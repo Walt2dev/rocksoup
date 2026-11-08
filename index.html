@@ -509,29 +509,28 @@
               </div>
               <div id="hud-inventory" class="inventory-strip" aria-label="Inventario"></div>
               <div id="hotbar-info" class="hotbar-info">1-9 seleccionar · clic extra · Shift+E usar · Shift+Q soltar</div>
-              <button id="btn-hotbar-toggle" class="hotbar-toggle" type="button" aria-expanded="false" aria-controls="hud-inventory" title="Expandir inventario">
+              <button id="btn-hotbar-toggle" class="hotbar-toggle" type="button" aria-expanded="false" aria-controls="inventory-panel" title="Abrir inventario">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-backpack"></use></svg>
               </button>
             </div>
 
             <div class="hud-context-actions" aria-label="Acciones de combate y unidad">
-              <button id="btn-cross-center" class="cross-btn cross-top" type="button" aria-label="Centrar cámara" title="Centrar">
+              <button id="btn-cross-center" class="cross-btn cross-top" type="button" aria-label="Centrar c?mara" title="Centrar">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-target"></use></svg>
               </button>
               <button id="btn-cross-workers" class="cross-btn cross-right" type="button" aria-label="Duendes inactivos" title="Duendes">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-worker"></use></svg>
                 <span id="cross-workers-badge" class="cross-badge" hidden>0</span>
               </button>
-              <button id="btn-cross-jump" class="cross-btn cross-bottom" type="button" aria-label="Saltar" title="Saltar">
+              <button id="btn-cross-jump" class="cross-btn cross-left" type="button" aria-label="Saltar" title="Saltar">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-jump"></use></svg>
               </button>
-              <button id="btn-context-action" class="cross-btn cross-left cross-action" type="button" aria-label="Acción contextual" title="Acción contextual">
-                <svg class="context-icon" viewBox="0 0 24 24" aria-hidden="true"><use id="context-action-icon-use" href="#icon-place"></use></svg>
-                <span id="context-action-label">Acción</span>
+              <button id="btn-context-action" class="cross-btn cross-center" type="button" aria-label="Usar o colocar" title="Usar o colocar">
+                <svg class="context-icon" viewBox="0 0 24 24" aria-hidden="true"><use id="context-action-icon-use" href="#icon-use"></use></svg>
+                <span id="context-action-label">Usar/Colocar</span>
               </button>
-              <button id="btn-cross-attack" class="cross-btn cross-center" type="button" aria-label="Atacar" title="Atacar">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-sword"></use></svg>
-                <span>Atacar</span>
+              <button id="btn-cross-quest" class="cross-btn cross-bottom" type="button" aria-label="Misiones" title="Misiones" hidden>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-target"></use></svg>
               </button>
             </div>
           </div>
@@ -791,6 +790,30 @@
           </div>
         </aside>
 
+        <aside id="inventory-panel" class="inventory-panel" aria-hidden="true" aria-label="Inventario">
+          <div class="inventory-card">
+            <header class="chat-header">
+              <div>
+                <span class="craft-eyebrow">Mochila</span>
+                <h2>Inventario</h2>
+              </div>
+              <button id="btn-inventory-close" class="craft-close" type="button" aria-label="Cerrar inventario">
+                &times;
+              </button>
+            </header>
+            <p class="inventory-hint">
+              Arrastra objetos a la fila inferior. Toca un objeto para asignarlo
+              al primer hueco libre.
+            </p>
+            <div id="inventory-grid" class="inventory-grid"></div>
+            <div class="inventory-hotbar-label">
+              <span>Fila rápida</span>
+              <span id="inventory-capacity"></span>
+            </div>
+            <div id="inventory-hotbar" class="inventory-hotbar"></div>
+          </div>
+        </aside>
+
         <div id="hud-menu" class="hud-menu" aria-hidden="true">
           <div class="hud-menu-sheet" role="dialog" aria-modal="true" aria-labelledby="hud-menu-title">
             <header class="hud-menu-header">
@@ -829,6 +852,14 @@
 
               <h3>Acciones</h3>
               <div class="hud-menu-grid">
+                <button class="hud-menu-item" type="button" data-hud-action="attack">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-sword"></use></svg>
+                  <span>Atacar</span><kbd>R</kbd>
+                </button>
+                <button class="hud-menu-item" type="button" data-hud-action="inventory">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-backpack"></use></svg>
+                  <span>Inventario</span>
+                </button>
                 <button class="hud-menu-item" type="button" data-hud-action="workers">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-worker"></use></svg>
                   <span>Duendes</span>

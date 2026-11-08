@@ -5,14 +5,25 @@ import { TouchControls } from "../ui/touchControls.js";
 import { resolveContextAction } from "./contextAction.js";
 import {
   loadDonkeySkinId,
+  loadHotbarSlots,
   loadStatsCollapsed,
   loadTouchControls,
+  saveHotbarSlots,
   saveStatsCollapsed,
 } from "./settings.js";
 import { sanitizeFeathers, sanitizeFishingRecords } from "./save.js";
 import { BUILTIN_SKINS, normalizeSkinId } from "./skins.js";
 import { normalizeDonkeySkinId } from "./donkeySkins.js";
 import { DONKEY_TRUST_REQUIRED, feedDonkey } from "./donkey.js";
+import {
+  HOTBAR_SLOT_COUNT,
+  assignHotbarSlot,
+  clearHotbarSlot,
+  defaultHotbarSlots,
+  firstEmptyHotbarSlot,
+  hotbarEntryAt,
+  normalizeHotbarSlots,
+} from "./hotbar.js";
 import {
   CROP_DATA,
   createFarmPlot,
@@ -188,6 +199,16 @@ const PLAYER_SPEAR_ATTACK = 50;
 const PLAYER_SWORD_ATTACK = 42;
 const PLAYER_BOW_ATTACK = 38;
 const PLAYER_BOW_RANGE = 12;
+const ATTACKABLE_AMBIENT_SPECIES = new Set([
+  AMBIENT_SPECIES.NIGHTLING,
+  AMBIENT_SPECIES.SPIDER,
+  AMBIENT_SPECIES.FOX,
+  AMBIENT_SPECIES.GOAT,
+  AMBIENT_SPECIES.VULTURE,
+  AMBIENT_SPECIES.SPARROW,
+  AMBIENT_SPECIES.CROW,
+  AMBIENT_SPECIES.OWL,
+]);
 const HEALTH_REGEN_DELAY = 8;
 const HEALTH_REGEN_RATE = 3;
 const ARMOR_DAMAGE_REDUCTION = 0.3;
@@ -424,6 +445,17 @@ export class Game {
     this.selectionMode = null;
     this.selectionDrag = null;
     this.selectedHotbar = null;
+    const storedHotbar = loadHotbarSlots();
+    this.hotbarSlots = storedHotbar
+      ? normalizeHotbarSlots(storedHotbar)
+      : defaultHotbarSlots(this.inventoryEntries());
+    this.hotbarAutoFill = !storedHotbar;
+    if (!storedHotbar && this.hotbarSlots.some(Boolean)) {
+      saveHotbarSlots(this.hotbarSlots);
+    }
+    this.inventoryOpen = false;
+    this.hotbarDrag = null;
+    this.suppressInventoryClick = false;
     this.craftSwipe = null;
     this.tooltipTimer = null;
     this.tooltipPointer = null;
@@ -696,6 +728,12 @@ export class Game {
     this.createTradeRoute = this.createTradeRoute.bind(this);
     this.handleTradeClick = this.handleTradeClick.bind(this);
     this.handleInventoryClick = this.handleInventoryClick.bind(this);
+    this.openInventory = this.openInventory.bind(this);
+    this.closeInventory = this.closeInventory.bind(this);
+    this.toggleInventory = this.toggleInventory.bind(this);
+    this.handleInventoryPointerDown = this.handleInventoryPointerDown.bind(this);
+    this.handleInventoryPointerMove = this.handleInventoryPointerMove.bind(this);
+    this.handleInventoryPointerUp = this.handleInventoryPointerUp.bind(this);
     this.handleChestClick = this.handleChestClick.bind(this);
     this.closeChest = this.closeChest.bind(this);
     this.handleUniversityTabsClick = this.handleUniversityTabsClick.bind(this);
@@ -2646,6 +2684,12 @@ export class Game {
     this.hud.btnCoffee?.addEventListener("click", this.drinkCoffee);
     this.hud.recipeList?.addEventListener("click", this.handleRecipeListClick);
     this.hud.inventory?.addEventListener("click", this.handleInventoryClick);
+    this.hud.btnInventoryClose?.addEventListener("click", this.closeInventory);
+    this.hud.inventoryPanel?.addEventListener("click", this.handleInventoryClick);
+    this.hud.inventoryPanel?.addEventListener("pointerdown", this.handleInventoryPointerDown);
+    window.addEventListener("pointermove", this.handleInventoryPointerMove);
+    window.addEventListener("pointerup", this.handleInventoryPointerUp);
+    window.addEventListener("pointercancel", this.handleInventoryPointerUp);
     this.hud.btnChestClose?.addEventListener("click", this.closeChest);
     this.hud.chestBackpack?.addEventListener("click", this.handleChestClick);
     this.hud.chestStorage?.addEventListener("click", this.handleChestClick);
@@ -2764,6 +2808,12 @@ export class Game {
     this.hud.btnCoffee?.removeEventListener("click", this.drinkCoffee);
     this.hud.recipeList?.removeEventListener("click", this.handleRecipeListClick);
     this.hud.inventory?.removeEventListener("click", this.handleInventoryClick);
+    this.hud.btnInventoryClose?.removeEventListener("click", this.closeInventory);
+    this.hud.inventoryPanel?.removeEventListener("click", this.handleInventoryClick);
+    this.hud.inventoryPanel?.removeEventListener("pointerdown", this.handleInventoryPointerDown);
+    window.removeEventListener("pointermove", this.handleInventoryPointerMove);
+    window.removeEventListener("pointerup", this.handleInventoryPointerUp);
+    window.removeEventListener("pointercancel", this.handleInventoryPointerUp);
     this.hud.btnChestClose?.removeEventListener("click", this.closeChest);
     this.hud.chestBackpack?.removeEventListener("click", this.handleChestClick);
     this.hud.chestStorage?.removeEventListener("click", this.handleChestClick);
@@ -4041,6 +4091,11 @@ export class Game {
       }
     }
 
+    if (this.pickAmbientAt(screenX, screenY, { attackable: true })) {
+      this.attack();
+      return;
+    }
+
     const fiefUnit = this.pickFiefUnitAt(screenX, screenY);
     if (fiefUnit) {
       this.selectFiefUnit(fiefUnit, {
@@ -4393,7 +4448,11 @@ export class Game {
     return this.assets.ambientSprites?.[ambient.species] ?? null;
   }
 
-  pickAmbientAt(screenX, screenY, { hostileOnly = false, species = null } = {}) {
+  pickAmbientAt(
+    screenX,
+    screenY,
+    { hostileOnly = false, attackable = false, species = null } = {},
+  ) {
     const sprites = this.assets.ambientSprites;
     let best = null;
 
@@ -4408,7 +4467,11 @@ export class Game {
         continue;
       }
 
-      if (
+      if (attackable) {
+        if (!ATTACKABLE_AMBIENT_SPECIES.has(ambient.species)) {
+          continue;
+        }
+      } else if (
         hostileOnly &&
         ambient.species !== AMBIENT_SPECIES.NIGHTLING &&
         ambient.species !== AMBIENT_SPECIES.SPIDER
@@ -5688,6 +5751,11 @@ export class Game {
   }
 
   handleMenuRequest() {
+    if (this.inventoryOpen) {
+      this.closeInventory();
+      return;
+    }
+
     if (!this.placingItem && this.selectedUnitIds.size > 0) {
       this.clearFiefSelection();
       this.notify("Unidades en modo automático.");
@@ -11921,7 +11989,12 @@ export class Game {
   }
 
   selectHotbar(index) {
-    const entry = this.inventoryEntries()[index - 1];
+    const slotIndex = index - 1;
+    const entry = hotbarEntryAt(
+      this.hotbarSlots,
+      slotIndex,
+      this.inventoryEntries(),
+    );
 
     if (!entry) {
       return;
@@ -11929,6 +12002,7 @@ export class Game {
 
     this.selectedHotbar = { kind: entry.kind, key: entry.key };
     this.renderInventoryHud();
+    this.renderInventoryPanel();
   }
 
   getContextAction() {
@@ -11989,17 +12063,407 @@ export class Game {
   }
 
   handleInventoryClick(event) {
-    const chip = event.target.closest(".hotbar-slot[data-hotbar-key]");
-
-    if (!chip) {
+    if (this.suppressInventoryClick) {
       return;
     }
 
-    this.selectedHotbar = {
-      kind: chip.dataset.hotbarKind,
-      key: chip.dataset.hotbarKey,
-    };
+    const slot = event.target.closest("[data-hotbar-slot]");
+    if (slot) {
+      this.selectHotbar(Number(slot.dataset.hotbarSlot) + 1);
+      return;
+    }
+
+    const item = event.target.closest(
+      "[data-inventory-kind][data-inventory-key]",
+    );
+    if (!item) {
+      return;
+    }
+
+    const entry = this.inventoryEntries().find(
+      (candidate) =>
+        candidate.kind === item.dataset.inventoryKind &&
+        candidate.key === item.dataset.inventoryKey,
+    );
+    if (!entry) {
+      return;
+    }
+
+    const existing = this.hotbarSlots.findIndex(
+      (assigned) =>
+        assigned &&
+        assigned.kind === entry.kind &&
+        assigned.key === entry.key,
+    );
+
+    if (existing >= 0) {
+      this.selectHotbar(existing + 1);
+      return;
+    }
+
+    const empty = firstEmptyHotbarSlot(this.hotbarSlots);
+    if (empty < 0) {
+      this.notify(
+        "La fila rápida está llena. Arrastra un objeto a un slot para reemplazarlo.",
+      );
+      return;
+    }
+
+    this.assignInventoryEntry(entry, empty);
+  }
+
+  useOrPlaceSelected() {
+    const action = this.getContextAction();
+
+    if (!action || action.id === "attack") {
+      this.notify("Selecciona un objeto para usar o colocar.");
+      return;
+    }
+
+    this.runContextAction();
+  }
+
+  openInventory() {
+    if (!this.hud.inventoryPanel) {
+      return;
+    }
+    this.inventoryOpen = true;
+    this.input?.keys?.clear();
+    this.hud.inventoryPanel.classList.add("is-open");
+    this.hud.inventoryPanel.setAttribute("aria-hidden", "false");
+    this.renderInventoryPanel();
+  }
+
+  closeInventory() {
+    this.inventoryOpen = false;
+    this.hud.inventoryPanel?.classList.remove("is-open");
+    this.hud.inventoryPanel?.setAttribute("aria-hidden", "true");
+    this.cancelHotbarDrag();
+  }
+
+  toggleInventory() {
+    if (this.inventoryOpen) {
+      this.closeInventory();
+    } else {
+      this.openInventory();
+    }
+  }
+
+  saveHotbar() {
+    saveHotbarSlots(this.hotbarSlots);
+  }
+
+  assignInventoryEntry(entry, targetIndex) {
+    this.hotbarAutoFill = false;
+    this.hotbarSlots = assignHotbarSlot(this.hotbarSlots, targetIndex, {
+      kind: entry.kind,
+      key: entry.key,
+    });
+    this.saveHotbar();
+    this.selectedHotbar = { kind: entry.kind, key: entry.key };
     this.renderInventoryHud();
+    this.renderInventoryPanel();
+  }
+
+  moveHotbarEntry(fromIndex, toIndex) {
+    if (fromIndex === toIndex) {
+      return;
+    }
+    this.hotbarAutoFill = false;
+    this.hotbarSlots = assignHotbarSlot(
+      this.hotbarSlots,
+      toIndex,
+      this.hotbarSlots[fromIndex],
+      { sourceIndex: fromIndex },
+    );
+    this.saveHotbar();
+    this.renderInventoryHud();
+    this.renderInventoryPanel();
+  }
+
+  removeHotbarEntry(index) {
+    this.hotbarAutoFill = false;
+    this.hotbarSlots = clearHotbarSlot(this.hotbarSlots, index);
+    this.saveHotbar();
+    this.renderInventoryHud();
+    this.renderInventoryPanel();
+  }
+
+  handleInventoryPointerDown(event) {
+    if (!this.inventoryOpen || event.button !== 0) {
+      return;
+    }
+
+    const item = event.target.closest(
+      "[data-inventory-kind][data-inventory-key]",
+    );
+    const slot = event.target.closest("[data-hotbar-slot]");
+    let source = null;
+
+    if (item) {
+      source = {
+        type: "inventory",
+        kind: item.dataset.inventoryKind,
+        key: item.dataset.inventoryKey,
+        fromSlot: null,
+      };
+    } else if (slot) {
+      const index = Number(slot.dataset.hotbarSlot);
+      const assigned = this.hotbarSlots[index];
+      if (!assigned) {
+        return;
+      }
+      source = {
+        type: "slot",
+        kind: assigned.kind,
+        key: assigned.key,
+        fromSlot: index,
+      };
+    }
+
+    if (!source) {
+      return;
+    }
+
+    this.hotbarDrag = {
+      ...source,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      active: false,
+      ghost: null,
+      targetSlot: null,
+    };
+    this.suppressInventoryClick = false;
+  }
+
+  handleInventoryPointerMove(event) {
+    const drag = this.hotbarDrag;
+    if (!drag || event.pointerId !== drag.pointerId) {
+      return;
+    }
+
+    const distance = Math.hypot(
+      event.clientX - drag.startX,
+      event.clientY - drag.startY,
+    );
+
+    if (!drag.active && distance < 6) {
+      return;
+    }
+
+    if (!drag.active) {
+      drag.active = true;
+      this.suppressInventoryClick = true;
+      const entry = this.inventoryEntries().find(
+        (candidate) =>
+          candidate.kind === drag.kind && candidate.key === drag.key,
+      );
+      const ghost = document.createElement("div");
+      ghost.className = "hotbar-drag-ghost";
+      ghost.textContent = entry?.symbol ?? "?";
+      if (entry?.color) {
+        ghost.style.borderColor = entry.color;
+        ghost.style.color = entry.color;
+      }
+      document.body.append(ghost);
+      drag.ghost = ghost;
+    }
+
+    event.preventDefault();
+    drag.ghost.style.left = `${event.clientX}px`;
+    drag.ghost.style.top = `${event.clientY}px`;
+    this.updateHotbarDragTarget(event);
+  }
+
+  updateHotbarDragTarget(event) {
+    const drag = this.hotbarDrag;
+    if (!drag) {
+      return;
+    }
+
+    const target = document
+      .elementFromPoint(event.clientX, event.clientY)
+      ?.closest("[data-hotbar-slot]");
+    const index = target ? Number(target.dataset.hotbarSlot) : null;
+
+    if (drag.targetSlot === index) {
+      return;
+    }
+
+    this.hud.inventoryHotbar
+      ?.querySelectorAll(".inventory-slot.is-drag-over")
+      .forEach((element) => element.classList.remove("is-drag-over"));
+    drag.targetSlot = index;
+    target?.classList.add("is-drag-over");
+    this.hud.inventoryPanel?.classList.toggle(
+      "is-remove-target",
+      drag.type === "slot" && index === null,
+    );
+  }
+
+  handleInventoryPointerUp(event) {
+    const drag = this.hotbarDrag;
+    if (!drag || event.pointerId !== drag.pointerId) {
+      return;
+    }
+
+    const wasActive = drag.active;
+
+    if (wasActive) {
+      event.preventDefault();
+      event.stopPropagation();
+      const target = document
+        .elementFromPoint(event.clientX, event.clientY)
+        ?.closest("[data-hotbar-slot]");
+      const index = target ? Number(target.dataset.hotbarSlot) : null;
+
+      if (index !== null) {
+        if (drag.type === "inventory") {
+          this.assignInventoryEntry(
+            { kind: drag.kind, key: drag.key },
+            index,
+          );
+        } else {
+          this.moveHotbarEntry(drag.fromSlot, index);
+        }
+      } else if (drag.type === "slot") {
+        this.removeHotbarEntry(drag.fromSlot);
+      }
+
+      this.hud.inventoryPanel?.classList.remove("is-remove-target");
+      this.hud.inventoryHotbar
+        ?.querySelectorAll(".inventory-slot.is-drag-over")
+        .forEach((element) => element.classList.remove("is-drag-over"));
+    }
+
+    this.cancelHotbarDrag({ suppressClick: wasActive });
+  }
+
+  cancelHotbarDrag({ suppressClick = false } = {}) {
+    const drag = this.hotbarDrag;
+    if (drag?.ghost) {
+      drag.ghost.remove();
+    }
+    this.hotbarDrag = null;
+
+    if (suppressClick) {
+      this.suppressInventoryClick = true;
+      window.setTimeout(() => {
+        this.suppressInventoryClick = false;
+      }, 50);
+    } else {
+      this.suppressInventoryClick = false;
+    }
+  }
+
+  renderInventoryPanel() {
+    if (!this.inventoryOpen || !this.hud.inventoryPanel) {
+      return;
+    }
+
+    const entries = this.inventoryEntries();
+    const selected = this.getSelectedEntry(entries);
+    const grid = this.hud.inventoryGrid;
+
+    if (grid) {
+      const fragment = document.createDocumentFragment();
+
+      for (const entry of entries) {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = "inventory-item";
+        item.dataset.inventoryKind = entry.kind;
+        item.dataset.inventoryKey = entry.key;
+        item.style.setProperty("--resource-color", entry.color);
+        const assigned = this.hotbarSlots.some(
+          (slot) =>
+            slot && slot.kind === entry.kind && slot.key === entry.key,
+        );
+        item.classList.toggle("is-assigned", assigned);
+        if (
+          selected &&
+          selected.kind === entry.kind &&
+          selected.key === entry.key
+        ) {
+          item.classList.add("is-selected");
+        }
+        item.setAttribute(
+          "aria-label",
+          `${entry.label} ×${entry.count}. Arrastra a la fila rápida.`,
+        );
+
+        const icon = document.createElement("span");
+        icon.className = "inventory-item-icon";
+        icon.textContent = entry.symbol ?? "?";
+        const label = document.createElement("span");
+        label.className = "inventory-item-label";
+        label.textContent = entry.label;
+        const count = document.createElement("b");
+        count.textContent = String(entry.count);
+        item.append(icon, label, count);
+        fragment.append(item);
+      }
+
+      if (entries.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "inventory-empty";
+        empty.textContent = "Tu inventario está vacío.";
+        fragment.append(empty);
+      }
+
+      grid.replaceChildren(fragment);
+    }
+
+    if (this.hud.inventoryCapacity) {
+      this.hud.inventoryCapacity.textContent = `${this.inventory.slotsUsed()}/${this.inventory.capacity}`;
+    }
+
+    const hotbar = this.hud.inventoryHotbar;
+    if (!hotbar) {
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+
+    for (let index = 0; index < HOTBAR_SLOT_COUNT; index += 1) {
+      const entry = hotbarEntryAt(this.hotbarSlots, index, entries);
+      const slot = document.createElement("button");
+      slot.type = "button";
+      slot.className = "inventory-slot";
+      slot.dataset.hotbarSlot = String(index);
+
+      const number = document.createElement("span");
+      number.className = "inventory-slot-number";
+      number.textContent = String(index + 1);
+      slot.append(number);
+
+      if (entry) {
+        slot.style.setProperty("--resource-color", entry.color);
+        slot.classList.add("has-item");
+        if (
+          selected &&
+          selected.kind === entry.kind &&
+          selected.key === entry.key
+        ) {
+          slot.classList.add("is-selected");
+        }
+        const icon = document.createElement("span");
+        icon.className = "inventory-item-icon";
+        icon.textContent = entry.symbol ?? "?";
+        const count = document.createElement("b");
+        count.textContent = String(entry.count);
+        slot.append(icon, count);
+        slot.title = `${entry.label} ×${entry.count}`;
+      } else {
+        slot.classList.add("is-empty");
+        slot.title = `Espacio ${index + 1} libre`;
+      }
+
+      fragment.append(slot);
+    }
+
+    hotbar.replaceChildren(fragment);
   }
 
   useSelectedItem() {
@@ -12256,33 +12720,54 @@ export class Game {
   }
 
   renderInventoryHud() {
-    const fragment = document.createDocumentFragment();
     const entries = this.inventoryEntries();
+
+    if (
+      this.hotbarAutoFill &&
+      this.hotbarSlots.every((slot) => slot === null) &&
+      entries.length > 0
+    ) {
+      this.hotbarSlots = defaultHotbarSlots(entries);
+      this.hotbarAutoFill = false;
+      saveHotbarSlots(this.hotbarSlots);
+    }
+
     const selected = this.getSelectedEntry(entries);
 
     if (this.selectedHotbar && !selected) {
       this.selectedHotbar = null;
     }
 
-    const selectedIndex = selected ? entries.indexOf(selected) : -1;
+    const selectedIndex = selected
+      ? this.hotbarSlots.findIndex(
+          (slot) =>
+            slot &&
+            slot.kind === selected.kind &&
+            slot.key === selected.key,
+        )
+      : -1;
+    const hotbarSignature = this.hotbarSlots
+      .map((slot) => (slot ? `${slot.kind}:${slot.key}` : "-"))
+      .join(",");
     const signature = `${entries
       .map((entry) => `${entry.kind}:${entry.key}:${entry.count}`)
-      .join("|")}|${selected?.kind ?? ""}:${selected?.key ?? ""}|${this.inventory.slotsUsed()}/${this.inventory.capacity}|${this.stonePouch.length}`;
+      .join("|")}|${selected?.kind ?? ""}:${selected?.key ?? ""}|${hotbarSignature}|${this.inventory.slotsUsed()}/${this.inventory.capacity}`;
 
     if (signature === this.inventoryHudSignature) {
       return;
     }
     this.inventoryHudSignature = signature;
 
-    const slotCount = Math.max(9, entries.length);
+    const fragment = document.createDocumentFragment();
 
-    for (let index = 0; index < slotCount; index += 1) {
-      const entry = entries[index];
+    for (let index = 0; index < HOTBAR_SLOT_COUNT; index += 1) {
+      const entry = hotbarEntryAt(this.hotbarSlots, index, entries);
 
       if (!entry) {
         const empty = document.createElement("span");
         empty.className = "resource-chip hotbar-slot is-empty";
         empty.title = `Espacio ${index + 1} libre`;
+        empty.dataset.hotbarSlot = String(index);
         const slot = document.createElement("span");
         slot.className = "slot-key";
         slot.textContent = String(index + 1);
@@ -12303,6 +12788,7 @@ export class Game {
         chip.classList.add("item-chip");
       }
       chip.classList.toggle("is-selected", index === selectedIndex);
+      chip.dataset.hotbarSlot = String(index);
       chip.dataset.hotbarKind = entry.kind;
       chip.dataset.hotbarKey = entry.key;
       chip.dataset.tooltip = tooltip;
@@ -12310,12 +12796,10 @@ export class Game {
       chip.setAttribute("aria-label", tooltip.replace("\n", " · "));
       chip.style.setProperty("--resource-color", entry.color);
 
-      if (index < 9) {
-        const slot = document.createElement("span");
-        slot.className = "slot-key";
-        slot.textContent = String(index + 1);
-        chip.append(slot);
-      }
+      const slot = document.createElement("span");
+      slot.className = "slot-key";
+      slot.textContent = String(index + 1);
+      chip.append(slot);
 
       icon.className = "hotbar-icon";
       icon.textContent = entry.symbol ?? "?";
@@ -12324,46 +12808,15 @@ export class Game {
       fragment.append(chip);
     }
 
-    if (this.stonePouch.length > 0) {
-      const chip = document.createElement("span");
-      const icon = document.createElement("span");
-      const value = document.createElement("b");
-      const tooltip = `Piedras qu\u00EDmicas \u00D7${this.stonePouch.length}\nSe recogen al minar minerales con pico.`;
-
-      chip.className = "resource-chip stone-chip";
-      chip.dataset.tooltip = tooltip;
-      chip.title = tooltip;
-      icon.className = "hotbar-icon";
-      icon.textContent = "Q";
-      value.textContent = String(this.stonePouch.length);
-      chip.append(icon, value);
-      fragment.append(chip);
-    }
-
-    const capacity = document.createElement("span");
-    capacity.className = "resource-capacity";
-    capacity.textContent = `${this.inventory.slotsUsed()}/${this.inventory.capacity} esp.`;
-    capacity.title = "Espacios ocupados por tipo de objeto. Cada pila admite 32 unidades.";
-    fragment.append(capacity);
-
     this.hud.inventory.replaceChildren(fragment);
 
     if (this.hud.hotbarInfo) {
-      if (selected) {
-        this.hud.hotbarInfo.textContent =
-          selected.kind === "tool" && selected.key === "fishingRod"
-            ? "Caña seleccionada · clic en agua cercana para pescar · E durante el tirón"
-            : selected.kind === "tool" && selected.key === "bow"
-              ? `Arco seleccionado · flechas: ${this.inventory.itemCount("arrow")} · R o Atacar para disparar`
-              : selected.kind === "tool" &&
-                  (selected.key === "sword" || selected.key === "spear")
-                ? `${selected.label} equipada · R o Atacar para golpear`
-                : `Seleccionado: ${selected.label} ×${selected.count} · E usar · Q soltar · Shift+Q pila`;
-      } else {
-        this.hud.hotbarInfo.textContent =
-          "1-9 seleccionar · clic extra · E usar · Q soltar · pasa o mantén pulsado para ver el origen";
-      }
+      this.hud.hotbarInfo.textContent = selected
+        ? `Seleccionado: ${selected.label} ×${selected.count}`
+        : "Arrastra objetos desde la mochila a la fila rápida.";
     }
+
+    this.renderInventoryPanel();
   }
 
   notify(message) {

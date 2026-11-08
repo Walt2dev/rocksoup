@@ -11,10 +11,10 @@ export class HudMenu {
     this.handleMenuClick = this.handleMenuClick.bind(this);
     this.handleBackdropClick = this.handleBackdropClick.bind(this);
     this.handleContextAction = this.handleContextAction.bind(this);
-    this.handleCrossAttack = () => this.game?.attack?.();
     this.handleCrossCenter = () => this.game?.recenterCamera?.();
     this.handleCrossWorkers = () => this.game?.handleIdleWorkerRequest?.();
     this.handleCrossJump = () => this.game?.jump?.();
+    this.handleCrossQuest = () => this.click("btn-quest");
     this.handleHotbarToggle = this.handleHotbarToggle.bind(this);
     this.handleStatsClose = this.handleStatsClose.bind(this);
     this.toggle = this.toggle.bind(this);
@@ -33,10 +33,10 @@ export class HudMenu {
     this.hud.hudMenu?.addEventListener("click", this.handleBackdropClick);
     this.hud.hudMenu?.addEventListener("click", this.handleMenuClick);
     this.hud.btnContextAction?.addEventListener("click", this.handleContextAction);
-    this.hud.btnCrossAttack?.addEventListener("click", this.handleCrossAttack);
     this.hud.btnCrossCenter?.addEventListener("click", this.handleCrossCenter);
     this.hud.btnCrossWorkers?.addEventListener("click", this.handleCrossWorkers);
     this.hud.btnCrossJump?.addEventListener("click", this.handleCrossJump);
+    this.hud.btnCrossQuest?.addEventListener("click", this.handleCrossQuest);
     this.hud.btnHotbarToggle?.addEventListener("click", this.handleHotbarToggle);
     this.hud.btnStatsClose?.addEventListener("click", this.handleStatsClose);
     window.addEventListener("keydown", this.handleKeyDown, true);
@@ -55,10 +55,10 @@ export class HudMenu {
     this.hud.hudMenu?.removeEventListener("click", this.handleBackdropClick);
     this.hud.hudMenu?.removeEventListener("click", this.handleMenuClick);
     this.hud.btnContextAction?.removeEventListener("click", this.handleContextAction);
-    this.hud.btnCrossAttack?.removeEventListener("click", this.handleCrossAttack);
     this.hud.btnCrossCenter?.removeEventListener("click", this.handleCrossCenter);
     this.hud.btnCrossWorkers?.removeEventListener("click", this.handleCrossWorkers);
     this.hud.btnCrossJump?.removeEventListener("click", this.handleCrossJump);
+    this.hud.btnCrossQuest?.removeEventListener("click", this.handleCrossQuest);
     this.hud.btnHotbarToggle?.removeEventListener("click", this.handleHotbarToggle);
     this.hud.btnStatsClose?.removeEventListener("click", this.handleStatsClose);
     window.removeEventListener("keydown", this.handleKeyDown, true);
@@ -173,6 +173,14 @@ export class HudMenu {
         this.click("btn-idle-worker");
         this.close();
         break;
+      case "attack":
+        this.game?.attack?.();
+        this.close();
+        break;
+      case "inventory":
+        this.game?.openInventory?.();
+        this.close();
+        break;
       case "center":
         this.game?.recenterCamera?.();
         this.close();
@@ -237,18 +245,16 @@ export class HudMenu {
   }
 
   handleContextAction() {
-    this.game?.runContextAction?.();
+    this.game?.useOrPlaceSelected?.();
     this.refreshContextActions();
   }
 
   handleHotbarToggle() {
-    const panel = this.hud.playerPanel;
-    if (!panel) {
-      return;
-    }
-    const expanded = panel.classList.toggle("is-inventory-expanded");
-    this.hud.btnHotbarToggle.setAttribute("aria-expanded", String(expanded));
-    this.hud.btnHotbarToggle.classList.toggle("is-active", expanded);
+    this.game?.toggleInventory?.();
+    this.hud.btnHotbarToggle?.setAttribute(
+      "aria-expanded",
+      String(this.game?.inventoryOpen === true),
+    );
   }
 
   handleStatsClose() {
@@ -290,6 +296,10 @@ export class HudMenu {
         heading.hidden = allHidden;
       }
     }
+
+    if (this.hud.btnCrossQuest) {
+      this.hud.btnCrossQuest.hidden = this.hud.btnQuest?.hidden ?? true;
+    }
   }
 
   refresh() {
@@ -300,6 +310,15 @@ export class HudMenu {
   refreshContextActions() {
     if (!this.hud.btnContextAction || !this.game) {
       return;
+    }
+
+    if (this.hud.btnCrossQuest) {
+      this.hud.btnCrossQuest.hidden = this.hud.btnQuest?.hidden ?? true;
+    }
+    if (this.hud.btnHotbarToggle) {
+      const open = this.game.inventoryOpen === true;
+      this.hud.btnHotbarToggle.classList.toggle("is-active", open);
+      this.hud.btnHotbarToggle.setAttribute("aria-expanded", String(open));
     }
 
     const action = this.game.getContextAction?.();
@@ -314,8 +333,8 @@ export class HudMenu {
     }
     this.lastActionKey = key;
 
-    const label = hasContext ? action.label : "Acción";
-    const icon = hasContext ? action.icon : "target";
+    const label = hasContext ? action.label : "Usar/Colocar";
+    const icon = hasContext ? action.icon : "use";
 
     if (this.hud.contextActionLabel) {
       this.hud.contextActionLabel.textContent = label;
@@ -328,10 +347,10 @@ export class HudMenu {
     this.hud.btnContextAction.classList.toggle("is-disabled", !hasContext);
     this.hud.btnContextAction.title = hasContext
       ? `${action.label} (acción contextual)`
-      : "Sin acción contextual: selecciona una semilla, objeto colocable o acércate al burro";
+      : "Selecciona un objeto para usar o colocar";
     this.hud.btnContextAction.setAttribute(
       "aria-label",
-      hasContext ? `${action.label} (acción contextual)` : "Sin acción contextual",
+      hasContext ? `${action.label} (acción contextual)` : "Usar o colocar",
     );
   }
 }

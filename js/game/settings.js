@@ -2,6 +2,7 @@ export const TOUCH_SETTING_KEY = "rocksoup.touchControls.v1";
 export const LAN_NAME_KEY = "rocksoup.lan.name.v1";
 export const LAN_TOKEN_KEY = "rocksoup.lan.token.v1";
 export const STATS_COLLAPSED_KEY = "rocksoup.statsCollapsed.v1";
+export const HOTBAR_SETTING_KEY = "rocksoup.hotbar.v1";
 
 function storageAvailable() {
   try {
@@ -60,6 +61,33 @@ export function saveStatsCollapsed(collapsed) {
   }
   try {
     window.localStorage.setItem(STATS_COLLAPSED_KEY, collapsed ? "1" : "0");
+  } catch {
+    // Almacenamiento bloqueado.
+  }
+}
+
+export function loadHotbarSlots() {
+  if (!storageAvailable()) {
+    return null;
+  }
+  try {
+    const raw = window.localStorage.getItem(HOTBAR_SETTING_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveHotbarSlots(slots) {
+  if (!storageAvailable()) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(HOTBAR_SETTING_KEY, JSON.stringify(slots));
   } catch {
     // Almacenamiento bloqueado.
   }
