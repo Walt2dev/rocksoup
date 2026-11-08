@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0b0f14" />
+    <title>Sopa de Piedras — DracxGames</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <svg class="svg-defs" aria-hidden="true" focusable="false">
+      <symbol id="bowl-logo" viewBox="0 0 120 100">
+        <path
+          d="M18 52h84c-2 26-18 38-42 38S20 78 18 52z"
+          fill="#27313d"
+          stroke="#e0a458"
+          stroke-width="3"
+        />
+        <ellipse cx="60" cy="52" rx="42" ry="9" fill="#121820" stroke="#e0a458" stroke-width="3" />
+        <ellipse cx="47" cy="48" rx="11" ry="7" fill="#6b6f76" />
+        <ellipse cx="63" cy="45" rx="8" ry="6" fill="#8a8f97" />
+        <ellipse cx="76" cy="50" rx="9" ry="5" fill="#555963" />
+        <path
+          d="M41 33c-6-8 4-12-2-20M59 31c-6-10 5-14-1-23M77 34c-5-8 5-12-1-20"
+          stroke="#8b97a8"
+          stroke-width="2.5"
+          fill="none"
+          stroke-linecap="round"
+        />
+      </symbol>
+    </svg>
+
+    <div class="app">
+      <section class="screen screen-loading is-active" id="screen-loading" aria-label="Cargando juego">
+        <header class="loading-brand">DracxGames</header>
+        <div class="loading-card">
+          <svg class="game-logo" aria-hidden="true"><use href="#bowl-logo"></use></svg>
+          <h1>Sopa de Piedras</h1>
+          <p class="tagline">Un mundo procedural cocinado a fuego lento</p>
+          <div
+            class="progress-track"
+            id="progress-track"
+            role="progressbar"
+            aria-label="Progreso de carga"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="0"
+          >
+            <div class="progress-fill" id="progress-fill"></div>
+          </div>
+          <div class="loading-meta">
+            <span id="load-status">Encendiendo la fogata...</span>
+            <span id="load-percent">0%</span>
+          </div>
+        </div>
+        <footer class="loading-footer">DracxGames · 2026</footer>
+      </section>
+
+      <section class="screen screen-menu" id="screen-menu" aria-label="Menú principal">
+        <header class="brand-bar">
+          <div class="brand-mark">DX</div>
+          <div class="brand-copy">
+            <span class="brand-name">DracxGames</span>
+            <span class="brand-sub">juegos con alma de piedra</span>
+          </div>
+        </header>
+
+        <main class="menu-main">
+          <div class="menu-card">
+            <svg class="game-logo menu-logo" aria-hidden="true"><use href="#bowl-logo"></use></svg>
+            <p class="menu-eyebrow">DracxGames presenta</p>
+            <h1>Sopa de Piedras</h1>
+            <p class="tagline">Explora un mundo infinito, generado grano a grano.</p>
+
+            <nav class="menu-actions" aria-label="Opciones de partida">
+              <button id="btn-new" class="menu-button primary" type="button">Nueva partida</button>
+              <button id="btn-continue" class="menu-button" type="button" title="Solo partidas individuales guardadas">
+                Continuar partida
+              </button>
+              <button id="btn-lan" class="menu-button" type="button">Mundo LAN</button>
+              <button id="btn-personalization" class="menu-button" type="button">Personalización y packs</button>
+              <button id="btn-exit" class="menu-button danger" type="button">Salir</button>
+            </nav>
+
+            <p id="save-info" class="save-info">Buscando partida individual guardada...</p>
+
+            <details class="seed-details">
+              <summary>Semilla avanzada</summary>
+              <label for="menu-seed">Seed</label>
+              <input
+                id="menu-seed"
+                maxlength="64"
+                spellcheck="false"
+                autocomplete="off"
+                placeholder="vacío = aleatoria"
+              />
+            </details>
+
+            <p id="menu-error" class="error" role="alert"></p>
+          </div>
+        </main>
+
+        <footer class="menu-footer">
+          <span>DracxGames</span>
+          <span>Fase 4 · supervivencia LAN</span>
+        </footer>
+      </section>
+
+      <section class="screen screen-lan" id="screen-lan" aria-label="Mundo LAN">
+        <div class="lan-brand">DracxGames</div>
+
+        <div class="lan-card lan-connect-card" id="lan-connect-card">
+          <span class="lan-eyebrow">Multijugador local</span>
+          <h2>Mundo LAN</h2>
+          <p class="lan-lead">Supervivencia compartida PvP para jugar con amigos en tu red local.</p>
+          <div class="lan-features">
+            <span>Mundo compartido</span>
+            <span>Salud y PvP</span>
+            <span>Duendes visibles</span>
+            <span>Node + WebSocket</span>
+          </div>
+
+          <label class="lan-field" for="lan-name">
+            Tu nombre
+            <input id="lan-name" maxlength="18" autocomplete="off" placeholder="Jugador" />
+          </label>
+
+          <label class="lan-field" for="lan-skin">
+            Personaje
+            <select id="lan-skin"></select>
+          </label>
+
+          <label class="lan-touch-toggle">
+            <input id="lan-touch" type="checkbox" />
+            Activar controles táctiles (joystick y botones)
+          </label>
+
+          <div class="lan-actions">
+            <button id="btn-lan-connect" class="menu-button primary" type="button">Conectar</button>
+            <button id="btn-lan-back" class="menu-button" type="button">Volver al menú</button>
+          </div>
+
+          <p id="lan-status" class="lan-note">
+            Enciende el servidor en el PC con <code>npm run lan</code> y abre esta página desde
+            la tablet usando la IP LAN del PC.
+          </p>
+        </div>
+
+        <div class="lan-card lan-lobby-card" id="lan-lobby-card" hidden>
+          <span class="lan-eyebrow">Lobby compartido</span>
+          <h2>Mundo LAN</h2>
+          <p id="lan-connection" class="lan-lead">Conectado al servidor LAN.</p>
+          <ul id="lan-players" class="lan-player-list"></ul>
+          <div class="lan-actions">
+            <button id="btn-lan-start" class="menu-button primary" type="button" hidden>
+              Iniciar mundo
+            </button>
+            <button id="btn-lan-leave" class="menu-button" type="button">Desconectar</button>
+          </div>
+          <p id="lan-lobby-status" class="lan-note">
+            El host inicia la partida cuando todos estén conectados.
+          </p>
+        </div>
+
+        <footer class="loading-footer">DracxGames · Mundo LAN</footer>
+      </section>
+
+      <section class="screen screen-character" id="screen-character" aria-label="Elegir personaje">
+        <div class="character-card">
+          <span class="lan-eyebrow">Nueva partida</span>
+          <h2>Elige tu personaje</h2>
+          <p class="lan-lead">El arquetipo cambia solo la apariencia. Las estadísticas y recetas son iguales para todos.</p>
+          <div id="character-grid" class="character-grid"></div>
+          <div class="character-actions">
+            <button id="btn-character-back" class="menu-button" type="button">Volver</button>
+            <button id="btn-character-confirm" class="menu-button primary" type="button">Jugar</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen screen-dev" id="screen-dev" aria-label="Modo desarrollador">
+        <div class="dev-card">
+          <div class="dev-header">
+            <div>
+              <span class="lan-eyebrow">Modo desarrollador</span>
+              <h2>Personalización y packs</h2>
+            </div>
+            <button id="btn-dev-back" class="craft-close" type="button" aria-label="Volver al menú">&times;</button>
+          </div>
+          <p class="lan-lead">Sube un ZIP con un <code>pack.json</code> y PNGs. Los packs se guardan solo en este navegador.</p>
+          <div class="dev-actions">
+            <label class="dev-upload">
+              <span>Subir pack .zip</span>
+              <input id="dev-pack-file" type="file" accept=".zip,application/zip" />
+            </label>
+            <select id="dev-pack-select" aria-label="Packs instalados"></select>
+            <button id="dev-pack-activate" class="menu-button primary" type="button">Activar</button>
+            <button id="dev-pack-delete" class="menu-button danger" type="button">Eliminar</button>
+            <button id="dev-pack-template" class="menu-button" type="button">Descargar pack.json</button>
+          </div>
+          <p id="dev-status" class="lan-note" role="status"></p>
+          <div class="dev-default-pack">
+            <h3>Pack de texturas por defecto</h3>
+            <p class="lan-note">Sube uno o varios PNG con el nombre exacto de la referencia. Los sprites con varios frames usan _0.png, _1.png, _2.png. El Mago también acepta mago_0.png. Se guardan en este navegador y se aplican antes que los packs ZIP.</p>
+            <div class="dev-actions">
+              <label class="dev-upload">
+                <span>Subir PNGs</span>
+                <input id="dev-default-files" type="file" accept="image/png,.png" multiple />
+              </label>
+              <button id="dev-default-apply" class="menu-button primary" type="button">Aplicar y recargar</button>
+              <button id="dev-default-clear" class="menu-button danger" type="button">Vaciar pack por defecto</button>
+            </div>
+            <p id="dev-default-status" class="lan-note" role="status"></p>
+            <div id="dev-default-list" class="dev-default-list"></div>
+          </div>
+          <div class="dev-grid">
+            <div>
+              <h3>Referencia de texturas</h3>
+              <div id="dev-reference" class="dev-reference"></div>
+            </div>
+            <div>
+              <h3>Personajes instalados</h3>
+              <div id="dev-skins" class="character-grid dev-skin-grid"></div>
+            </div>
+          </div>
+          <div class="dev-mounturas">
+            <h3>Monturas</h3>
+            <p class="lan-note">Elige la skin del burro. Se aplicará al continuar la partida.</p>
+            <div id="dev-donkeys" class="character-grid dev-donkey-grid"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen screen-game" id="screen-game" aria-label="Mundo de juego">
+        <canvas id="view" aria-label="Mundo isométrico procedural"></canvas>
+
+        <div class="hud hud-top">
+          <div class="hud-brand">
+            <span class="hud-brand-name">DracxGames</span>
+            <span class="hud-title">Sopa de Piedras</span>
+          </div>
+          <div class="hud-fief-actions">
+            <button id="btn-game-mode" class="hud-button" type="button" title="Cambiar modo de juego">
+              <span id="game-mode-label">Supervivencia</span> <kbd>M</kbd>
+            </button>
+            <button id="btn-fief" class="hud-button" type="button">
+              Feudo <kbd>V</kbd>
+            </button>
+            <button
+              id="btn-quest"
+              class="hud-button hud-quest"
+              type="button"
+              aria-expanded="false"
+              aria-controls="quest-panel"
+              hidden
+            >
+              Misiones <kbd>J</kbd> <span id="quest-badge" class="quest-badge" hidden>0</span>
+            </button>
+            <span id="wave-timer" class="wave-timer" hidden>Oleada 01:30</span>
+          </div>
+          <div class="hud-actions">
+            <button id="btn-craft" class="hud-button" type="button" aria-expanded="false" aria-controls="craft-panel">
+              Crafteo <kbd>C</kbd>
+            </button>
+            <button id="btn-recipes" class="hud-button" type="button" aria-expanded="false" aria-controls="recipe-book-panel">
+              Recetas <kbd>L</kbd>
+            </button>
+            <button id="btn-rotate-left" class="hud-button hud-rotate" type="button" title="Girar perspectiva a la izquierda" aria-label="Girar perspectiva a la izquierda">↶</button>
+            <button id="btn-rotate-right" class="hud-button hud-rotate" type="button" title="Girar perspectiva a la derecha" aria-label="Girar perspectiva a la derecha">↷</button>
+            <button id="btn-coffee" class="hud-button" type="button" hidden>
+              Café <kbd>1</kbd>
+            </button>
+            <button id="btn-attack" class="hud-button" type="button">
+              Atacar <kbd>R</kbd>
+            </button>
+            <button id="btn-place-selected" class="hud-button" type="button" title="Colocar el objeto seleccionado">
+              Colocar
+            </button>
+            <button id="btn-place-fire" class="hud-button" type="button" hidden>
+              Fogata <kbd>F</kbd>
+            </button>
+            <button id="btn-menu" class="hud-button" type="button">Menú <kbd>Esc</kbd></button>
+            <button id="btn-idle-worker" class="hud-button" type="button" title="Centrar en un duende inactivo">
+              Duendes
+            </button>
+          </div>
+        </div>
+
+
+        <div class="cycle-top" id="cycle-top">
+          <div class="stat cycle-stat" id="cycle-stat">
+                <span>Ciclo</span>
+                <div class="cycle-value">
+                  <span id="hud-cycle-indicator" class="cycle-indicator" data-phase="day" aria-hidden="true">
+                    <svg class="cycle-icon cycle-sun" viewBox="0 0 24 24">
+                      <circle cx="12" cy="12" r="4.2"></circle>
+                      <path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M19.1 4.9l-1.6 1.6M6.5 17.5l-1.6 1.6"></path>
+                    </svg>
+                    <svg class="cycle-icon cycle-moon" viewBox="0 0 24 24">
+                      <path d="M20.2 14.6A8.4 8.4 0 0 1 9.4 3.8 8.6 8.6 0 1 0 20.2 14.6Z"></path>
+                    </svg>
+                  </span>
+                  <strong id="hud-cycle">Día 1</strong>
+                  <span id="hud-cycle-phase" class="cycle-phase">Día 00:00</span>
+                  <span id="hud-moon" class="cycle-phase" title="Fase lunar">Luna nueva</span>
+                </div>
+              </div>
+        </div>
+        <div class="hud hud-bottom">
+          <div class="hud-bottom-left">
+            <div class="hud-panel stats" id="stats-panel">
+              <div id="stats-details" class="stats-details">
+                <div class="stat">
+                  <span>Seed</span>
+                  <strong id="hud-seed">??</strong>
+                </div>
+                <div class="stat">
+                  <span>Bioma</span>
+                  <strong id="hud-biome">??</strong>
+                </div>
+                <div class="stat">
+                  <span>Coords</span>
+                  <strong id="hud-coords">??</strong>
+                </div>
+                <div class="stat">
+                  <span>Chunks</span>
+                  <strong id="hud-chunks">??</strong>
+                </div>
+                <div class="stat">
+                  <span>FPS</span>
+                  <strong id="hud-fps">??</strong>
+                </div>
+                <div class="stat">
+                  <span>Fauna</span>
+                  <strong id="hud-fauna">??</strong>
+                </div>
+              </div>
+              <button id="btn-stats-toggle" class="stats-toggle" type="button" aria-expanded="true" aria-label="Contraer datos">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+              </button>
+            </div>
+            </div>
+
+            <div class="hud-panel player-panel">
+              <div id="worker-panel" class="worker-panel worker-inline" hidden>
+              <div class="worker-copy">
+                <span class="worker-eyebrow">Duende seleccionado</span>
+                <strong id="worker-name">—</strong>
+                <span id="worker-status" class="worker-status">Sin tarea</span>
+              </div>
+              <div class="worker-actions">
+                <button id="btn-worker-auto" class="worker-action" type="button">
+                  Auto: OFF
+                </button>
+                <button id="btn-worker-restore" class="worker-action" type="button" hidden>
+                  Restaurar veta
+                </button>
+                <button id="btn-worker-cancel" class="worker-action" type="button">
+                  Cancelar tarea
+                </button>
+                <button id="btn-worker-deselect" class="worker-action" type="button">
+                  Deseleccionar
+                </button>
+              </div>
+            </div>
+              <div class="health-row">
+                <span class="health-label">Salud</span>
+                <div class="health-track">
+                  <div id="hud-health-fill" class="health-fill"></div>
+                </div>
+                <strong id="hud-health" class="health-value">100</strong>
+              </div>
+              <div class="energy-row">
+                <span id="hud-energy-label" class="energy-label">Energía</span>
+                <div class="energy-track">
+                  <div id="hud-energy-fill" class="energy-fill"></div>
+                </div>
+                <strong id="hud-energy" class="energy-value">100</strong>
+              </div>
+              <div id="hud-inventory" class="inventory-strip" aria-label="Inventario"></div>
+              <div id="hotbar-info" class="hotbar-info">1-9 seleccionar · clic extra · Shift+E usar · Shift+Q soltar</div>
+              <div id="hud-buff" class="buff-chip" hidden>
+                <span class="buff-dot"></span>
+                <span id="hud-buff-label">CafǸ �� 30 s</span>
+              </div>
+              <div id="hud-effects" class="effects-strip" aria-label="Efectos activos"></div>
+            </div>
+            </div>
+          </div>
+
+          <p class="hud-help">
+            WASD mover · Q/E girar · Shift+E usar · Shift+Q soltar · Space saltar · Home centrar · M modo juego · V feudo · J misiones · R atacar · C crafteo · L recetas · F colocar · clic derecho cancelar · rueda zoom
+          </p>
+        </div>
+
+        <aside id="craft-panel" class="craft-panel" aria-hidden="true" aria-label="Panel de crafteo">
+          <header class="craft-header">
+            <div>
+              <span id="craft-eyebrow" class="craft-eyebrow">Taller del viajero</span>
+              <h2 id="craft-title">Crafteo</h2>
+            </div>
+            <button id="btn-craft-close" class="craft-close" type="button" aria-label="Cerrar crafteo">
+              ×
+            </button>
+          </header>
+          <div id="craft-progress" class="craft-progress" aria-label="Progreso de artesano">
+            <div class="craft-level-row">
+              <span id="craft-level" class="craft-level">Artesano · nivel 1</span>
+              <span id="craft-xp-label" class="craft-xp-label">0/50 XP</span>
+            </div>
+            <div class="craft-xp-track" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+              <div id="craft-xp-fill" class="craft-xp-fill"></div>
+            </div>
+          </div>
+          <p id="craft-intro" class="craft-intro">Combina lo que recolectas para hacerte la vida más fácil.</p>
+          <div id="craft-tabs" class="craft-tabs" role="tablist"></div>
+          <label id="craft-search-wrap" class="craft-search">
+            <input id="craft-search" type="search" placeholder="Buscar receta..." autocomplete="off" />
+          </label>
+          <div id="recipe-list" class="recipe-list"></div>
+          <div id="station-extra" class="station-extra" hidden></div>
+          <footer class="craft-footer">Consume recursos del inventario compartido.</footer>
+        </aside>
+
+        <aside id="recipe-book-panel" class="recipe-book-panel" aria-hidden="true" aria-label="Libro de recetas">
+          <header class="craft-header">
+            <div>
+              <span class="craft-eyebrow">Guía del viajero</span>
+              <h2>Libro de recetas</h2>
+            </div>
+            <button id="btn-recipe-book-close" class="craft-close" type="button" aria-label="Cerrar libro de recetas">
+              &times;
+            </button>
+          </header>
+          <p class="craft-intro">Todas las recetas, estaciones, ingredientes y fases lunares en un solo lugar.</p>
+          <label class="craft-search">
+            <input id="recipe-book-search" type="search" placeholder="Buscar receta o ingrediente..." autocomplete="off" />
+          </label>
+          <div id="recipe-book-list" class="recipe-book-list"></div>
+        </aside>
+
+        <aside id="chest-panel" class="chest-panel" aria-hidden="true" aria-label="Cofre de madera">
+          <header class="craft-header">
+            <div>
+              <span class="craft-eyebrow">Almacenamiento</span>
+              <h2>Cofre de madera</h2>
+            </div>
+            <button id="btn-chest-close" class="craft-close" type="button" aria-label="Cerrar cofre">
+              &times;
+            </button>
+          </header>
+          <p class="craft-intro">Haz clic para mover 1 objeto. Shift + clic mueve la pila completa.</p>
+          <div class="chest-columns">
+            <section class="chest-section">
+              <h3>Mochila <span id="chest-backpack-cap" class="chest-cap"></span></h3>
+              <div id="chest-backpack" class="chest-list"></div>
+            </section>
+            <section class="chest-section">
+              <h3>Cofre <span id="chest-storage-cap" class="chest-cap"></span></h3>
+              <div id="chest-storage" class="chest-list"></div>
+            </section>
+          </div>
+        </aside>
+
+        <aside id="university-panel" class="university-panel" aria-hidden="true" aria-label="Universidad">
+          <header class="craft-header">
+            <div>
+              <span class="craft-eyebrow">Investigación y desarrollo</span>
+              <h2>Universidad</h2>
+            </div>
+            <button id="btn-university-close" class="craft-close" type="button" aria-label="Cerrar universidad">
+              &times;
+            </button>
+          </header>
+          <p class="craft-intro">Compra el libro y el caldero, investiga pociones y llena la biblioteca.</p>
+          <div id="university-tabs" class="craft-tabs" role="tablist"></div>
+          <div id="university-body" class="university-body"></div>
+        </aside>
+
+        <section id="observatory-panel" class="observatory-panel" aria-hidden="true" aria-label="Observatorio">
+          <header class="observatory-header">
+            <div>
+              <span class="craft-eyebrow">Ciencia del cielo</span>
+              <h2>Observatorio</h2>
+            </div>
+            <button id="btn-observatory-close" class="craft-close" type="button" aria-label="Cerrar observatorio">
+              &times;
+            </button>
+          </header>
+          <div class="observatory-toolbar">
+            <input id="sky-search" type="search" placeholder="Buscar constelación o planeta..." autocomplete="off" />
+            <span id="sky-moon" class="sky-moon">Luna nueva</span>
+            <span id="sky-status" class="sky-status"></span>
+          </div>
+          <div id="sky-mission" class="sky-mission"></div>
+          <div class="sky-align-actions">
+            <button id="btn-sky-align" class="menu-button primary" type="button">Alinear misión</button>
+            <button id="btn-sky-observe" class="menu-button" type="button">Observar seleccionada</button>
+            <span id="sky-lens" class="sky-lens">Lente de bronce</span>
+          </div>
+          <div id="sky-notes" class="sky-notes"></div>
+          <div id="sky-diary" class="sky-diary"></div>
+          <div class="observatory-body">
+            <canvas id="sky-canvas" aria-label="Cielo nocturno"></canvas>
+            <aside id="sky-list" class="sky-list" aria-label="Catálogo celeste"></aside>
+          </div>
+          <p id="sky-info" class="sky-info">Arrastra para mirar, usa la rueda para acercar y selecciona un objeto.</p>
+        </section>
+
+        <aside id="fief-panel" class="fief-panel" aria-hidden="true" aria-label="Feudo y defensa">
+          <div class="fief-card">
+            <header class="fief-header">
+              <div>
+                <span class="craft-eyebrow">Defensa de la alianza</span>
+                <h2>Feudo</h2>
+              </div>
+              <button id="btn-fief-close" class="craft-close" type="button" aria-label="Cerrar feudo">&times;</button>
+            </header>
+            <div class="fief-mode-row" id="fief-modes"></div>
+            <p id="fief-wave" class="lan-note"></p>
+            <div id="fief-villages" class="fief-villages"></div>
+            <div id="fief-content" class="fief-content"></div>
+            <p id="fief-status" class="lan-note" role="status"></p>
+          </div>
+        </aside>
+
+        <aside id="village-panel" class="village-panel" aria-hidden="true" aria-label="Aldea y chamán">
+          <header class="village-header">
+            <div>
+              <span class="craft-eyebrow">Aldea del bioma</span>
+              <h2 id="village-title">Aldea</h2>
+            </div>
+            <button id="btn-village-close" class="craft-close" type="button" aria-label="Cerrar aldea">&times;</button>
+          </header>
+          <div class="village-body">
+            <p id="village-shaman" class="village-shaman"></p>
+            <p id="village-request" class="village-request"></p>
+            <p id="village-status" class="village-status"></p>
+            <p id="village-reward" class="village-reward"></p>
+          </div>
+          <div class="village-actions">
+            <button id="btn-village-prepare" class="menu-button" type="button">Preparar ritual</button>
+            <button id="btn-village-deliver" class="menu-button primary" type="button">Entregar brebaje</button>
+            <button id="btn-village-market" class="menu-button" type="button">Mercado y caravanas</button>
+          </div>
+        </aside>
+
+        <aside id="quest-panel" class="quest-panel" aria-hidden="true" aria-label="Misiones de aldeas">
+          <div class="quest-card">
+            <header class="quest-header">
+              <div>
+                <span class="craft-eyebrow">Diario de alianzas</span>
+                <h2>Misiones de aldeas</h2>
+              </div>
+              <button id="btn-quest-close" class="craft-close" type="button" aria-label="Cerrar misiones">
+                &times;
+              </button>
+            </header>
+            <p class="quest-intro">
+              Habla con cada chamán para descubrir su ritual. El círculo de objetivo marca la confianza de la aldea.
+            </p>
+            <div id="quest-list" class="quest-list"></div>
+          </div>
+        </aside>
+
+        <aside id="trade-panel" class="trade-panel" aria-hidden="true" aria-label="Mercado y caravanas">
+          <div class="trade-card">
+            <header class="trade-header">
+              <div>
+                <span class="craft-eyebrow">Alianza de aldeas</span>
+                <h2>Mercado y caravanas</h2>
+              </div>
+              <button id="btn-trade-close" class="craft-close" type="button" aria-label="Cerrar mercado">&times;</button>
+            </header>
+            <div class="trade-body">
+              <h3>Producción de duendes</h3>
+              <div id="trade-villages" class="trade-villages"></div>
+              <h3>Nueva ruta</h3>
+              <div class="trade-form">
+                <select id="trade-origin" aria-label="Aldea de origen"></select>
+                <select id="trade-destination" aria-label="Aldea de destino"></select>
+                <select id="trade-goods" aria-label="Mercancía"></select>
+                <button id="btn-trade-create" class="menu-button primary" type="button">Crear ruta</button>
+              </div>
+              <p id="trade-status" class="lan-note" role="status"></p>
+              <h3>Caravanas activas</h3>
+              <div id="trade-routes" class="trade-routes"></div>
+            </div>
+          </div>
+        </aside>
+
+        <div id="cycle-banner" class="cycle-banner" role="status" aria-live="polite" data-phase="day">
+          <span class="cycle-banner-icon" aria-hidden="true">
+            <svg class="cycle-icon cycle-sun" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="4.2"></circle>
+              <path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M19.1 4.9l-1.6 1.6M6.5 17.5l-1.6 1.6"></path>
+            </svg>
+            <svg class="cycle-icon cycle-moon" viewBox="0 0 24 24">
+              <path d="M20.2 14.6A8.4 8.4 0 0 1 9.4 3.8 8.6 8.6 0 1 0 20.2 14.6Z"></path>
+            </svg>
+          </span>
+          <span id="cycle-banner-text" class="cycle-banner-text">Comienza el día</span>
+        </div>
+
+        <div id="fishing-panel" class="fishing-panel" role="status" aria-live="polite" hidden>
+          <div class="fishing-card">
+            <strong id="fishing-title" class="fishing-title">Esperando a que piquen...</strong>
+            <div id="fishing-bar" class="fishing-bar" hidden>
+              <span class="fishing-zone" aria-hidden="true"></span>
+              <span class="fishing-perfect" aria-hidden="true"></span>
+              <span id="fishing-marker" class="fishing-marker" aria-hidden="true"></span>
+            </div>
+            <span id="fishing-hint" class="fishing-hint">Toca la pantalla o pulsa E en el momento justo</span>
+          </div>
+        </div>
+
+        <div id="item-tooltip" class="item-tooltip" role="tooltip" hidden></div>
+
+        <div id="toast" class="toast" role="status" aria-live="polite"></div>
+      </section>
+
+      <section class="screen screen-exit" id="screen-exit" aria-label="Despedida">
+        <div class="exit-brand">DracxGames</div>
+        <h2>Gracias por jugar</h2>
+        <p>El caldo seguirá esperando.</p>
+        <button id="btn-exit-back" class="menu-button" type="button">Volver al menú</button>
+      </section>
+    </div>
+
+    <script type="module" src="js/main.js"></script>
+  </body>
+</html>

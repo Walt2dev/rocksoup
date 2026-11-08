@@ -1,0 +1,18 @@
+{
+  "name": "rocksoup",
+  "version": "0.6.0",
+  "private": true,
+  "type": "module",
+  "description": "Sopa de Piedras: mundo isometrico procedural y determinista",
+  "scripts": {
+    "test": "node --test \"tests/**/*.test.mjs\"",
+    "lan": "node server/lan-server.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2",
+    "ws": "^8.22.1"
+  }
+}
