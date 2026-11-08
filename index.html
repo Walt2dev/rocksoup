@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" dir="ltr">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -742,7 +742,7 @@
           </div>
         </aside>
 
-        <aside id="chat-panel" class="chat-panel" aria-hidden="true" aria-label="Chat multijugador">
+        <aside id="chat-panel" class="chat-panel" dir="ltr" aria-hidden="true" aria-label="Chat multijugador">
           <div class="chat-card">
             <header class="chat-header">
               <div>
@@ -753,7 +753,7 @@
             </header>
             <div id="chat-log" class="chat-log" role="log" aria-live="polite"></div>
             <form id="chat-form" class="chat-form">
-              <input id="chat-input" type="text" maxlength="180" autocomplete="off" placeholder="Escribe un mensaje..." />
+              <textarea id="chat-input" rows="3" maxlength="180" autocomplete="off" dir="ltr" placeholder="Escribe un mensaje..."></textarea>
               <button id="chat-send" class="menu-button primary" type="submit">Enviar</button>
             </form>
           </div>

@@ -4037,12 +4037,17 @@ body.touch-enabled .hud-bottom {
   flex-direction: column;
   gap: 12px;
   width: min(560px, 96vw);
-  max-height: 80vh;
+  max-height: min(80vh, calc(var(--app-height) - 24px));
   padding: 18px 20px;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: #111a24;
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+}
+
+.chat-card {
+  direction: ltr;
 }
 
 .chat-header {
@@ -4060,19 +4065,22 @@ body.touch-enabled .hud-bottom {
 
 .chat-log {
   display: flex;
-  flex: 1;
+  flex: 1 1 180px;
   flex-direction: column;
   gap: 6px;
-  min-height: 180px;
-  max-height: 52vh;
+  min-height: 0;
+  max-height: none;
   padding: 8px;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  direction: ltr;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.18);
 }
 
 .chat-line {
+  direction: ltr;
   font-family: var(--sans);
   font-size: 12px;
   line-height: 1.45;
@@ -4085,10 +4093,12 @@ body.touch-enabled .hud-bottom {
   font-family: var(--mono);
   font-size: 11px;
   font-weight: 700;
+  unicode-bidi: plaintext;
 }
 
 .chat-text {
   color: var(--text);
+  unicode-bidi: plaintext;
 }
 
 .chat-system {
@@ -4099,24 +4109,45 @@ body.touch-enabled .hud-bottom {
 
 .chat-form {
   display: flex;
+  align-items: flex-end;
   gap: 8px;
+  direction: ltr;
 }
 
-.chat-form input {
+.chat-form input,
+.chat-form textarea {
   flex: 1;
   min-width: 0;
+  min-height: 64px;
+  max-height: 120px;
   padding: 10px 12px;
+  resize: none;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.25);
   color: var(--text);
   font-family: var(--sans);
-  font-size: 13px;
+  font-size: 16px;
+  line-height: 1.35;
+  direction: ltr;
+  text-align: left;
 }
 
-.chat-form input:focus {
+.chat-form input:focus,
+.chat-form textarea:focus {
   border-color: var(--accent);
   outline: none;
+}
+
+.chat-form .menu-button {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 64px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0 12px;
+  font-size: 12px;
+  align-self: flex-end;
 }
 
 .ranking-tabs {
@@ -5130,6 +5161,25 @@ body.touch-enabled .hud-bottom {
   .touch-zoom {
     left: calc(max(12px, env(safe-area-inset-left)) + 98px);
     bottom: calc(124px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (pointer: coarse) and (min-width: 600px) and (min-height: 600px) {
+  .hud-bottom {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom));
+  }
+
+  .hud-context-actions {
+    bottom: calc(142px + env(safe-area-inset-bottom));
+  }
+
+  .touch-joystick,
+  .touch-zoom {
+    bottom: calc(142px + env(safe-area-inset-bottom));
+  }
+
+  .touch-rotate {
+    bottom: calc(250px + env(safe-area-inset-bottom));
   }
 }
 
