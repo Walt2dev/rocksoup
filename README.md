@@ -33,9 +33,9 @@ Abre `http://localhost:3000` en el equipo anfitrión o la URL del despliegue.
 - **Chat** global dentro de la partida con rate-limit e historial reciente.
 - **Roster** en partida con el botón **Jugadores** o la tecla `P`.
 - **HUD rediseñado**: estado compacto, menú único (`H` o botón ⚙), cruz de
-  acciones (Atacar arriba, Saltar y Duendes a la izquierda, Chat a la derecha,
-  Centrar abajo y Misiones abajo a la derecha; Usar/Colocar al centro), giro y
-  zoom junto al joystick.
+  acciones (Atacar arriba, Saltar y Duendes a la izquierda, Misiones a la
+  derecha, Centrar abajo y Chat abajo a la derecha; Usar/Colocar al centro),
+  giro y zoom junto al joystick.
 - **Hotbar de 9 slots en una sola fila**. El botón mochila abre el inventario
   completo centrado, donde se arrastran objetos a la fila rápida o se
   reordenan.

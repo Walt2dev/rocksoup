@@ -12,6 +12,7 @@ export class HudMenu {
     this.handleBackdropClick = this.handleBackdropClick.bind(this);
     this.handleContextAction = this.handleContextAction.bind(this);
     this.handleCrossAttack = () => this.game?.attack?.();
+    this.handleCrossAttackDelegated = this.handleCrossAttackDelegated.bind(this);
     this.handleCrossCenter = () => this.game?.recenterCamera?.();
     this.handleCrossWorkers = () => this.game?.handleIdleWorkerRequest?.();
     this.handleCrossJump = () => this.game?.jump?.();
@@ -35,7 +36,9 @@ export class HudMenu {
     this.hud.hudMenu?.addEventListener("click", this.handleBackdropClick);
     this.hud.hudMenu?.addEventListener("click", this.handleMenuClick);
     this.hud.btnContextAction?.addEventListener("click", this.handleContextAction);
-    this.hud.btnCrossAttack?.addEventListener("click", this.handleCrossAttack);
+    this.hud.btnCrossAttack
+      ?.closest(".hud-context-actions")
+      ?.addEventListener("click", this.handleCrossAttackDelegated);
     this.hud.btnCrossCenter?.addEventListener("click", this.handleCrossCenter);
     this.hud.btnCrossWorkers?.addEventListener("click", this.handleCrossWorkers);
     this.hud.btnCrossJump?.addEventListener("click", this.handleCrossJump);
@@ -59,7 +62,9 @@ export class HudMenu {
     this.hud.hudMenu?.removeEventListener("click", this.handleBackdropClick);
     this.hud.hudMenu?.removeEventListener("click", this.handleMenuClick);
     this.hud.btnContextAction?.removeEventListener("click", this.handleContextAction);
-    this.hud.btnCrossAttack?.removeEventListener("click", this.handleCrossAttack);
+    this.hud.btnCrossAttack
+      ?.closest(".hud-context-actions")
+      ?.removeEventListener("click", this.handleCrossAttackDelegated);
     this.hud.btnCrossCenter?.removeEventListener("click", this.handleCrossCenter);
     this.hud.btnCrossWorkers?.removeEventListener("click", this.handleCrossWorkers);
     this.hud.btnCrossJump?.removeEventListener("click", this.handleCrossJump);
@@ -253,6 +258,16 @@ export class HudMenu {
   handleContextAction() {
     this.game?.useOrPlaceSelected?.();
     this.refreshContextActions();
+  }
+
+  handleCrossAttackDelegated(event) {
+    const button = event.target?.closest?.('[data-cross-action="attack"]');
+    if (!button || button.disabled) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.handleCrossAttack();
   }
 
   handleHotbarToggle() {

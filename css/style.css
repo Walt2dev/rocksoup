@@ -4806,6 +4806,7 @@ body.touch-enabled .hud-bottom {
   font-family: var(--mono);
   font-weight: 700;
   line-height: 1.05;
+  z-index: 1;
   cursor: pointer;
   pointer-events: auto;
   backdrop-filter: blur(8px);
@@ -4841,6 +4842,7 @@ body.touch-enabled .hud-bottom {
 .cross-top {
   top: 0;
   left: 61px;
+  z-index: 2;
 }
 
 .cross-right {

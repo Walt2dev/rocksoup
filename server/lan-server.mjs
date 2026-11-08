@@ -1159,7 +1159,7 @@ function handleAmbientHit(client, message) {
     return;
   }
 
-  if (Math.hypot(position.x - client.x, position.y - client.y) > 12) {
+  if (Math.hypot(position.x - client.x, position.y - client.y) > 20) {
     return;
   }
 

@@ -3545,6 +3545,31 @@ export class Game {
     return 0.45;
   }
 
+  showAttackSwing() {
+    const transform = this.playerTransform;
+    this.effects.addText("\u2694", transform.x, transform.y, {
+      color: "#f0c07a",
+      duration: 0.38,
+      rise: 16,
+    });
+  }
+
+  findNetworkPlayerInRange(range) {
+    const transform = this.playerTransform;
+    let best = null;
+    let bestDistance = range;
+
+    for (const remote of this.remotePlayers.values()) {
+      const distance = Math.hypot(remote.x - transform.x, remote.y - transform.y);
+      if (distance <= bestDistance) {
+        bestDistance = distance;
+        best = remote;
+      }
+    }
+
+    return best;
+  }
+
   attack() {
     if (this.fishing) {
       this.cancelFishing();
@@ -3567,23 +3592,42 @@ export class Game {
     const target = this.findAttackTargetInRange(range);
 
     if (this.network) {
-      if (weapon === "bow") {
-        this.inventory.removeItem("arrow", 1);
-      }
       if (target?.ambient?.network && Number.isInteger(target.ambient.networkId)) {
+        if (weapon === "bow") {
+          this.inventory.removeItem("arrow", 1);
+        }
         const damage = this.attackDamage(weapon);
         this.network.sendAmbientHit(target.ambient.networkId, damage);
         this.effects.addText(`-${damage}`, target.transform.x, target.transform.y, {
           color: "#f0b5ae",
         });
+        this.showAttackSwing();
         this.updateHud();
         return;
       }
-      this.network.sendAttack(weapon);
+
+      if (this.findNetworkPlayerInRange(range)) {
+        if (weapon === "bow") {
+          this.inventory.removeItem("arrow", 1);
+        }
+        this.network.sendAttack(weapon);
+        this.showAttackSwing();
+        this.updateHud();
+        return;
+      }
+
+      this.showAttackSwing();
+      this.notify(
+        weapon === "bow"
+          ? "No hay objetivos a distancia."
+          : "No hay criaturas al alcance.",
+      );
+      this.updateHud();
       return;
     }
 
     if (!target) {
+      this.showAttackSwing();
       this.notify(
         weapon === "bow"
           ? "No hay objetivos a distancia."
@@ -3593,6 +3637,7 @@ export class Game {
     }
 
     const damage = this.attackDamage(weapon);
+    this.showAttackSwing();
 
     if (weapon === "bow") {
       this.inventory.removeItem("arrow", 1);
