@@ -32,7 +32,9 @@ Abre `http://localhost:3000` en el equipo anfitrión o la URL del despliegue.
   configurado; si no, guarda el ranking en `lan-save.json`.
 - **Chat** global dentro de la partida con rate-limit e historial reciente.
 - **Roster** en partida con el botón **Jugadores** o la tecla `P`.
-- Teclas: `T` chat, `B` ranking, `P` jugadores, `Esc` cierra el chat.
+- **HUD rediseñado**: estado compacto, menú único (`H` o botón ⚙), acción
+  principal contextual y hotbar colapsable con mochila.
+- Teclas: `T` chat, `B` ranking, `P` jugadores, `H` menú, `Esc` cierra el chat.
 
 ### Panel de administración
 

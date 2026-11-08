@@ -2,6 +2,7 @@ import { createRng } from "../core/rng.js";
 import { Camera } from "../render/camera.js";
 import { Effects } from "../render/effects.js";
 import { TouchControls } from "../ui/touchControls.js";
+import { resolveContextAction } from "./contextAction.js";
 import {
   loadDonkeySkinId,
   loadStatsCollapsed,
@@ -453,6 +454,7 @@ export class Game {
     this.networkTimer = 0;
     this.inventorySendTimer = 0;
     this.touchControls = null;
+    this.hudMenu = null;
     this.ambientRng = createRng(`${this.world.seed}:ambient`);
     this.ambientSpawnTimer = 0;
     this.ambientSpawnSlot = 0;
@@ -2475,6 +2477,8 @@ export class Game {
     this.hud.btnAttack?.removeEventListener("click", this.attack);
     this.touchControls?.destroy();
     this.touchControls = null;
+    this.hudMenu?.destroy();
+    this.hudMenu = null;
     this.closeCrafting();
     this.closeRecipeBook();
     this.closeChest();
@@ -11369,6 +11373,7 @@ export class Game {
           : "No hay duendes inactivos";
     }
     this.touchControls?.setIdleWorkerCount(idleWorkers);
+    this.hudMenu?.refreshContextActions();
   }
 
   updateCoffeeHud() {
@@ -11479,6 +11484,29 @@ export class Game {
 
     this.selectedHotbar = { kind: entry.kind, key: entry.key };
     this.renderInventoryHud();
+  }
+
+  getContextAction() {
+    return resolveContextAction({
+      entry: this.getSelectedEntry(),
+      placing: Boolean(this.placingItem),
+      mounted: this.donkeyMounted,
+      fishing: this.fishing,
+    });
+  }
+
+  runContextAction() {
+    const action = this.getContextAction();
+
+    if (action.id === "place") {
+      this.handlePlaceSelected();
+    } else if (action.id === "use" || action.id === "fish") {
+      this.useSelectedItem();
+    } else if (action.id === "dismount") {
+      this.dismountDonkey();
+    } else {
+      this.attack();
+    }
   }
 
   handleInventoryClick(event) {

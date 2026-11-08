@@ -33,6 +33,7 @@ import {
 } from "./game/texturePacks.js";
 import { LanClient } from "./net/lanClient.js";
 import { SocialUI } from "./net/social.js";
+import { HudMenu } from "./ui/hudMenu.js";
 import { loadAssets } from "./render/assets.js";
 
 const byId = (id) => document.getElementById(id);
@@ -241,11 +242,24 @@ const ui = {
     pvpBannerTitle: byId("pvp-banner-title"),
     pvpBannerTimer: byId("pvp-banner-timer"),
     pvpBannerLeader: byId("pvp-banner-leader"),
+    btnHudMenu: byId("btn-hud-menu"),
+    hudMenu: byId("hud-menu"),
+    btnHudMenuClose: byId("btn-hud-menu-close"),
+    hudMenuHelp: byId("hud-menu-help"),
+    btnContextAction: byId("btn-context-action"),
+    contextActionLabel: byId("context-action-label"),
+    contextActionIcon: byId("context-action-icon-use"),
+    btnTouchJump: byId("btn-touch-jump"),
+    btnTouchUse: byId("btn-touch-use"),
+    btnHotbarToggle: byId("btn-hotbar-toggle"),
+    btnStatsClose: byId("btn-stats-close"),
+    playerPanel: byId("player-panel"),
   },
 };
 
 let assets = null;
 let game = null;
+let hudMenu = null;
 let exitTimer = null;
 let saveStore;
 let lanClient = null;
@@ -322,6 +336,19 @@ function refreshSaveInfo() {
   ui.saveInfo.textContent = `Partida individual · ${save.seed} · ${date}`;
 }
 
+function attachHudMenu() {
+  hudMenu?.destroy();
+  hudMenu = null;
+
+  if (!game) {
+    return;
+  }
+
+  hudMenu = new HudMenu({ game, hud: ui.hud });
+  game.hudMenu = hudMenu;
+  hudMenu.attach();
+}
+
 function beginGame(seed, saveState, characterSkin = null) {
   ui.menuError.textContent = "";
   social.setEnabled(false);
@@ -347,6 +374,7 @@ function beginGame(seed, saveState, characterSkin = null) {
       onMenuRequested: returnToMenu,
     });
     game.start();
+    attachHudMenu();
 
     if (new URLSearchParams(window.location.search).has("debug")) {
       window.__rocksoup = game;
@@ -661,12 +689,14 @@ function startLanGame(message) {
       networkSelfId: message.selfId ?? lanClient.selfId,
     });
     game.start();
+    attachHudMenu();
 
     social.setClient(lanClient);
     social.setEnabled(true);
     social.setChatHistory(message.chat);
     social.setLeaderboard(message.leaderboard, message.leaderboardBest);
     social.setEvent(message.event);
+    hudMenu?.refresh();
 
     if (new URLSearchParams(window.location.search).has("debug")) {
       window.__rocksoup = game;
