@@ -222,6 +222,7 @@ const ui = {
     btnChat: byId("btn-chat"),
     chatBadge: byId("chat-badge"),
     btnRanking: byId("btn-ranking"),
+    btnPlayers: byId("btn-players"),
     chatPanel: byId("chat-panel"),
     chatLog: byId("chat-log"),
     chatForm: byId("chat-form"),
@@ -233,6 +234,9 @@ const ui = {
     rankingNext: byId("ranking-next"),
     rankingTabs: byId("ranking-tabs"),
     btnRankingClose: byId("btn-ranking-close"),
+    playersPanel: byId("players-panel"),
+    playersList: byId("players-list"),
+    btnPlayersClose: byId("btn-players-close"),
     pvpBanner: byId("pvp-banner"),
     pvpBannerTitle: byId("pvp-banner-title"),
     pvpBannerTimer: byId("pvp-banner-timer"),
@@ -661,7 +665,7 @@ function startLanGame(message) {
     social.setClient(lanClient);
     social.setEnabled(true);
     social.setChatHistory(message.chat);
-    social.setLeaderboard(message.leaderboard);
+    social.setLeaderboard(message.leaderboard, message.leaderboardBest);
     social.setEvent(message.event);
 
     if (new URLSearchParams(window.location.search).has("debug")) {
@@ -704,7 +708,10 @@ function connectLan() {
     },
     onLobby: (message) => updateLanLobby(message),
     onStart: (message) => startLanGame(message),
-    onPlayers: (message) => game?.handleNetworkPlayers(message),
+    onPlayers: (message) => {
+      game?.handleNetworkPlayers(message);
+      social.setPlayers(message.players, lanClient?.selfId);
+    },
     onTime: (message) => {
       game?.handleNetworkTime(message);
       social.setEvent(message.event);
@@ -718,7 +725,8 @@ function connectLan() {
     onHit: (message) => game?.handleNetworkHit(message),
     onRespawn: (message) => game?.handleNetworkRespawn(message),
     onChat: (message) => social.pushChat(message),
-    onLeaderboard: (message) => social.setLeaderboard(message.entries),
+    onLeaderboard: (message) =>
+      social.setLeaderboard(message.entries, message.bestEntries),
     onEvent: (event) => social.setEvent(event),
     onKill: (message) => social.pushKill(message),
     onError: (message) => {

@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { readFile, writeFile, rename, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { extname, join, resolve, sep } from "node:path";
+import { extname, join, resolve, sep, dirname } from "node:path";
 import { networkInterfaces } from "node:os";
 import { randomBytes } from "node:crypto";
 import { WebSocketServer } from "ws";
@@ -32,6 +32,16 @@ import {
   mergeEventResults,
   sanitizeLeaderboard,
 } from "./leaderboard.mjs";
+import {
+  createLeaderboardStore,
+  hashToken,
+} from "./leaderboardStore.mjs";
+import {
+  adminAuthorized,
+  bearerToken,
+  buildAdminSnapshot,
+  getAdminToken,
+} from "./admin.mjs";
 
 const ROOT = resolve(process.cwd());
 const SAVE_DIR = process.env.SAVE_DIR
@@ -309,6 +319,8 @@ const pvpConfig = {
 };
 const pvp = createPvpState(Date.now(), pvpConfig);
 const chatHistory = new ChatHistory(CHAT_CONFIG.historyLimit);
+const leaderboardStore = createLeaderboardStore();
+await leaderboardStore.init();
 
 function publicPlayer(client) {
   return {
@@ -322,6 +334,8 @@ function publicPlayer(client) {
     swimSeconds: client.swimSeconds,
     workers: client.workers,
     skinId: client.skinId,
+    eventScore: pvp.scores[client.id]?.score ?? 0,
+    eventKills: pvp.scores[client.id]?.kills ?? 0,
   };
 }
 
@@ -358,8 +372,10 @@ function broadcastLobby() {
   broadcast(lobbyPayload(), { include: (client) => !started });
 }
 
-function leaderboardEntriesFor(client) {
-  return leaderboardTop(state.leaderboard, { limit: 10 }).map((entry) => ({
+function decorateLeaderboardEntry(entry, client) {
+  const fromDb = typeof entry.tokenHash === "string";
+
+  return {
     name: entry.name,
     color: entry.color,
     points: entry.points,
@@ -368,21 +384,55 @@ function leaderboardEntriesFor(client) {
     bestStreak: entry.bestStreak,
     eventsWon: entry.eventsWon,
     bestEventScore: entry.bestEventScore,
-    isSelf: entry.token === client.token,
-  }));
+    isSelf: client
+      ? fromDb
+        ? entry.tokenHash === hashToken(client.token)
+        : entry.token === client.token
+      : false,
+  };
 }
 
-function sendLeaderboard(client) {
+async function getLeaderboardPayload(client = null) {
+  const [dbPoints, dbBest] = await Promise.all([
+    leaderboardStore.top("points", 10),
+    leaderboardStore.top("best", 10),
+  ]);
+
+  if (dbPoints && dbBest) {
+    const dbEmpty = dbPoints.length === 0 && dbBest.length === 0;
+    const jsonHasEntries = Object.keys(state.leaderboard.entries ?? {}).length > 0;
+
+    if (!(dbEmpty && jsonHasEntries)) {
+      return {
+        points: dbPoints.map((entry) => decorateLeaderboardEntry(entry, client)),
+        best: dbBest.map((entry) => decorateLeaderboardEntry(entry, client)),
+      };
+    }
+  }
+
+  return {
+    points: leaderboardTop(state.leaderboard, { sort: "points", limit: 10 }).map(
+      (entry) => decorateLeaderboardEntry(entry, client),
+    ),
+    best: leaderboardTop(state.leaderboard, { sort: "best", limit: 10 }).map(
+      (entry) => decorateLeaderboardEntry(entry, client),
+    ),
+  };
+}
+
+async function sendLeaderboard(client) {
+  const leaderboard = await getLeaderboardPayload(client);
   send(client.ws, {
     type: "leaderboard",
-    entries: leaderboardEntriesFor(client),
+    entries: leaderboard.points,
+    bestEntries: leaderboard.best,
   });
 }
 
-function broadcastLeaderboard() {
-  for (const client of clients.values()) {
-    sendLeaderboard(client);
-  }
+async function broadcastLeaderboard() {
+  await Promise.allSettled(
+    [...clients.values()].map((client) => sendLeaderboard(client)),
+  );
 }
 
 function pushChat(entry) {
@@ -403,7 +453,7 @@ function currentEventSnapshot() {
   return snapshotPvp(pvp, Date.now());
 }
 
-function handlePvpTransition(now) {
+async function handlePvpTransition(now) {
   const transition = tickPvp(pvp, now);
 
   if (!transition) {
@@ -416,11 +466,13 @@ function handlePvpTransition(now) {
       `¡Evento PvP! Deathmatch de ${Math.round(pvp.config.durationMs / 1000)} s. Cada kill da puntos.`,
     );
   } else if (transition.type === "finished") {
+    const winnerToken = transition.winner?.token ?? null;
     mergeEventResults(state.leaderboard, transition.results, {
       now,
-      winnerToken: transition.winner?.token ?? null,
+      winnerToken,
     });
-    broadcastLeaderboard();
+    await leaderboardStore.merge(transition.results, { winnerToken, now });
+    await broadcastLeaderboard();
 
     if (transition.winner && transition.winner.score > 0) {
       pushSystemChat(
@@ -463,7 +515,8 @@ function profileFor(client) {
   };
 }
 
-function sendStart(client) {
+async function sendStart(client) {
+  const leaderboard = await getLeaderboardPayload(client);
   send(client.ws, {
     type: "start",
     seed: state.seed,
@@ -471,7 +524,8 @@ function sendStart(client) {
     profile: profileFor(client),
     selfId: client.id,
     hostId,
-    leaderboard: leaderboardEntriesFor(client),
+    leaderboard: leaderboard.points,
+    leaderboardBest: leaderboard.best,
     chat: chatHistory.snapshot(),
     event: currentEventSnapshot(),
   });
@@ -530,7 +584,7 @@ async function saveState() {
   };
 
   try {
-    await mkdir(SAVE_DIR, { recursive: true });
+    await mkdir(dirname(SAVE_PATH), { recursive: true });
     const temp = `${SAVE_PATH}.tmp`;
     await writeFile(temp, JSON.stringify(payload), "utf8");
     await rename(temp, SAVE_PATH);
@@ -541,7 +595,9 @@ async function saveState() {
 
 function joinGameForClient(client) {
   if (started) {
-    sendStart(client);
+    sendStart(client).catch((error) => {
+      console.warn("[LAN] No se pudo enviar el estado inicial:", error.message);
+    });
   } else {
     send(client.ws, {
       type: "welcome",
@@ -652,6 +708,7 @@ function handleJoin(ws, message) {
     lastAttackAt: 0,
     lastStateAt: 0,
     lastLeaderboardAt: 0,
+    connectedAt: Date.now(),
     chatLimiter: new ChatLimiter(),
   };
 
@@ -777,7 +834,9 @@ function handleLeaderboardRequest(client) {
     return;
   }
   client.lastLeaderboardAt = now;
-  sendLeaderboard(client);
+  sendLeaderboard(client).catch((error) => {
+    console.warn("[LAN] No se pudo enviar el ranking:", error.message);
+  });
 }
 
 function handleHarvest(client, message) {
@@ -1030,7 +1089,9 @@ function handleMessage(ws, raw) {
     pvp.nextAt = Date.now() + pvp.config.intervalMs;
     broadcast({ type: "lobby", hostId, started, players: [] });
     for (const other of clients.values()) {
-      sendStart(other);
+      sendStart(other).catch((error) => {
+        console.warn("[LAN] No se pudo iniciar a un jugador:", error.message);
+      });
     }
     scheduleSave();
     return;
@@ -1134,8 +1195,57 @@ const server = createServer(async (req, res) => {
       pathname = "/index.html";
     }
 
+    if (pathname === "/admin") {
+      pathname = "/admin.html";
+    }
+
+    if (pathname === "/api/admin/players") {
+      if (req.method !== "GET") {
+        res.writeHead(405, { Allow: "GET" });
+        res.end();
+        return;
+      }
+
+      const adminToken = getAdminToken();
+
+      if (!adminToken) {
+        res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end("Not found");
+        return;
+      }
+
+      if (!adminAuthorized(adminToken, bearerToken(req.headers.authorization))) {
+        res.writeHead(401, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-store",
+          "WWW-Authenticate": "Bearer",
+        });
+        res.end(JSON.stringify({ error: "No autorizado" }));
+        return;
+      }
+
+      const leaderboard = await getLeaderboardPayload(null);
+      const snapshot = buildAdminSnapshot({
+        clients: [...clients.values()],
+        pvp,
+        started,
+        hostId,
+        now: Date.now(),
+        leaderboard,
+        rankingSource: leaderboardStore.isAvailable() ? "mysql" : "json",
+      });
+
+      res.writeHead(200, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+      });
+      res.end(JSON.stringify(snapshot));
+      return;
+    }
+
     const allowed =
       pathname === "/index.html" ||
+      pathname === "/admin.html" ||
       pathname === "/favicon.svg" ||
       pathname.startsWith("/css/") ||
       pathname.startsWith("/characters/") ||
@@ -1203,7 +1313,9 @@ setInterval(() => {
     return;
   }
 
-  handlePvpTransition(now);
+  handlePvpTransition(now).catch((error) => {
+    console.warn("[LAN] Error en el evento PvP:", error.message);
+  });
   state.time += elapsed;
   broadcast({
     type: "time",
@@ -1236,9 +1348,11 @@ server.listen(PORT, "0.0.0.0", () => {
 
 process.on("SIGINT", async () => {
   await saveState();
+  await leaderboardStore.close();
   process.exit(0);
 });
 process.on("SIGTERM", async () => {
   await saveState();
+  await leaderboardStore.close();
   process.exit(0);
 });

@@ -27,16 +27,40 @@ Abre `http://localhost:3000` en el equipo anfitrión o la URL del despliegue.
 - **PvP** siempre activo en partidas multijugador.
 - **Evento Deathmatch PvP** automático cada 5 minutos durante 90 segundos.
   Cada kill da puntos; las rachas de 3 o más dan bonus.
-- **Ranking** persistente en `lan-save.json`: puntos acumulados, kills,
-  muertes, mejor racha, victorias de evento y mejor puntuación de un evento.
+- **Ranking** persistente: puntos acumulados, kills, muertes, mejor racha,
+  victorias de evento y mejor puntuación de un evento. Usa MySQL si está
+  configurado; si no, guarda el ranking en `lan-save.json`.
 - **Chat** global dentro de la partida con rate-limit e historial reciente.
-- Teclas: `T` abre el chat, `B` abre el ranking, `Esc` cierra el chat.
+- **Roster** en partida con el botón **Jugadores** o la tecla `P`.
+- Teclas: `T` chat, `B` ranking, `P` jugadores, `Esc` cierra el chat.
 
-Variables de entorno útiles:
+### Panel de administración
+
+- Disponible en `/admin`.
+- Requiere definir `ADMIN_TOKEN`; sin token la ruta y la API devuelven 404.
+- Muestra conectados, salud, posición, tiempo conectado, evento y TOP del
+  ranking. Se actualiza cada 2 segundos.
+
+### MySQL (solo ranking)
+
+1. Importa `server/schema.sql` desde el panel de tu base de datos (Importar SQL).
+2. Define las variables de entorno `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`,
+   `MYSQL_PASSWORD`, `MYSQL_DATABASE`.
+3. Opcional: `MYSQL_SSL=true`, `MYSQL_SSL_CA=/ruta/ca.pem`,
+   `MYSQL_CONNECTION_LIMIT=5`.
+4. Opcional: migra el ranking actual con
+   `node server/migrate-leaderboard.mjs`.
+
+Si MySQL no está configurado o falla, el servidor continúa con el ranking JSON.
+
+## Variables de entorno útiles
 
 - `PORT`: puerto HTTP/WebSocket (por defecto `3000`).
 - `SAVE_PATH`: ruta del guardado (útil en volúmenes persistentes).
 - `SAVE_DIR`: carpeta del guardado si no usas `SAVE_PATH`.
+- `ADMIN_TOKEN`: token del panel `/admin`.
+- `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`.
+- `MYSQL_SSL`, `MYSQL_SSL_CA`, `MYSQL_CONNECTION_LIMIT`.
 - `PVP_INTERVAL_MS`: tiempo entre eventos (por defecto `300000`).
 - `PVP_DURATION_MS`: duración del evento (por defecto `90000`).
 

@@ -16,11 +16,17 @@ export class SocialUI {
     this.enabled = false;
     this.chatOpen = false;
     this.rankingOpen = false;
+    this.rosterOpen = false;
     this.rankingSort = "points";
     this.leaderboard = [];
+    this.bestLeaderboard = [];
+    this.players = [];
+    this.selfId = null;
     this.event = null;
     this.unread = 0;
     this.attached = false;
+    this.rosterLastRender = 0;
+    this.rosterTimer = null;
 
     this.handleKeyDown = this.handleKeyDown.bind(this);
     this.handleChatInputKeyDown = this.handleChatInputKeyDown.bind(this);
@@ -28,8 +34,10 @@ export class SocialUI {
     this.handleChatSubmit = this.handleChatSubmit.bind(this);
     this.toggleChat = this.toggleChat.bind(this);
     this.toggleRanking = this.toggleRanking.bind(this);
+    this.toggleRoster = this.toggleRoster.bind(this);
     this.closeChat = this.closeChat.bind(this);
     this.closeRanking = this.closeRanking.bind(this);
+    this.closeRoster = this.closeRoster.bind(this);
     this.sendChat = this.sendChat.bind(this);
   }
 
@@ -46,8 +54,10 @@ export class SocialUI {
     window.addEventListener("keydown", this.handleKeyDown);
     this.hud.btnChat?.addEventListener("click", this.toggleChat);
     this.hud.btnRanking?.addEventListener("click", this.toggleRanking);
+    this.hud.btnPlayers?.addEventListener("click", this.toggleRoster);
     this.hud.btnChatClose?.addEventListener("click", this.closeChat);
     this.hud.btnRankingClose?.addEventListener("click", this.closeRanking);
+    this.hud.btnPlayersClose?.addEventListener("click", this.closeRoster);
     this.hud.chatSend?.addEventListener("click", this.sendChat);
     this.hud.chatForm?.addEventListener("submit", this.handleChatSubmit);
     this.hud.chatInput?.addEventListener("keydown", this.handleChatInputKeyDown);
@@ -64,14 +74,17 @@ export class SocialUI {
     window.removeEventListener("keydown", this.handleKeyDown);
     this.hud.btnChat?.removeEventListener("click", this.toggleChat);
     this.hud.btnRanking?.removeEventListener("click", this.toggleRanking);
+    this.hud.btnPlayers?.removeEventListener("click", this.toggleRoster);
     this.hud.btnChatClose?.removeEventListener("click", this.closeChat);
     this.hud.btnRankingClose?.removeEventListener("click", this.closeRanking);
+    this.hud.btnPlayersClose?.removeEventListener("click", this.closeRoster);
     this.hud.chatSend?.removeEventListener("click", this.sendChat);
     this.hud.chatForm?.removeEventListener("submit", this.handleChatSubmit);
     this.hud.chatInput?.removeEventListener("keydown", this.handleChatInputKeyDown);
     this.hud.rankingTabs?.removeEventListener("click", this.handleRankingTabsClick);
     this.closeChat();
     this.closeRanking();
+    this.closeRoster();
   }
 
   setEnabled(enabled) {
@@ -83,12 +96,17 @@ export class SocialUI {
     if (this.hud.btnRanking) {
       this.hud.btnRanking.hidden = !this.enabled;
     }
+    if (this.hud.btnPlayers) {
+      this.hud.btnPlayers.hidden = !this.enabled;
+    }
 
     if (!this.enabled) {
       this.closeChat();
       this.closeRanking();
+      this.closeRoster();
       this.unread = 0;
       this.updateChatBadge();
+      this.players = [];
       this.setEvent(null);
     }
   }
@@ -136,9 +154,40 @@ export class SocialUI {
     }
   }
 
-  setLeaderboard(entries) {
+  setLeaderboard(entries, bestEntries) {
     this.leaderboard = Array.isArray(entries) ? entries : [];
+    this.bestLeaderboard = Array.isArray(bestEntries) ? bestEntries : [];
     this.renderRanking();
+  }
+
+  setPlayers(players, selfId) {
+    this.players = Array.isArray(players) ? players : [];
+    if (Number.isFinite(selfId)) {
+      this.selfId = selfId;
+    }
+
+    if (!this.rosterOpen) {
+      return;
+    }
+
+    const now = performance.now();
+    const elapsed = now - this.rosterLastRender;
+
+    if (elapsed >= 500) {
+      this.rosterLastRender = now;
+      this.renderRoster();
+      return;
+    }
+
+    if (this.rosterTimer === null) {
+      this.rosterTimer = window.setTimeout(() => {
+        this.rosterTimer = null;
+        this.rosterLastRender = performance.now();
+        if (this.rosterOpen) {
+          this.renderRoster();
+        }
+      }, 500 - elapsed);
+    }
   }
 
   setEvent(event) {
@@ -216,8 +265,13 @@ export class SocialUI {
   openChat() {
     this.chatOpen = true;
     this.rankingOpen = false;
+    this.rosterOpen = false;
     this.hud.rankingPanel?.classList.remove("is-open");
     this.hud.rankingPanel?.setAttribute("aria-hidden", "true");
+    this.hud.playersPanel?.classList.remove("is-open");
+    this.hud.playersPanel?.setAttribute("aria-hidden", "true");
+    this.hud.btnRanking?.classList.remove("is-active");
+    this.hud.btnPlayers?.classList.remove("is-active");
     this.hud.chatPanel?.classList.add("is-open");
     this.hud.chatPanel?.setAttribute("aria-hidden", "false");
     this.hud.btnChat?.classList.add("is-active");
@@ -252,9 +306,13 @@ export class SocialUI {
   openRanking() {
     this.rankingOpen = true;
     this.chatOpen = false;
+    this.rosterOpen = false;
     this.hud.chatPanel?.classList.remove("is-open");
     this.hud.chatPanel?.setAttribute("aria-hidden", "true");
     this.hud.btnChat?.classList.remove("is-active");
+    this.hud.playersPanel?.classList.remove("is-open");
+    this.hud.playersPanel?.setAttribute("aria-hidden", "true");
+    this.hud.btnPlayers?.classList.remove("is-active");
     this.hud.rankingPanel?.classList.add("is-open");
     this.hud.rankingPanel?.setAttribute("aria-hidden", "false");
     this.hud.btnRanking?.classList.add("is-active");
@@ -271,6 +329,117 @@ export class SocialUI {
     this.hud.rankingPanel?.classList.remove("is-open");
     this.hud.rankingPanel?.setAttribute("aria-hidden", "true");
     this.hud.btnRanking?.classList.remove("is-active");
+  }
+
+  toggleRoster() {
+    if (!this.enabled) {
+      return;
+    }
+    if (this.rosterOpen) {
+      this.closeRoster();
+    } else {
+      this.openRoster();
+    }
+  }
+
+  openRoster() {
+    this.rosterOpen = true;
+    this.chatOpen = false;
+    this.rankingOpen = false;
+    this.hud.chatPanel?.classList.remove("is-open");
+    this.hud.chatPanel?.setAttribute("aria-hidden", "true");
+    this.hud.btnChat?.classList.remove("is-active");
+    this.hud.rankingPanel?.classList.remove("is-open");
+    this.hud.rankingPanel?.setAttribute("aria-hidden", "true");
+    this.hud.btnRanking?.classList.remove("is-active");
+    this.hud.playersPanel?.classList.add("is-open");
+    this.hud.playersPanel?.setAttribute("aria-hidden", "false");
+    this.hud.btnPlayers?.classList.add("is-active");
+    this.rosterLastRender = performance.now();
+    this.renderRoster();
+  }
+
+  closeRoster() {
+    if (this.rosterTimer !== null) {
+      window.clearTimeout(this.rosterTimer);
+      this.rosterTimer = null;
+    }
+    if (!this.rosterOpen) {
+      return;
+    }
+    this.rosterOpen = false;
+    this.hud.playersPanel?.classList.remove("is-open");
+    this.hud.playersPanel?.setAttribute("aria-hidden", "true");
+    this.hud.btnPlayers?.classList.remove("is-active");
+  }
+
+  renderRoster() {
+    const container = this.hud.playersList;
+    if (!container) {
+      return;
+    }
+
+    const selfId = Number.isFinite(this.selfId)
+      ? this.selfId
+      : this.lanClient?.selfId ?? null;
+    const players = Array.isArray(this.players) ? [...this.players] : [];
+
+    players.sort((a, b) => {
+      const selfA = a.id === selfId ? 0 : 1;
+      const selfB = b.id === selfId ? 0 : 1;
+      return selfA - selfB || String(a.name ?? "").localeCompare(String(b.name ?? ""));
+    });
+
+    if (players.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "ranking-empty";
+      empty.textContent = "No hay jugadores conectados.";
+      container.replaceChildren(empty);
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+
+    for (const player of players) {
+      const row = document.createElement("div");
+      row.className = "player-row";
+      if (player.id === selfId) {
+        row.classList.add("is-self");
+      }
+
+      const dot = document.createElement("span");
+      dot.className = "player-dot";
+      if (typeof player.color === "string" && player.color.length > 0) {
+        dot.style.background = player.color;
+      }
+
+      const main = document.createElement("div");
+      main.className = "player-main";
+      const name = document.createElement("span");
+      name.className = "player-name";
+      name.textContent =
+        player.id === selfId
+          ? `${player.name ?? "Jugador"} (tú)`
+          : String(player.name ?? "Jugador");
+      const meta = document.createElement("span");
+      meta.className = "player-meta";
+      const workers = Array.isArray(player.workers) ? player.workers.length : 0;
+      meta.textContent = `${player.eventScore ?? 0} pts evento · ${workers} duendes`;
+      main.append(name, meta);
+
+      const score = document.createElement("span");
+      score.className = "player-score";
+      score.textContent = `${player.eventKills ?? 0} K`;
+
+      const health = document.createElement("span");
+      health.className = "player-health";
+      health.textContent = `${Math.round(Number(player.health) || 0)} HP`;
+
+      row.append(dot, main, score, health);
+      fragment.append(row);
+    }
+
+    container.replaceChildren(fragment);
   }
 
   renderEventBanner() {
@@ -323,7 +492,9 @@ export class SocialUI {
       return;
     }
 
-    const entries = Array.isArray(this.leaderboard) ? [...this.leaderboard] : [];
+    const source =
+      this.rankingSort === "best" ? this.bestLeaderboard : this.leaderboard;
+    const entries = Array.isArray(source) ? [...source] : [];
 
     entries.sort((a, b) => {
       if (this.rankingSort === "best") {
@@ -437,6 +608,14 @@ export class SocialUI {
       event.preventDefault();
       if (!event.repeat) {
         this.toggleRanking();
+      }
+      return;
+    }
+
+    if (event.code === "KeyP") {
+      event.preventDefault();
+      if (!event.repeat) {
+        this.toggleRoster();
       }
     }
   }

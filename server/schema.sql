@@ -1,0 +1,14 @@
+CREATE TABLE IF NOT EXISTS leaderboard (
+  token_hash CHAR(64) NOT NULL PRIMARY KEY,
+  name VARCHAR(24) NOT NULL,
+  color VARCHAR(16) NOT NULL,
+  points INT UNSIGNED NOT NULL DEFAULT 0,
+  kills INT UNSIGNED NOT NULL DEFAULT 0,
+  deaths INT UNSIGNED NOT NULL DEFAULT 0,
+  best_streak INT UNSIGNED NOT NULL DEFAULT 0,
+  events_won INT UNSIGNED NOT NULL DEFAULT 0,
+  best_event_score INT UNSIGNED NOT NULL DEFAULT 0,
+  updated_at BIGINT NOT NULL,
+  KEY idx_points (points DESC, kills DESC),
+  KEY idx_best (best_event_score DESC, points DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

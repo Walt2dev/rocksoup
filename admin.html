@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <title>Administración · Sopa de Piedras</title>
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body class="admin-body">
+    <main class="admin-shell">
+      <header class="admin-header">
+        <div>
+          <span class="craft-eyebrow">DracxGames</span>
+          <h1>Administración</h1>
+        </div>
+        <a class="menu-button" href="/">Volver al juego</a>
+      </header>
+
+      <section class="admin-login" id="admin-login">
+        <p class="admin-muted">
+          Introduce el <code>ADMIN_TOKEN</code> configurado en las variables de
+          entorno del servidor.
+        </p>
+        <form id="admin-login-form" class="admin-login-form">
+          <input
+            id="admin-token"
+            type="password"
+            autocomplete="off"
+            placeholder="ADMIN_TOKEN"
+            aria-label="Token de administración"
+          />
+          <button class="menu-button primary" type="submit">Entrar</button>
+        </form>
+        <p id="admin-login-status" class="admin-status" role="status"></p>
+      </section>
+
+      <section class="admin-dashboard" id="admin-dashboard" hidden>
+        <div class="admin-toolbar">
+          <span id="admin-status" class="admin-status" role="status">Conectando...</span>
+          <span id="admin-updated" class="admin-muted"></span>
+          <button id="admin-logout" class="menu-button" type="button">
+            Cambiar token
+          </button>
+        </div>
+
+        <div class="admin-cards">
+          <article class="admin-card">
+            <span>Jugadores</span>
+            <strong id="admin-player-count">0</strong>
+          </article>
+          <article class="admin-card">
+            <span>Partida</span>
+            <strong id="admin-started">-</strong>
+          </article>
+          <article class="admin-card">
+            <span>Evento</span>
+            <strong id="admin-event">-</strong>
+          </article>
+          <article class="admin-card">
+            <span>Host</span>
+            <strong id="admin-host">-</strong>
+          </article>
+        </div>
+
+        <section class="admin-section">
+          <h2>Conectados</h2>
+          <div id="admin-players" class="admin-table-wrap"></div>
+        </section>
+
+        <section class="admin-section">
+          <h2>TOP por puntos</h2>
+          <div id="admin-ranking-points" class="admin-table-wrap"></div>
+        </section>
+
+        <section class="admin-section">
+          <h2>TOP por mejor evento</h2>
+          <div id="admin-ranking-best" class="admin-table-wrap"></div>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="js/admin.js"></script>
+  </body>
+</html>

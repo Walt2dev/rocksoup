@@ -281,6 +281,9 @@
             <button id="btn-ranking" class="hud-button" type="button" aria-expanded="false" aria-controls="ranking-panel" hidden>
               Ranking <kbd>B</kbd>
             </button>
+            <button id="btn-players" class="hud-button" type="button" aria-expanded="false" aria-controls="players-panel" hidden>
+              Jugadores <kbd>P</kbd>
+            </button>
             <button id="btn-place-selected" class="hud-button" type="button" title="Colocar el objeto seleccionado">
               Colocar
             </button>
@@ -397,7 +400,7 @@
           </div>
 
           <p class="hud-help">
-            WASD mover · Q/E girar · Shift+E usar · Shift+Q soltar · Space saltar · Home centrar · M modo juego · V feudo · J misiones · R atacar · C crafteo · L recetas · F colocar · clic derecho cancelar · rueda zoom
+            WASD mover · Q/E girar · Shift+E usar · Shift+Q soltar · Space saltar · Home centrar · M modo juego · V feudo · J misiones · R atacar · C crafteo · L recetas · T chat · B ranking · P jugadores · F colocar · clic derecho cancelar · rueda zoom
           </p>
         </div>
 
@@ -629,6 +632,19 @@
             </div>
             <p id="ranking-next" class="ranking-next"></p>
             <div id="ranking-list" class="ranking-list"></div>
+          </div>
+        </aside>
+
+        <aside id="players-panel" class="players-panel" aria-hidden="true" aria-label="Jugadores conectados">
+          <div class="players-card">
+            <header class="chat-header">
+              <div>
+                <span class="craft-eyebrow">Multijugador</span>
+                <h2>Jugadores</h2>
+              </div>
+              <button id="btn-players-close" class="craft-close" type="button" aria-label="Cerrar jugadores">&times;</button>
+            </header>
+            <div id="players-list" class="players-list"></div>
           </div>
         </aside>
 
