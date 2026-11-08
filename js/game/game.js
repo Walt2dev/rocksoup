@@ -418,6 +418,11 @@ export class Game {
     this.lastDamageTime = -HEALTH_REGEN_DELAY;
     this.mobDamageCooldown = 0;
     this.selectedWorkerId = null;
+    this.selectedWorkerIds = new Set();
+    this.selectedUnitIds = new Set();
+    this.selectedUnitType = null;
+    this.selectionMode = null;
+    this.selectionDrag = null;
     this.selectedHotbar = null;
     this.craftSwipe = null;
     this.tooltipTimer = null;
@@ -608,7 +613,8 @@ export class Game {
     this.input = new GameInput(canvas, this.camera, {
       onMenu: () => this.handleMenuRequest(),
       onRecenter: () => this.recenterCamera(),
-      onClick: (screenX, screenY) => this.handleClick(screenX, screenY),
+      onClick: (screenX, screenY, shiftKey) =>
+        this.handleClick(screenX, screenY, { shiftKey }),
       onRightClick: () => this.handleRightClick(),
       onCameraPan: () => {
         this.cameraFollow = false;
@@ -625,6 +631,8 @@ export class Game {
       onHoverEnd: () => this.clearPointerHover(),
       onDragStart: (screenX, screenY) => this.handleDragStart(screenX, screenY),
       onDragMove: (screenX, screenY) => this.handleDragMove(screenX, screenY),
+      onDragEnd: (screenX, screenY, event) =>
+        this.handleDragEnd(screenX, screenY, event),
       onRotateLeft: () => this.rotateCamera(-1),
       onRotateRight: () => this.rotateCamera(1),
       onJump: () => this.jump(),
@@ -653,6 +661,8 @@ export class Game {
     this.handleWorkerCancel = this.handleWorkerCancel.bind(this);
     this.handleWorkerDeselect = this.handleWorkerDeselect.bind(this);
     this.handleIdleWorkerRequest = this.handleIdleWorkerRequest.bind(this);
+    this.handleFiefMultiSelectChange = this.handleFiefMultiSelectChange.bind(this);
+    this.handleWorkerMultiSelectChange = this.handleWorkerMultiSelectChange.bind(this);
     this.handleCraftSwipeStart = this.handleCraftSwipeStart.bind(this);
     this.handleCraftSwipeEnd = this.handleCraftSwipeEnd.bind(this);
     this.handleCraftSwipeCancel = this.handleCraftSwipeCancel.bind(this);
@@ -1855,16 +1865,30 @@ export class Game {
     });
   }
 
-  selectWorker(id) {
+  selectWorker(id, { additive = false, toggle = false } = {}) {
     if (!this.ecs.hasComponent(id, Component.WORKER)) {
       return;
     }
 
-    this.selectedWorkerId = id;
+    const multi = additive || toggle || this.selectionMode === "worker";
+
+    if (multi) {
+      if (this.selectedWorkerIds.has(id)) {
+        this.selectedWorkerIds.delete(id);
+      } else {
+        this.selectedWorkerIds.add(id);
+      }
+    } else {
+      this.selectedWorkerIds.clear();
+      this.selectedWorkerIds.add(id);
+    }
+
+    this.selectedWorkerId = this.getSelectedWorkerIds()[0] ?? null;
     this.updateWorkerPanel();
   }
 
   deselectWorker() {
+    this.selectedWorkerIds.clear();
     this.selectedWorkerId = null;
     this.updateWorkerPanel();
   }
@@ -1903,45 +1927,60 @@ export class Game {
       return;
     }
 
-    if (
-      !this.selectedWorkerId ||
-      !this.ecs.hasComponent(this.selectedWorkerId, Component.WORKER)
-    ) {
+    const ids = this.getSelectedWorkerIds();
+    if (ids.length === 0) {
       panel.hidden = true;
+      this.selectedWorkerId = null;
       return;
     }
 
-    const worker = this.ecs.getComponent(this.selectedWorkerId, Component.WORKER);
-    panel.hidden = false;
-    this.hud.workerName.textContent = worker.name;
-    this.hud.workerStatus.textContent = this.workerStatusText(worker);
-
-    if (this.hud.btnWorkerCancel) {
-      this.hud.btnWorkerCancel.disabled = worker.state === "idle";
+    const workers = ids
+      .map((id) => this.ecs.getComponent(id, Component.WORKER))
+      .filter(Boolean);
+    if (workers.length === 0) {
+      panel.hidden = true;
+      this.selectedWorkerId = null;
+      return;
     }
 
+    const worker = workers[0];
+    this.selectedWorkerId = ids[0];
+    panel.hidden = false;
+    this.hud.workerName.textContent =
+      workers.length > 1 ? `${workers.length} duendes` : worker.name;
+    this.hud.workerStatus.textContent =
+      workers.length > 1 ? "Selección múltiple" : this.workerStatusText(worker);
+
+    const anyActive = workers.some((entry) => entry.state !== "idle");
+    if (this.hud.btnWorkerCancel) {
+      this.hud.btnWorkerCancel.disabled = !anyActive;
+    }
+
+    const autoOn = workers.every((entry) => entry.autoRepeat === true);
     if (this.hud.btnWorkerAuto) {
-      this.hud.btnWorkerAuto.textContent = worker.autoRepeat
-        ? "Auto: ON"
-        : "Auto: OFF";
-      this.hud.btnWorkerAuto.classList.toggle("is-active", worker.autoRepeat === true);
-      this.hud.btnWorkerAuto.setAttribute(
-        "aria-pressed",
-        String(worker.autoRepeat === true),
-      );
-      this.hud.btnWorkerAuto.title = worker.autoRepeat
+      this.hud.btnWorkerAuto.textContent = autoOn ? "Auto: ON" : "Auto: OFF";
+      this.hud.btnWorkerAuto.classList.toggle("is-active", autoOn);
+      this.hud.btnWorkerAuto.setAttribute("aria-pressed", String(autoOn));
+      this.hud.btnWorkerAuto.title = autoOn
         ? `Busca m\u00E1s recursos en ${(worker.autoRadius ?? WORKER_AUTO_RADIUS) + this.workerMapBonus} bloques`
         : "Activar tarea autom\u00E1tica";
     }
 
     if (this.hud.btnWorkerRestore) {
       const unlocked = this.inventory.hasUpgrade("veinRestorer");
-      const radius =
-        (worker.autoRadius ?? WORKER_AUTO_RADIUS) + this.workerMapBonus;
-      const active = worker.task?.kind === "restore";
-      const candidate = unlocked && !active
-        ? this.findNearestHarvestedMineral(this.selectedWorkerId, radius)
-        : null;
+      const active = workers.some((entry) => entry.task?.kind === "restore");
+      const candidate =
+        unlocked && !active
+          ? ids.some((id) => {
+              const entry = this.ecs.getComponent(id, Component.WORKER);
+              if (!entry) {
+                return false;
+              }
+              const radius =
+                (entry.autoRadius ?? WORKER_AUTO_RADIUS) + this.workerMapBonus;
+              return Boolean(this.findNearestHarvestedMineral(id, radius));
+            })
+          : false;
 
       this.hud.btnWorkerRestore.hidden = !unlocked;
       this.hud.btnWorkerRestore.disabled = !active && !candidate;
@@ -1949,39 +1988,38 @@ export class Game {
         ? "Restaurando..."
         : "Restaurar veta";
       this.hud.btnWorkerRestore.title = active
-        ? "El duende está restaurando una veta"
+        ? "Los duendes están restaurando vetas"
         : candidate
-          ? "Env\u00EDa al duende a restaurar una veta agotada (4 min)"
+          ? "Env\u00EDa a los duendes a restaurar vetas agotadas (4 min)"
           : "No hay vetas agotadas cerca";
     }
   }
 
   handleWorkerAutoToggle() {
-    if (!this.selectedWorkerId) {
+    const workers = this.getSelectedWorkerIds()
+      .map((id) => this.ecs.getComponent(id, Component.WORKER))
+      .filter(Boolean);
+    if (workers.length === 0) {
       return;
     }
 
-    const worker = this.ecs.getComponent(
-      this.selectedWorkerId,
-      Component.WORKER,
-    );
-
-    if (!worker) {
-      return;
+    const next = !workers.every((entry) => entry.autoRepeat === true);
+    for (const worker of workers) {
+      worker.autoRepeat = next;
     }
 
-    worker.autoRepeat = !worker.autoRepeat;
     this.updateWorkerPanel();
     this.save();
     this.notify(
-      worker.autoRepeat
-        ? `${worker.name} repetir\u00E1 la tarea buscando recursos cercanos.`
-        : `${worker.name} se detendr\u00E1 al terminar la tarea actual.`,
+      next
+        ? `${workers.length} duende${workers.length === 1 ? "" : "s"} repetir\u00E1n la tarea.`
+        : `${workers.length} duende${workers.length === 1 ? "" : "s"} se detendr\u00E1n al terminar.`,
     );
   }
 
   handleWorkerRestore() {
-    if (!this.selectedWorkerId) {
+    const ids = this.getSelectedWorkerIds();
+    if (ids.length === 0) {
       return;
     }
 
@@ -1990,38 +2028,47 @@ export class Game {
       return;
     }
 
-    const worker = this.ecs.getComponent(
-      this.selectedWorkerId,
-      Component.WORKER,
-    );
-
-    if (!worker) {
-      return;
+    let assigned = 0;
+    for (const id of ids) {
+      const worker = this.ecs.getComponent(id, Component.WORKER);
+      if (!worker || worker.task?.kind === "restore") {
+        continue;
+      }
+      const radius =
+        (worker.autoRadius ?? WORKER_AUTO_RADIUS) + this.workerMapBonus;
+      const target = this.findNearestHarvestedMineral(id, radius);
+      if (target) {
+        this.commandWorkerRestore(id, target.x, target.y, { silent: true });
+        assigned += 1;
+      }
     }
 
-    if (worker.task?.kind === "restore") {
-      this.notify(`${worker.name} ya está restaurando una veta.`);
-      return;
-    }
-
-    const radius =
-      (worker.autoRadius ?? WORKER_AUTO_RADIUS) + this.workerMapBonus;
-    const target = this.findNearestHarvestedMineral(
-      this.selectedWorkerId,
-      radius,
-    );
-
-    if (!target) {
+    if (assigned === 0) {
       this.notify("No hay vetas agotadas cerca.");
-      return;
+    } else {
+      this.notify(
+        `${assigned} duende${assigned === 1 ? "" : "s"} restaurando veta${
+          assigned === 1 ? "" : "s"
+        }.`,
+      );
     }
-
-    this.commandWorkerRestore(this.selectedWorkerId, target.x, target.y);
+    this.updateWorkerPanel();
   }
 
   handleWorkerCancel() {
-    if (this.selectedWorkerId) {
-      this.cancelWorkerTask(this.selectedWorkerId);
+    const ids = this.getSelectedWorkerIds();
+    let cancelled = 0;
+
+    for (const id of ids) {
+      if (this.cancelWorkerTask(id, { silent: true })) {
+        cancelled += 1;
+      }
+    }
+
+    if (cancelled > 0) {
+      this.notify(
+        `${cancelled} duende${cancelled === 1 ? "" : "s"} dejaron la tarea.`,
+      );
     }
   }
 
@@ -2059,6 +2106,296 @@ export class Game {
         ? `${worker.name} está inactivo.`
         : `${worker.name} · ${idleIds.length} duendes inactivos.`,
     );
+  }
+
+  getSelectedWorkerIds() {
+    return [...this.selectedWorkerIds].filter((id) =>
+      this.ecs.hasComponent(id, Component.WORKER),
+    );
+  }
+
+  handleFiefMultiSelectChange(event) {
+    this.setSelectionMode("fief", event.target.checked);
+  }
+
+  handleWorkerMultiSelectChange(event) {
+    this.setSelectionMode("worker", event.target.checked);
+  }
+
+  setSelectionMode(target, enabled) {
+    if (enabled) {
+      this.selectionMode = target;
+    } else if (this.selectionMode === target) {
+      this.selectionMode = null;
+    }
+
+    if (target === "fief" && this.hud.workerMultiSelect) {
+      this.hud.workerMultiSelect.checked = false;
+    }
+    if (target === "worker" && this.hud.fiefMultiSelect) {
+      this.hud.fiefMultiSelect.checked = false;
+    }
+
+    this.clearSelectionBox();
+
+    if (enabled) {
+      this.notify(
+        target === "fief"
+          ? "Selección múltiple de unidades activada. Arrastra o toca para agrupar."
+          : "Selección múltiple de duendes activada. Arrastra o toca para agrupar.",
+      );
+    } else {
+      this.notify("Selección múltiple desactivada.");
+    }
+  }
+
+  selectWorkers(ids, { additive = false } = {}) {
+    if (!additive) {
+      this.selectedWorkerIds.clear();
+    }
+
+    for (const id of ids) {
+      if (this.ecs.hasComponent(id, Component.WORKER)) {
+        this.selectedWorkerIds.add(id);
+      }
+    }
+
+    this.selectedWorkerId = this.getSelectedWorkerIds()[0] ?? null;
+    this.updateWorkerPanel();
+  }
+
+  selectFiefUnits(units, { additive = false } = {}) {
+    const valid = units.filter((unit) => unit?.hp > 0);
+
+    if (valid.length === 0) {
+      if (!additive) {
+        this.clearFiefSelection();
+      }
+      return;
+    }
+
+    const type = valid[0].type;
+
+    if (additive && this.selectedUnitType && type !== this.selectedUnitType) {
+      this.selectedUnitIds.clear();
+    }
+    if (!additive) {
+      this.selectedUnitIds.clear();
+    }
+
+    this.selectedUnitType = type;
+    for (const unit of valid) {
+      if (unit.type === type) {
+        this.selectedUnitIds.add(unit.id);
+      }
+    }
+
+    const count = this.selectedUnitIds.size;
+    this.notify(
+      `${count} unidad${count === 1 ? "" : "es"} seleccionada${
+        count === 1 ? "" : "s"
+      }.`,
+    );
+  }
+
+  clearSelectionBox() {
+    this.selectionDrag = null;
+    if (this.hud.selectionBox) {
+      this.hud.selectionBox.hidden = true;
+    }
+  }
+
+  updateSelectionBox() {
+    const box = this.hud.selectionBox;
+    const drag = this.selectionDrag;
+    if (!box || !drag) {
+      return;
+    }
+
+    const left = Math.min(drag.startX, drag.currentX);
+    const top = Math.min(drag.startY, drag.currentY);
+    const width = Math.abs(drag.currentX - drag.startX);
+    const height = Math.abs(drag.currentY - drag.startY);
+
+    box.hidden = width < 4 && height < 4;
+    box.style.left = `${left}px`;
+    box.style.top = `${top}px`;
+    box.style.width = `${width}px`;
+    box.style.height = `${height}px`;
+  }
+
+  finalizeSelectionRect(left, top, right, bottom, additive = false) {
+    const inside = (screen) =>
+      screen.x >= left &&
+      screen.x <= right &&
+      screen.y >= top &&
+      screen.y <= bottom;
+
+    if (this.selectionMode === "fief") {
+      const units = this.units.filter((unit) => {
+        if (unit.hp <= 0) {
+          return false;
+        }
+        const screen = this.camera.project(
+          unit.x,
+          unit.y,
+          this.world.heightAt(unit.x, unit.y) * 0.72,
+        );
+        return inside(screen);
+      });
+      this.selectFiefUnits(units, { additive });
+      return;
+    }
+
+    if (this.selectionMode === "worker") {
+      const ids = [];
+      for (const id of this.getWorkerIds()) {
+        const transform = this.ecs.getComponent(id, Component.TRANSFORM);
+        if (!transform) {
+          continue;
+        }
+        const screen = this.camera.project(
+          transform.x,
+          transform.y,
+          this.world.heightAt(transform.x, transform.y) * 0.72,
+        );
+        if (inside(screen)) {
+          ids.push(id);
+        }
+      }
+      this.selectWorkers(ids, { additive });
+    }
+  }
+
+  handleDragEnd(screenX, screenY, event = {}) {
+    if (!this.selectionDrag) {
+      return;
+    }
+
+    this.selectionDrag.currentX = screenX;
+    this.selectionDrag.currentY = screenY;
+    this.updateSelectionBox();
+
+    const left = Math.min(this.selectionDrag.startX, screenX);
+    const right = Math.max(this.selectionDrag.startX, screenX);
+    const top = Math.min(this.selectionDrag.startY, screenY);
+    const bottom = Math.max(this.selectionDrag.startY, screenY);
+
+    this.clearSelectionBox();
+    if (right - left < 4 && bottom - top < 4) {
+      return;
+    }
+    this.finalizeSelectionRect(left, top, right, bottom, event.shiftKey === true);
+  }
+
+  commandWorkersGather(ids, kind, x, y) {
+    const workers = ids.filter((id) =>
+      this.ecs.hasComponent(id, Component.WORKER),
+    );
+    if (workers.length === 0) {
+      return;
+    }
+    if (workers.length === 1) {
+      this.commandWorkerGather(workers[0], kind, x, y);
+      return;
+    }
+
+    const candidates = [];
+    const seen = new Set();
+    for (let radius = 0; radius <= 6; radius += 1) {
+      for (let dy = -radius; dy <= radius; dy += 1) {
+        for (let dx = -radius; dx <= radius; dx += 1) {
+          if (radius > 0 && Math.max(Math.abs(dx), Math.abs(dy)) !== radius) {
+            continue;
+          }
+          const nx = x + dx;
+          const ny = y + dy;
+          const key = `${nx}:${ny}`;
+          if (seen.has(key)) {
+            continue;
+          }
+          seen.add(key);
+          if (this.world.getNodeAt(kind, nx, ny)) {
+            candidates.push({
+              x: nx,
+              y: ny,
+              distance: Math.hypot(nx - x, ny - y),
+            });
+          }
+        }
+      }
+    }
+
+    candidates.sort((a, b) => a.distance - b.distance);
+    const used = new Set();
+    let assigned = 0;
+
+    for (const id of workers) {
+      const candidate = candidates.find(
+        (entry) => !used.has(`${entry.x}:${entry.y}`),
+      );
+      if (!candidate) {
+        break;
+      }
+      used.add(`${candidate.x}:${candidate.y}`);
+      this.commandWorkerGather(id, kind, candidate.x, candidate.y, {
+        silent: true,
+      });
+      assigned += 1;
+    }
+
+    if (assigned === 0) {
+      this.notify("No hay recursos de ese tipo cerca.");
+    } else if (assigned < workers.length) {
+      this.notify(`${assigned} duendes asignados; faltan recursos cercanos.`);
+    } else {
+      this.notify(`${assigned} duendes asignados a recursos.`);
+    }
+  }
+
+  commandWorkersMove(ids, x, y) {
+    const workers = ids.filter((id) =>
+      this.ecs.hasComponent(id, Component.WORKER),
+    );
+    if (workers.length === 0) {
+      return;
+    }
+
+    const offsets = [
+      [0, 0],
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+      [1, 1],
+      [-1, -1],
+      [1, -1],
+      [-1, 1],
+      [2, 0],
+      [-2, 0],
+      [0, 2],
+      [0, -2],
+    ];
+
+    let moved = 0;
+    for (let index = 0; index < workers.length; index += 1) {
+      const [dx, dy] = offsets[index % offsets.length];
+      const x2 = x + dx;
+      const y2 = y + dy;
+      if (!this.isActorWalkableAt(x2, y2)) {
+        continue;
+      }
+      this.commandWorkerMove(workers[index], x2, y2);
+      moved += 1;
+    }
+
+    if (moved === 0) {
+      this.notify("No hay una casilla libre cerca para los duendes.");
+    } else {
+      this.notify(
+        `${moved} duende${moved === 1 ? "" : "s"} en camino.`,
+      );
+    }
   }
 
   handleCraftSwipeStart(event) {
@@ -2345,6 +2682,14 @@ export class Game {
     this.hud.btnWorkerCancel?.addEventListener("click", this.handleWorkerCancel);
     this.hud.btnWorkerDeselect?.addEventListener("click", this.handleWorkerDeselect);
     this.hud.btnIdleWorker?.addEventListener("click", this.handleIdleWorkerRequest);
+    this.hud.fiefMultiSelect?.addEventListener("change", this.handleFiefMultiSelectChange);
+    this.hud.workerMultiSelect?.addEventListener("change", this.handleWorkerMultiSelectChange);
+    if (this.hud.fiefMultiSelect) {
+      this.hud.fiefMultiSelect.checked = false;
+    }
+    if (this.hud.workerMultiSelect) {
+      this.hud.workerMultiSelect.checked = false;
+    }
     this.hud.craftPanel?.addEventListener("pointerdown", this.handleCraftSwipeStart);
     this.canvas.addEventListener("pointerdown", this.handleCraftEdgeSwipeStart);
     window.addEventListener("pointerup", this.handleCraftEdgeSwipeEnd);
@@ -2455,6 +2800,8 @@ export class Game {
     this.hud.btnWorkerCancel?.removeEventListener("click", this.handleWorkerCancel);
     this.hud.btnWorkerDeselect?.removeEventListener("click", this.handleWorkerDeselect);
     this.hud.btnIdleWorker?.removeEventListener("click", this.handleIdleWorkerRequest);
+    this.hud.fiefMultiSelect?.removeEventListener("change", this.handleFiefMultiSelectChange);
+    this.hud.workerMultiSelect?.removeEventListener("change", this.handleWorkerMultiSelectChange);
     this.hud.craftPanel?.removeEventListener("pointerdown", this.handleCraftSwipeStart);
     this.canvas.removeEventListener("pointerdown", this.handleCraftEdgeSwipeStart);
     window.removeEventListener("pointerup", this.handleCraftEdgeSwipeEnd);
@@ -3632,7 +3979,7 @@ export class Game {
     }
   }
 
-  handleClick(screenX, screenY) {
+  handleClick(screenX, screenY, { shiftKey = false } = {}) {
     if (this.fishing) {
       if (this.fishing.phase === "bite") {
         this.resolveFishingTap();
@@ -3696,11 +4043,17 @@ export class Game {
 
     const fiefUnit = this.pickFiefUnitAt(screenX, screenY);
     if (fiefUnit) {
-      this.selectFiefUnit(fiefUnit);
+      this.selectFiefUnit(fiefUnit, {
+        additive: shiftKey || this.selectionMode === "fief",
+        toggle: shiftKey || this.selectionMode === "fief",
+      });
       return;
     }
 
-    if (this.selectedWorkerId && this.pickPlayerAt(screenX, screenY)) {
+    if (
+      this.selectedWorkerIds.size > 0 &&
+      this.pickPlayerAt(screenX, screenY)
+    ) {
       this.deselectWorker();
       return;
     }
@@ -3708,11 +4061,27 @@ export class Game {
     const workerId = this.pickWorkerAt(screenX, screenY);
 
     if (workerId) {
-      if (this.selectedWorkerId === workerId) {
-        this.deselectWorker();
-      } else {
-        this.selectWorker(workerId);
+      this.selectWorker(workerId, {
+        additive: shiftKey || this.selectionMode === "worker",
+        toggle: shiftKey || this.selectionMode === "worker",
+      });
+      return;
+    }
+
+    if (this.selectedUnitIds.size > 0) {
+      const target = this.tileAtScreen(screenX, screenY);
+      for (const id of this.selectedUnitIds) {
+        const unit = this.units.find((entry) => entry.id === id);
+        if (unit) {
+          unit.rally = { x: target.x + 0.5, y: target.y + 0.5 };
+          unit.manual = true;
+        }
       }
+      this.notify(
+        `${this.selectedUnitIds.size} unidad${
+          this.selectedUnitIds.size === 1 ? "" : "es"
+        }: nueva orden.`,
+      );
       return;
     }
 
@@ -3743,8 +4112,14 @@ export class Game {
     const pickable = this.renderer.pickNode(screenX, screenY);
 
     if (pickable) {
-      if (this.selectedWorkerId) {
-        this.commandWorkerGather(this.selectedWorkerId, pickable.kind, pickable.x, pickable.y);
+      const workerIds = this.getSelectedWorkerIds();
+      if (workerIds.length > 0) {
+        this.commandWorkersGather(
+          workerIds,
+          pickable.kind,
+          pickable.x,
+          pickable.y,
+        );
       } else {
         this.commandGather(pickable.kind, pickable.x, pickable.y);
       }
@@ -3789,17 +4164,19 @@ export class Game {
       }
     }
 
-    const walkable = this.selectedWorkerId
+    const workerIds = this.getSelectedWorkerIds();
+    const hasWorkers = workerIds.length > 0;
+    const walkable = hasWorkers
       ? (x, y) => this.isActorWalkableAt(x, y)
       : (x, y) => this.isPlayerWalkableAt(x, y);
 
     if (!walkable(goalX, goalY)) {
-      this.notify("No puedes caminar ahí.");
+      this.notify("No puedes caminar ah��.");
       return;
     }
 
-    if (this.selectedWorkerId) {
-      this.commandWorkerMove(this.selectedWorkerId, goalX, goalY);
+    if (hasWorkers) {
+      this.commandWorkersMove(workerIds, goalX, goalY);
       return;
     }
 
@@ -3810,9 +4187,7 @@ export class Game {
       goalX,
       goalY,
       isWalkable: walkable,
-      getHeight: this.selectedWorkerId
-        ? null
-        : (x, y) => this.world.heightAt(x, y),
+      getHeight: (x, y) => this.world.heightAt(x, y),
       maxStepHeight: 1,
       maxDropHeight: Infinity,
       maxNodes: PATH_MAX_NODES,
@@ -3917,6 +4292,17 @@ export class Game {
   }
 
   handleDragStart(screenX, screenY) {
+    if (this.selectionMode) {
+      this.selectionDrag = {
+        startX: screenX,
+        startY: screenY,
+        currentX: screenX,
+        currentY: screenY,
+      };
+      this.updateSelectionBox();
+      return true;
+    }
+
     if (
       this.placingItem !== "stonePath" ||
       this.inventory.itemCount("stonePath") <= 0
@@ -3930,6 +4316,13 @@ export class Game {
   }
 
   handleDragMove(screenX, screenY) {
+    if (this.selectionDrag) {
+      this.selectionDrag.currentX = screenX;
+      this.selectionDrag.currentY = screenY;
+      this.updateSelectionBox();
+      return;
+    }
+
     if (this.placingItem !== "stonePath") {
       return;
     }
@@ -5295,6 +5688,18 @@ export class Game {
   }
 
   handleMenuRequest() {
+    if (!this.placingItem && this.selectedUnitIds.size > 0) {
+      this.clearFiefSelection();
+      this.notify("Unidades en modo automático.");
+      return;
+    }
+
+    if (!this.placingItem && this.selectedWorkerIds.size > 0) {
+      this.deselectWorker();
+      this.notify("Duendes en modo automático.");
+      return;
+    }
+
     if (this.placingItem) {
       this.cancelPlacement();
       this.notify("Colocación cancelada.");
@@ -5889,14 +6294,48 @@ export class Game {
     return null;
   }
 
-  selectFiefUnit(unit) {
-    this.selectedUnitId = unit?.id ?? null;
-    if (unit) {
-      this.notify(`${unit.name} seleccionado. Haz clic en el mapa para darle una orden.`);
+  selectFiefUnit(unit, { additive = false, toggle = false } = {}) {
+    if (!unit) {
+      this.clearFiefSelection();
+      return;
     }
+
+    const multi = additive || toggle || this.selectionMode === "fief";
+
+    if (multi) {
+      if (
+        this.selectedUnitIds.size > 0 &&
+        this.selectedUnitType !== unit.type
+      ) {
+        this.selectedUnitIds.clear();
+      }
+      this.selectedUnitType = unit.type;
+      if (this.selectedUnitIds.has(unit.id)) {
+        this.selectedUnitIds.delete(unit.id);
+      } else {
+        this.selectedUnitIds.add(unit.id);
+      }
+      if (this.selectedUnitIds.size === 0) {
+        this.selectedUnitType = null;
+      }
+    } else {
+      this.selectedUnitIds.clear();
+      this.selectedUnitIds.add(unit.id);
+      this.selectedUnitType = unit.type;
+    }
+
+    this.selectedUnitId = null;
+    const count = this.selectedUnitIds.size;
+    this.notify(
+      `${count} unidad${count === 1 ? "" : "es"} seleccionada${
+        count === 1 ? "" : "s"
+      }. Haz clic en el mapa para dar la orden.`,
+    );
   }
 
   clearFiefSelection() {
+    this.selectedUnitIds.clear();
+    this.selectedUnitType = null;
     this.selectedUnitId = null;
   }
 
@@ -10628,7 +11067,7 @@ export class Game {
           sprite,
           flip: 1,
           scale: 0.9,
-          ringColor: unit.id === this.selectedUnitId ? "#f0c07a" : undefined,
+          ringColor: this.selectedUnitIds.has(unit.id) ? "#f0c07a" : undefined,
         });
       }
     }
@@ -11373,6 +11812,12 @@ export class Game {
           : "No hay duendes inactivos";
     }
     this.touchControls?.setIdleWorkerCount(idleWorkers);
+    if (this.hud.btnCrossWorkersBadge) {
+      this.hud.btnCrossWorkersBadge.hidden = idleWorkers <= 0;
+      this.hud.btnCrossWorkersBadge.textContent =
+        idleWorkers > 99 ? "99+" : String(idleWorkers);
+    }
+    this.hud.btnCrossWorkers?.classList.toggle("is-active", idleWorkers > 0);
     this.hudMenu?.refreshContextActions();
   }
 
@@ -11491,8 +11936,24 @@ export class Game {
       entry: this.getSelectedEntry(),
       placing: Boolean(this.placingItem),
       mounted: this.donkeyMounted,
+      nearDonkey: Boolean(this.getNearbyDonkeyId()),
       fishing: this.fishing,
     });
+  }
+
+  getNearbyDonkeyId() {
+    if (!this.donkeyId) {
+      return null;
+    }
+    const transform = this.ecs.getComponent(this.donkeyId, Component.TRANSFORM);
+    if (!transform) {
+      return null;
+    }
+    const distance = Math.hypot(
+      transform.x - this.playerTransform.x,
+      transform.y - this.playerTransform.y,
+    );
+    return distance <= DONKEY_INTERACT_RANGE ? this.donkeyId : null;
   }
 
   runContextAction() {
@@ -11504,8 +11965,26 @@ export class Game {
       this.useSelectedItem();
     } else if (action.id === "dismount") {
       this.dismountDonkey();
-    } else {
-      this.attack();
+    } else if (action.id === "mount") {
+      const donkeyId = this.getNearbyDonkeyId();
+      if (donkeyId) {
+        this.handleDonkeyInteraction(donkeyId);
+      } else {
+        this.notify("Acércate al burro.");
+      }
+    } else if (action.id === "plant") {
+      const selected = this.getSelectedEntry();
+      const tileX = Math.floor(this.playerTransform.x);
+      const tileY = Math.floor(this.playerTransform.y);
+      if (!this.tryPlantSeed(tileX, tileY, selected)) {
+        this.notify("Toca el suelo o una parcela para sembrar.");
+      }
+    } else if (action.id === "till") {
+      const tileX = Math.floor(this.playerTransform.x);
+      const tileY = Math.floor(this.playerTransform.y);
+      if (!this.tryFarmInteraction(tileX, tileY)) {
+        this.notify("Toca tierra para preparar una parcela.");
+      }
     }
   }
 

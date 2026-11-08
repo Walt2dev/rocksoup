@@ -12,3 +12,9 @@ CREATE TABLE IF NOT EXISTS leaderboard (
   KEY idx_points (points DESC, kills DESC),
   KEY idx_best (best_event_score DESC, points DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS world_state (
+  world_id VARCHAR(64) NOT NULL PRIMARY KEY,
+  payload LONGTEXT NOT NULL,
+  updated_at BIGINT NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

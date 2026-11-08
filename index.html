@@ -501,6 +501,10 @@
                   <button id="btn-worker-deselect" class="worker-action" type="button">
                     Deseleccionar
                   </button>
+                  <label class="multi-select-toggle worker-multi">
+                    <input id="worker-multi-select" type="checkbox" />
+                    Múltiple
+                  </label>
                 </div>
               </div>
               <div id="hud-inventory" class="inventory-strip" aria-label="Inventario"></div>
@@ -510,17 +514,24 @@
               </button>
             </div>
 
-            <div class="hud-context-actions">
-              <button id="btn-touch-jump" class="context-mini" type="button" aria-label="Saltar" title="Saltar">
+            <div class="hud-context-actions" aria-label="Acciones de combate y unidad">
+              <button id="btn-cross-center" class="cross-btn cross-top" type="button" aria-label="Centrar cámara" title="Centrar">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-target"></use></svg>
+              </button>
+              <button id="btn-cross-workers" class="cross-btn cross-right" type="button" aria-label="Duendes inactivos" title="Duendes">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-worker"></use></svg>
+                <span id="cross-workers-badge" class="cross-badge" hidden>0</span>
+              </button>
+              <button id="btn-cross-jump" class="cross-btn cross-bottom" type="button" aria-label="Saltar" title="Saltar">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-jump"></use></svg>
               </button>
-              <button id="btn-touch-use" class="context-mini" type="button" aria-label="Atacar" title="Atacar" hidden>
-                <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-sword"></use></svg>
-                <span data-secondary-label>Atacar</span>
+              <button id="btn-context-action" class="cross-btn cross-left cross-action" type="button" aria-label="Acción contextual" title="Acción contextual">
+                <svg class="context-icon" viewBox="0 0 24 24" aria-hidden="true"><use id="context-action-icon-use" href="#icon-place"></use></svg>
+                <span id="context-action-label">Acción</span>
               </button>
-              <button id="btn-context-action" class="context-primary" type="button" aria-label="Atacar (acción principal)">
-                <svg class="context-icon" viewBox="0 0 24 24" aria-hidden="true"><use id="context-action-icon-use" href="#icon-sword"></use></svg>
-                <span id="context-action-label">Atacar</span>
+              <button id="btn-cross-attack" class="cross-btn cross-center" type="button" aria-label="Atacar" title="Atacar">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-sword"></use></svg>
+                <span>Atacar</span>
               </button>
             </div>
           </div>
@@ -529,6 +540,8 @@
             WASD mover · Q/E girar · Shift+E usar · Shift+Q soltar · Space saltar · Home centrar · M modo juego · V feudo · J misiones · R atacar · C crafteo · L recetas · T chat · B ranking · P jugadores · F colocar · clic derecho cancelar · rueda zoom
           </p>
         </div>
+
+        <div id="selection-box" class="selection-box" hidden></div>
 
         <aside id="craft-panel" class="craft-panel" aria-hidden="true" aria-label="Panel de crafteo">
           <header class="craft-header">
@@ -653,6 +666,10 @@
               </div>
               <button id="btn-fief-close" class="craft-close" type="button" aria-label="Cerrar feudo">&times;</button>
             </header>
+            <label class="multi-select-toggle">
+              <input id="fief-multi-select" type="checkbox" />
+              Selección múltiple
+            </label>
             <div class="fief-mode-row" id="fief-modes"></div>
             <p id="fief-wave" class="lan-note"></p>
             <div id="fief-villages" class="fief-villages"></div>
@@ -859,6 +876,10 @@
                 <button class="hud-menu-item" type="button" data-hud-action="game-mode">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-gear"></use></svg>
                   <span>Modo de juego</span><kbd>M</kbd>
+                </button>
+                <button class="hud-menu-item" type="button" data-hud-action="save-exit">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-backpack"></use></svg>
+                  <span>Guardar y salir</span>
                 </button>
                 <button class="hud-menu-item" type="button" data-hud-action="stats">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-stats"></use></svg>

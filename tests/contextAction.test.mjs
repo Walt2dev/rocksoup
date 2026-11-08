@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   isConsumableItem,
   isPlaceableItem,
+  isSeedItem,
   resolveContextAction,
 } from "../js/game/contextAction.js";
 
@@ -61,5 +62,27 @@ test("la caña de pescar sugiere pescar", () => {
   assert.equal(
     resolveContextAction({ entry: { kind: "tool", key: "fishingRod" } }).id,
     "use",
+  );
+});
+
+test("semillas y azada tienen acción contextual", () => {
+  for (const key of ["semillaHierba", "semillaTrigo", "semillaMaiz"]) {
+    assert.equal(isSeedItem(key), true);
+    assert.equal(
+      resolveContextAction({ entry: { kind: "resource", key } }).id,
+      "plant",
+    );
+  }
+  assert.equal(
+    resolveContextAction({ entry: { kind: "tool", key: "hoe" } }).id,
+    "till",
+  );
+});
+
+test("montar y bajar del burro tienen prioridad", () => {
+  assert.equal(resolveContextAction({ nearDonkey: true }).id, "mount");
+  assert.equal(
+    resolveContextAction({ nearDonkey: true, mounted: true }).id,
+    "dismount",
   );
 });

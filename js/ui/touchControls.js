@@ -25,11 +25,29 @@ export class TouchControls {
     const root = document.createElement("div");
     root.className = "touch-controls";
     root.innerHTML = `
+      <div class="touch-rotate">
+        <button type="button" class="touch-mini" data-touch-action="rotate-left" aria-label="Girar a la izquierda">↶</button>
+        <button type="button" class="touch-mini" data-touch-action="rotate-right" aria-label="Girar a la derecha">↷</button>
+      </div>
+      <div class="touch-zoom">
+        <button type="button" class="touch-mini" data-touch-action="zoom-in" aria-label="Acercar">+</button>
+        <button type="button" class="touch-mini" data-touch-action="zoom-out" aria-label="Alejar">−</button>
+      </div>
       <div class="touch-joystick" data-touch-joystick>
         <div class="touch-joystick-ring"></div>
         <div class="touch-joystick-knob"></div>
       </div>
     `;
+
+    root.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-touch-action]");
+      if (!button) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      this.handleAction(button.dataset.touchAction);
+    });
 
     const joystick = root.querySelector("[data-touch-joystick]");
     joystick.addEventListener("pointerdown", this.handleJoystickDown);
@@ -101,8 +119,28 @@ export class TouchControls {
     this.game.input.setTouchMovement(dx / radius, dy / radius);
   }
 
+  handleAction(action) {
+    if (action === "rotate-left") {
+      this.game.rotateCamera(-1);
+    } else if (action === "rotate-right") {
+      this.game.rotateCamera(1);
+    } else if (action === "zoom-in") {
+      this.game.camera.zoomAt(
+        this.game.camera.width / 2,
+        this.game.camera.height / 2,
+        1.2,
+      );
+    } else if (action === "zoom-out") {
+      this.game.camera.zoomAt(
+        this.game.camera.width / 2,
+        this.game.camera.height / 2,
+        0.84,
+      );
+    }
+  }
+
   setIdleWorkerCount() {
-    // El contador de duendes ahora vive en el menú de HUD.
+    // El contador de duendes ahora vive en la cruz del HUD.
   }
 
   destroy() {

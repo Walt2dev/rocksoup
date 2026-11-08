@@ -17,6 +17,9 @@ const el = {
   players: document.getElementById("admin-players"),
   rankingPoints: document.getElementById("admin-ranking-points"),
   rankingBest: document.getElementById("admin-ranking-best"),
+  worldDownload: document.getElementById("admin-world-download"),
+  worldFile: document.getElementById("admin-world-file"),
+  worldStatus: document.getElementById("admin-world-status"),
 };
 
 let token = sessionStorage.getItem(TOKEN_KEY) ?? "";
@@ -260,6 +263,88 @@ el.logout.addEventListener("click", () => {
   el.token.value = "";
   showLogin("Token eliminado. Introduce otro para continuar.");
 });
+
+async function downloadWorld() {
+  if (!token) {
+    showLogin("Introduce el token para descargar el mundo.");
+    return;
+  }
+
+  el.worldStatus.textContent = "Descargando mundo...";
+
+  try {
+    const response = await fetch("/api/admin/world", {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+
+    if (response.status === 401 || response.status === 404) {
+      el.worldStatus.textContent = "No autorizado.";
+      return;
+    }
+    if (!response.ok) {
+      el.worldStatus.textContent = `Error al descargar (${response.status}).`;
+      return;
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    const stamp = new Date().toISOString().slice(0, 10);
+    anchor.href = url;
+    anchor.download = `rocksoup-world-${stamp}.json`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    el.worldStatus.textContent = "Mundo descargado.";
+  } catch {
+    el.worldStatus.textContent = "Error de conexión al descargar.";
+  }
+}
+
+async function importWorld(event) {
+  const file = event.target.files?.[0];
+  if (!file) {
+    return;
+  }
+
+  if (!token) {
+    showLogin("Introduce el token para importar el mundo.");
+    event.target.value = "";
+    return;
+  }
+
+  el.worldStatus.textContent = "Importando mundo...";
+
+  try {
+    const text = await file.text();
+    const response = await fetch("/api/admin/world", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: text,
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      el.worldStatus.textContent = data.error ?? "No se pudo importar.";
+      return;
+    }
+
+    el.worldStatus.textContent = `Mundo importado (${data.worldId ?? "main"}). Reinicia la app para aplicarlo.`;
+  } catch {
+    el.worldStatus.textContent = "Error de conexión al importar.";
+  } finally {
+    event.target.value = "";
+  }
+}
+
+el.worldDownload?.addEventListener("click", downloadWorld);
+el.worldFile?.addEventListener("change", importWorld);
 
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden && token && !el.dashboard.hidden) {

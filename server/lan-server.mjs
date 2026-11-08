@@ -42,6 +42,7 @@ import {
   buildAdminSnapshot,
   getAdminToken,
 } from "./admin.mjs";
+import { createWorldStore, normalizeWorldId } from "./worldStore.mjs";
 
 const ROOT = resolve(process.cwd());
 const SAVE_DIR = process.env.SAVE_DIR
@@ -51,6 +52,7 @@ const SAVE_PATH = process.env.SAVE_PATH
   ? resolve(process.env.SAVE_PATH)
   : join(SAVE_DIR, "lan-save.json");
 const PORT = Number(process.env.PORT || 3000);
+const WORLD_ID = normalizeWorldId(process.env.WORLD_ID);
 const MAX_PLAYERS = 6;
 const PLAYER_COLORS = ["#e0a458", "#7ec699", "#6ca9e0", "#d97b6c", "#b58ce0", "#d8c46a"];
 const MIME = {
@@ -252,43 +254,66 @@ function createInitialState() {
   };
 }
 
-async function loadState() {
-  if (!existsSync(SAVE_PATH)) {
-    return createInitialState();
-  }
+function normalizeState(parsed) {
+  const state = createInitialState();
 
-  try {
-    const parsed = JSON.parse(await readFile(SAVE_PATH, "utf8"));
-    const state = createInitialState();
-
-    if (typeof parsed.seed === "string" && parsed.seed.length > 0) {
-      state.seed = parsed.seed;
-    }
-    state.worldBiomes =
-      parsed.worldBiomes === "expanded" ? "expanded" : "legacy";
-    state.time = Number.isFinite(parsed.time) ? Math.max(0, parsed.time) : 0;
-    state.structures = {
-      campfires: sanitizeStructureList(parsed.structures?.campfires),
-      ovens: sanitizeStructureList(parsed.structures?.ovens),
-      brewingTables: sanitizeStructureList(parsed.structures?.brewingTables),
-      torches: sanitizeTorches(parsed.structures?.torches),
-      stonePaths: sanitizeStructureList(parsed.structures?.stonePaths, 1000),
-    };
-    state.groundItems = [];
-    state.profiles =
-      parsed.profiles && typeof parsed.profiles === "object" ? parsed.profiles : {};
-    state.harvested = Array.isArray(parsed.harvested) ? parsed.harvested : [];
-    state.planted = Array.isArray(parsed.planted) ? parsed.planted : [];
-    state.farmPlots = sanitizeFarmPlots(parsed.farmPlots);
-    state.leaderboard = sanitizeLeaderboard(parsed.leaderboard);
-
+  if (!parsed || typeof parsed !== "object") {
     return state;
-  } catch (error) {
-    console.warn("[LAN] No se pudo leer el guardado; se crea uno nuevo:", error.message);
-    return createInitialState();
   }
+
+  if (typeof parsed.seed === "string" && parsed.seed.length > 0) {
+    state.seed = parsed.seed;
+  }
+  state.worldBiomes =
+    parsed.worldBiomes === "expanded" ? "expanded" : "legacy";
+  state.time = Number.isFinite(parsed.time) ? Math.max(0, parsed.time) : 0;
+  state.structures = {
+    campfires: sanitizeStructureList(parsed.structures?.campfires),
+    ovens: sanitizeStructureList(parsed.structures?.ovens),
+    brewingTables: sanitizeStructureList(parsed.structures?.brewingTables),
+    torches: sanitizeTorches(parsed.structures?.torches),
+    stonePaths: sanitizeStructureList(parsed.structures?.stonePaths, 1000),
+  };
+  state.groundItems = [];
+  state.profiles =
+    parsed.profiles && typeof parsed.profiles === "object"
+      ? parsed.profiles
+      : {};
+  state.harvested = Array.isArray(parsed.harvested) ? parsed.harvested : [];
+  state.planted = Array.isArray(parsed.planted) ? parsed.planted : [];
+  state.farmPlots = sanitizeFarmPlots(parsed.farmPlots);
+  state.leaderboard = sanitizeLeaderboard(parsed.leaderboard);
+
+  return state;
 }
 
+async function loadState() {
+  let parsed = null;
+
+  if (worldStore.configured) {
+    parsed = await worldStore.load(WORLD_ID);
+  }
+
+  if (!parsed && existsSync(SAVE_PATH)) {
+    try {
+      parsed = JSON.parse(await readFile(SAVE_PATH, "utf8"));
+    } catch (error) {
+      console.warn(
+        "[LAN] No se pudo leer el guardado; se crea uno nuevo:",
+        error.message,
+      );
+    }
+  }
+
+  if (!parsed) {
+    return createInitialState();
+  }
+
+  return normalizeState(parsed);
+}
+
+const worldStore = createWorldStore();
+await worldStore.init();
 const state = await loadState();
 if (!Array.isArray(state.harvested)) {
   state.harvested = [];
@@ -542,25 +567,25 @@ function scheduleSave() {
   }, 800);
 }
 
-async function saveState() {
+function buildSavePayload() {
   const profiles = {};
 
   for (const client of clients.values()) {
     profiles[client.token] = {
-    name: client.name,
-    color: client.color,
-    skinId: client.skinId,
-    x: client.x,
-    y: client.y,
-    health: client.health,
-    inventory: client.inventory,
-    stones: client.stones,
-    fishingRecords: client.fishingRecords,
-    feathers: client.feathers,
-    observatoryDiscoveries: client.observatoryDiscoveries,
-    swimSeconds: client.swimSeconds,
-    lastSeen: Date.now(),
-  };
+      name: client.name,
+      color: client.color,
+      skinId: client.skinId,
+      x: client.x,
+      y: client.y,
+      health: client.health,
+      inventory: client.inventory,
+      stones: client.stones,
+      fishingRecords: client.fishingRecords,
+      feathers: client.feathers,
+      observatoryDiscoveries: client.observatoryDiscoveries,
+      swimSeconds: client.swimSeconds,
+      lastSeen: Date.now(),
+    };
   }
 
   for (const [token, profile] of Object.entries(state.profiles)) {
@@ -569,7 +594,7 @@ async function saveState() {
     }
   }
 
-  const payload = {
+  return {
     version: 1,
     seed: state.seed,
     worldBiomes: state.worldBiomes,
@@ -582,15 +607,41 @@ async function saveState() {
     profiles,
     leaderboard: state.leaderboard,
   };
+}
 
+function serializeState(source) {
+  return {
+    version: 1,
+    seed: source.seed,
+    worldBiomes: source.worldBiomes,
+    time: source.time,
+    harvested: source.harvested,
+    planted: source.planted,
+    farmPlots: source.farmPlots,
+    structures: source.structures,
+    groundItems: source.groundItems,
+    profiles: source.profiles,
+    leaderboard: source.leaderboard,
+  };
+}
+
+async function writeSavePayload(payload) {
   try {
     await mkdir(dirname(SAVE_PATH), { recursive: true });
     const temp = `${SAVE_PATH}.tmp`;
     await writeFile(temp, JSON.stringify(payload), "utf8");
     await rename(temp, SAVE_PATH);
+    return true;
   } catch (error) {
     console.warn("[LAN] No se pudo guardar:", error.message);
+    return false;
   }
+}
+
+async function saveState() {
+  const payload = buildSavePayload();
+  await worldStore.save(WORLD_ID, payload);
+  await writeSavePayload(payload);
 }
 
 function joinGameForClient(client) {
@@ -1186,6 +1237,35 @@ function handleClose(ws) {
   scheduleSave();
 }
 
+function verifyAdminRequest(req) {
+  const adminToken = getAdminToken();
+  if (!adminToken) {
+    return { ok: false, status: 404 };
+  }
+  if (!adminAuthorized(adminToken, bearerToken(req.headers.authorization))) {
+    return { ok: false, status: 401 };
+  }
+  return { ok: true, status: 200 };
+}
+
+function readRequestBody(req, limit = 8 * 1024 * 1024) {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks = [];
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > limit) {
+        reject(new Error("payload too large"));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    req.on("error", reject);
+  });
+}
+
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
@@ -1240,6 +1320,86 @@ const server = createServer(async (req, res) => {
         "Cache-Control": "no-store",
       });
       res.end(JSON.stringify(snapshot));
+      return;
+    }
+
+    if (pathname === "/api/admin/world") {
+      const auth = verifyAdminRequest(req);
+
+      if (!auth.ok) {
+        if (auth.status === 404) {
+          res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("Not found");
+        } else {
+          res.writeHead(401, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store",
+            "WWW-Authenticate": "Bearer",
+          });
+          res.end(JSON.stringify({ error: "No autorizado" }));
+        }
+        return;
+      }
+
+      if (req.method === "GET") {
+        const payload = buildSavePayload();
+        res.writeHead(200, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Content-Disposition": 'attachment; filename="rocksoup-world.json"',
+          "Cache-Control": "no-store",
+        });
+        res.end(JSON.stringify(payload));
+        return;
+      }
+
+      if (req.method === "POST") {
+        try {
+          const raw = await readRequestBody(req);
+          const parsed = JSON.parse(raw);
+
+          if (
+            !parsed ||
+            typeof parsed.seed !== "string" ||
+            parsed.seed.length === 0
+          ) {
+            res.writeHead(400, {
+              "Content-Type": "application/json; charset=utf-8",
+              "Cache-Control": "no-store",
+            });
+            res.end(JSON.stringify({ error: "Mundo inválido: falta seed." }));
+            return;
+          }
+
+          const imported = normalizeState(parsed);
+          const payload = serializeState(imported);
+          const persistedToDb = await worldStore.save(WORLD_ID, payload);
+          const persistedToFile = await writeSavePayload(payload);
+
+          res.writeHead(200, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store",
+          });
+          res.end(
+            JSON.stringify({
+              ok: true,
+              restartRequired: true,
+              worldId: WORLD_ID,
+              persistedToDb,
+              persistedToFile,
+            }),
+          );
+        } catch (error) {
+          res.writeHead(400, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store",
+          });
+          res.end(JSON.stringify({ error: error.message }));
+        }
+        return;
+      }
+
+      res.writeHead(405, { Allow: "GET, POST" });
+      res.end();
       return;
     }
 
@@ -1344,15 +1504,22 @@ server.listen(PORT, "0.0.0.0", () => {
     }
   }
   console.log("[LAN] Los jugadores deben estar en la misma red Wi-Fi.");
+  console.log(
+    `[LAN] Mundo persistente: ${WORLD_ID} · ${
+      worldStore.isAvailable() ? "MySQL" : "JSON"
+    }`,
+  );
 });
 
 process.on("SIGINT", async () => {
   await saveState();
   await leaderboardStore.close();
+  await worldStore.close();
   process.exit(0);
 });
 process.on("SIGTERM", async () => {
   await saveState();
   await leaderboardStore.close();
+  await worldStore.close();
   process.exit(0);
 });

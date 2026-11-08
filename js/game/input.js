@@ -31,6 +31,7 @@ export class GameInput {
     onHoverEnd,
     onDragStart,
     onDragMove,
+    onDragEnd,
     onRotateLeft,
     onRotateRight,
     onJump,
@@ -56,6 +57,7 @@ export class GameInput {
     this.onHoverEnd = onHoverEnd;
     this.onDragStart = onDragStart;
     this.onDragMove = onDragMove;
+    this.onDragEnd = onDragEnd;
     this.onRotateLeft = onRotateLeft;
     this.onRotateRight = onRotateRight;
     this.onJump = onJump;
@@ -358,6 +360,9 @@ export class GameInput {
     const duration = performance.now() - this.downTime;
     const distance = Math.hypot(event.clientX - this.startX, event.clientY - this.startY);
     const shouldClick = !this.dragging && duration <= CLICK_DURATION && distance <= DRAG_THRESHOLD;
+    const wasDragging = this.dragging;
+    const dragPaints = this.dragPaints;
+    const rect = this.canvas.getBoundingClientRect();
 
     if (this.canvas.hasPointerCapture(event.pointerId)) {
       this.canvas.releasePointerCapture(event.pointerId);
@@ -365,6 +370,14 @@ export class GameInput {
 
     this.resetPointer();
     this.canvas.classList.remove("is-dragging");
+
+    if (wasDragging && dragPaints) {
+      this.onDragEnd?.(
+        event.clientX - rect.left,
+        event.clientY - rect.top,
+        event,
+      );
+    }
 
     if (shouldClick) {
       this.emitClick(event);
@@ -413,7 +426,11 @@ export class GameInput {
 
   emitClick(event) {
     const rect = this.canvas.getBoundingClientRect();
-    this.onClick?.(event.clientX - rect.left, event.clientY - rect.top);
+    this.onClick?.(
+      event.clientX - rect.left,
+      event.clientY - rect.top,
+      event.shiftKey === true,
+    );
   }
 
   emitRightClick(event) {

@@ -11,7 +11,10 @@ export class HudMenu {
     this.handleMenuClick = this.handleMenuClick.bind(this);
     this.handleBackdropClick = this.handleBackdropClick.bind(this);
     this.handleContextAction = this.handleContextAction.bind(this);
-    this.handleSecondaryAction = this.handleSecondaryAction.bind(this);
+    this.handleCrossAttack = () => this.game?.attack?.();
+    this.handleCrossCenter = () => this.game?.recenterCamera?.();
+    this.handleCrossWorkers = () => this.game?.handleIdleWorkerRequest?.();
+    this.handleCrossJump = () => this.game?.jump?.();
     this.handleHotbarToggle = this.handleHotbarToggle.bind(this);
     this.handleStatsClose = this.handleStatsClose.bind(this);
     this.toggle = this.toggle.bind(this);
@@ -30,8 +33,10 @@ export class HudMenu {
     this.hud.hudMenu?.addEventListener("click", this.handleBackdropClick);
     this.hud.hudMenu?.addEventListener("click", this.handleMenuClick);
     this.hud.btnContextAction?.addEventListener("click", this.handleContextAction);
-    this.hud.btnTouchUse?.addEventListener("click", this.handleSecondaryAction);
-    this.hud.btnTouchJump?.addEventListener("click", () => this.game?.jump?.());
+    this.hud.btnCrossAttack?.addEventListener("click", this.handleCrossAttack);
+    this.hud.btnCrossCenter?.addEventListener("click", this.handleCrossCenter);
+    this.hud.btnCrossWorkers?.addEventListener("click", this.handleCrossWorkers);
+    this.hud.btnCrossJump?.addEventListener("click", this.handleCrossJump);
     this.hud.btnHotbarToggle?.addEventListener("click", this.handleHotbarToggle);
     this.hud.btnStatsClose?.addEventListener("click", this.handleStatsClose);
     window.addEventListener("keydown", this.handleKeyDown, true);
@@ -50,7 +55,10 @@ export class HudMenu {
     this.hud.hudMenu?.removeEventListener("click", this.handleBackdropClick);
     this.hud.hudMenu?.removeEventListener("click", this.handleMenuClick);
     this.hud.btnContextAction?.removeEventListener("click", this.handleContextAction);
-    this.hud.btnTouchUse?.removeEventListener("click", this.handleSecondaryAction);
+    this.hud.btnCrossAttack?.removeEventListener("click", this.handleCrossAttack);
+    this.hud.btnCrossCenter?.removeEventListener("click", this.handleCrossCenter);
+    this.hud.btnCrossWorkers?.removeEventListener("click", this.handleCrossWorkers);
+    this.hud.btnCrossJump?.removeEventListener("click", this.handleCrossJump);
     this.hud.btnHotbarToggle?.removeEventListener("click", this.handleHotbarToggle);
     this.hud.btnStatsClose?.removeEventListener("click", this.handleStatsClose);
     window.removeEventListener("keydown", this.handleKeyDown, true);
@@ -189,6 +197,11 @@ export class HudMenu {
         this.click("btn-game-mode");
         this.close();
         break;
+      case "save-exit":
+        this.game?.save?.();
+        this.close();
+        window.setTimeout(() => this.click("btn-menu"), 30);
+        break;
       case "stats":
         this.hud.statsPanel?.classList.toggle("is-open");
         this.close();
@@ -225,16 +238,6 @@ export class HudMenu {
 
   handleContextAction() {
     this.game?.runContextAction?.();
-    this.refreshContextActions();
-  }
-
-  handleSecondaryAction() {
-    const mode = this.hud.btnTouchUse?.dataset.mode;
-    if (mode === "attack") {
-      this.game?.attack?.();
-    } else {
-      this.game?.useSelectedItem?.();
-    }
     this.refreshContextActions();
   }
 
@@ -304,43 +307,31 @@ export class HudMenu {
       return;
     }
 
-    const key = `${action.id}:${action.label}:${action.icon}`;
+    const hasContext = action.id !== "attack";
+    const key = `${action.id}:${action.label}:${action.icon}:${hasContext}`;
     if (key === this.lastActionKey) {
       return;
     }
     this.lastActionKey = key;
 
+    const label = hasContext ? action.label : "Acción";
+    const icon = hasContext ? action.icon : "target";
+
     if (this.hud.contextActionLabel) {
-      this.hud.contextActionLabel.textContent = action.label;
+      this.hud.contextActionLabel.textContent = label;
     }
     if (this.hud.contextActionIcon) {
-      this.hud.contextActionIcon.setAttribute("href", `#icon-${action.icon}`);
+      this.hud.contextActionIcon.setAttribute("href", `#icon-${icon}`);
     }
     this.hud.btnContextAction.dataset.action = action.id;
+    this.hud.btnContextAction.disabled = !hasContext;
+    this.hud.btnContextAction.classList.toggle("is-disabled", !hasContext);
+    this.hud.btnContextAction.title = hasContext
+      ? `${action.label} (acción contextual)`
+      : "Sin acción contextual: selecciona una semilla, objeto colocable o acércate al burro";
     this.hud.btnContextAction.setAttribute(
       "aria-label",
-      `${action.label} (acción principal)`,
+      hasContext ? `${action.label} (acción contextual)` : "Sin acción contextual",
     );
-
-    const secondary = this.hud.btnTouchUse;
-    if (!secondary) {
-      return;
-    }
-
-    if (action.id === "attack") {
-      secondary.hidden = true;
-      return;
-    }
-
-    secondary.hidden = false;
-    secondary.dataset.mode = "attack";
-    secondary.setAttribute("aria-label", "Atacar");
-    secondary.title = "Atacar";
-    secondary.querySelector("[data-secondary-label]")?.replaceChildren(
-      document.createTextNode("Atacar"),
-    );
-    secondary
-      .querySelector("use")
-      ?.setAttribute("href", "#icon-sword");
   }
 }

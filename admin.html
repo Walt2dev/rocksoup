@@ -64,6 +64,29 @@
         </div>
 
         <section class="admin-section">
+          <h2>Mundo</h2>
+          <p class="admin-muted">
+            Descarga una copia de seguridad o importa un mundo. La importación
+            se aplica al reiniciar/redeployar la aplicación.
+          </p>
+          <div class="admin-world-actions">
+            <button id="admin-world-download" class="menu-button" type="button">
+              Descargar mundo
+            </button>
+            <label class="menu-button admin-file-button">
+              Importar mundo
+              <input
+                id="admin-world-file"
+                type="file"
+                accept="application/json,.json"
+                hidden
+              />
+            </label>
+          </div>
+          <p id="admin-world-status" class="admin-status" role="status"></p>
+        </section>
+
+        <section class="admin-section">
           <h2>Conectados</h2>
           <div id="admin-players" class="admin-table-wrap"></div>
         </section>

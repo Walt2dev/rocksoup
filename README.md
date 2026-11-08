@@ -32,8 +32,12 @@ Abre `http://localhost:3000` en el equipo anfitrión o la URL del despliegue.
   configurado; si no, guarda el ranking en `lan-save.json`.
 - **Chat** global dentro de la partida con rate-limit e historial reciente.
 - **Roster** en partida con el botón **Jugadores** o la tecla `P`.
-- **HUD rediseñado**: estado compacto, menú único (`H` o botón ⚙), acción
-  principal contextual y hotbar colapsable con mochila.
+- **HUD rediseñado**: estado compacto, menú único (`H` o botón ⚙), cruz de
+  acciones (Atacar, Centrar, Duendes, Saltar y Acción contextual), giro y zoom
+  junto al joystick, y hotbar colapsable con mochila.
+- **Selección múltiple** de unidades del feudo y duendes: botón/checkbox en el
+  panel, `Shift + clic` y rectángulo de selección con el modo activo.
+- **Guardar y salir** en el menú del HUD.
 - Teclas: `T` chat, `B` ranking, `P` jugadores, `H` menú, `Esc` cierra el chat.
 
 ### Panel de administración
@@ -42,18 +46,21 @@ Abre `http://localhost:3000` en el equipo anfitrión o la URL del despliegue.
 - Requiere definir `ADMIN_TOKEN`; sin token la ruta y la API devuelven 404.
 - Muestra conectados, salud, posición, tiempo conectado, evento y TOP del
   ranking. Se actualiza cada 2 segundos.
+- Permite **descargar** e **importar** el mundo en JSON. La importación se
+  aplica al reiniciar/redeployar la app.
 
-### MySQL (solo ranking)
+### MySQL (ranking y mundos)
 
 1. Importa `server/schema.sql` desde el panel de tu base de datos (Importar SQL).
 2. Define las variables de entorno `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`,
    `MYSQL_PASSWORD`, `MYSQL_DATABASE`.
-3. Opcional: `MYSQL_SSL=true`, `MYSQL_SSL_CA=/ruta/ca.pem`,
+3. Configura `WORLD_ID` para separar mundos (`production`, `preview`).
+4. Opcional: `MYSQL_SSL=true`, `MYSQL_SSL_CA=/ruta/ca.pem`,
    `MYSQL_CONNECTION_LIMIT=5`.
-4. Opcional: migra el ranking actual con
+5. Opcional: migra el ranking actual con
    `node server/migrate-leaderboard.mjs`.
 
-Si MySQL no está configurado o falla, el servidor continúa con el ranking JSON.
+Si MySQL no está configurado o falla, el servidor continúa con `lan-save.json`.
 
 ## Variables de entorno útiles
 
@@ -61,6 +68,7 @@ Si MySQL no está configurado o falla, el servidor continúa con el ranking JSON
 - `SAVE_PATH`: ruta del guardado (útil en volúmenes persistentes).
 - `SAVE_DIR`: carpeta del guardado si no usas `SAVE_PATH`.
 - `ADMIN_TOKEN`: token del panel `/admin`.
+- `WORLD_ID`: identificador del mundo persistente (`main` por defecto).
 - `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`.
 - `MYSQL_SSL`, `MYSQL_SSL_CA`, `MYSQL_CONNECTION_LIMIT`.
 - `PVP_INTERVAL_MS`: tiempo entre eventos (por defecto `300000`).
@@ -97,5 +105,5 @@ npm test
 - `js/game`: simulación, inventario, aldeas, crafteo, trabajadores.
 - `js/render`: carga de assets y render isométrico.
 - `js/net`: cliente WebSocket y UI social multijugador.
-- `server`: servidor estático + WebSocket, eventos PvP, chat y ranking.
+- `server`: servidor estático + WebSocket, eventos PvP, chat, ranking y mundos.
 - `tests`: pruebas con `node --test`.

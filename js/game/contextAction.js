@@ -32,6 +32,13 @@ const CONSUMABLE_ITEMS = new Set([
 
 const WEAPON_TOOLS = new Set(["spear", "sword", "bow"]);
 
+const SEED_ITEMS = new Set([
+  "semillaHierba",
+  "semillaArbol",
+  "semillaTrigo",
+  "semillaMaiz",
+]);
+
 export function isPlaceableItem(key) {
   return PLACEABLE_ITEMS.has(key);
 }
@@ -40,10 +47,15 @@ export function isConsumableItem(key) {
   return CONSUMABLE_ITEMS.has(key);
 }
 
+export function isSeedItem(key) {
+  return SEED_ITEMS.has(key);
+}
+
 export function resolveContextAction({
   entry = null,
   placing = false,
   mounted = false,
+  nearDonkey = false,
   fishing = null,
 } = {}) {
   if (fishing) {
@@ -54,6 +66,10 @@ export function resolveContextAction({
 
   if (mounted) {
     return { id: "dismount", label: "Bajar", icon: "jump" };
+  }
+
+  if (nearDonkey) {
+    return { id: "mount", label: "Burro", icon: "jump" };
   }
 
   if (placing) {
@@ -69,7 +85,14 @@ export function resolveContextAction({
     }
   }
 
+  if (entry?.kind === "resource" && SEED_ITEMS.has(entry.key)) {
+    return { id: "plant", label: "Sembrar", icon: "place" };
+  }
+
   if (entry?.kind === "tool") {
+    if (entry.key === "hoe") {
+      return { id: "till", label: "Labrar", icon: "place" };
+    }
     if (WEAPON_TOOLS.has(entry.key)) {
       return { id: "attack", label: "Atacar", icon: "sword" };
     }
@@ -80,3 +103,4 @@ export function resolveContextAction({
 
   return { id: "attack", label: "Atacar", icon: "sword" };
 }
+

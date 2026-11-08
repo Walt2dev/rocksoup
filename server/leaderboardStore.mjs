@@ -138,7 +138,7 @@ ON DUPLICATE KEY UPDATE
   updated_at = VALUES(updated_at)
 `;
 
-function buildSsl(config, logger) {
+export function buildSsl(config, logger) {
   if (config.sslMode === "true" || config.sslMode === "1" || config.sslMode === "required") {
     if (config.sslCaPath) {
       try {
