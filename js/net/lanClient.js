@@ -28,11 +28,13 @@ function loadToken() {
 
 function serverUrl() {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const port =
-    window.location.port && window.location.port !== "80" && window.location.port !== "443"
-      ? window.location.port
-      : "3000";
-  return `${protocol}//${window.location.hostname}:${port}/ws`;
+  const override = new URLSearchParams(window.location.search).get("ws");
+
+  if (override && /^[a-zA-Z0-9.\-:\[\]]+$/.test(override)) {
+    return `${protocol}//${override}/ws`;
+  }
+
+  return `${protocol}//${window.location.host}/ws`;
 }
 
 export class LanClient {
@@ -141,6 +143,26 @@ export class LanClient {
       return;
     }
 
+    if (message.type === "chat") {
+      this.callbacks.onChat?.(message);
+      return;
+    }
+
+    if (message.type === "leaderboard") {
+      this.callbacks.onLeaderboard?.(message);
+      return;
+    }
+
+    if (message.type === "event") {
+      this.callbacks.onEvent?.(message.event);
+      return;
+    }
+
+    if (message.type === "kill") {
+      this.callbacks.onKill?.(message);
+      return;
+    }
+
     if (message.type === "plant") {
       this.callbacks.onPlant?.(message);
       return;
@@ -213,6 +235,14 @@ export class LanClient {
 
   sendRestore(x, y) {
     this.send({ type: "restore", x, y });
+  }
+
+  sendChat(text) {
+    this.send({ type: "chat", text });
+  }
+
+  requestLeaderboard() {
+    this.send({ type: "leaderboard" });
   }
 
   sendStructure(itemId, x, y, z = null) {

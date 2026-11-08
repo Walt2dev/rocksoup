@@ -32,6 +32,7 @@ import {
   uploadDefaultPackFiles,
 } from "./game/texturePacks.js";
 import { LanClient } from "./net/lanClient.js";
+import { SocialUI } from "./net/social.js";
 import { loadAssets } from "./render/assets.js";
 
 const byId = (id) => document.getElementById(id);
@@ -218,6 +219,24 @@ const ui = {
     btnWorkerCancel: byId("btn-worker-cancel"),
     btnWorkerDeselect: byId("btn-worker-deselect"),
     btnIdleWorker: byId("btn-idle-worker"),
+    btnChat: byId("btn-chat"),
+    chatBadge: byId("chat-badge"),
+    btnRanking: byId("btn-ranking"),
+    chatPanel: byId("chat-panel"),
+    chatLog: byId("chat-log"),
+    chatForm: byId("chat-form"),
+    chatInput: byId("chat-input"),
+    chatSend: byId("chat-send"),
+    btnChatClose: byId("btn-chat-close"),
+    rankingPanel: byId("ranking-panel"),
+    rankingList: byId("ranking-list"),
+    rankingNext: byId("ranking-next"),
+    rankingTabs: byId("ranking-tabs"),
+    btnRankingClose: byId("btn-ranking-close"),
+    pvpBanner: byId("pvp-banner"),
+    pvpBannerTitle: byId("pvp-banner-title"),
+    pvpBannerTimer: byId("pvp-banner-timer"),
+    pvpBannerLeader: byId("pvp-banner-leader"),
   },
 };
 
@@ -229,6 +248,12 @@ let lanClient = null;
 let lanPlaying = false;
 let pendingNewSeed = null;
 let selectedSkin = "explorer";
+
+const social = new SocialUI({
+  hud: ui.hud,
+  notify: (message) => game?.notify(message),
+});
+social.attach();
 
 try {
   saveStore = createSaveStore(window.localStorage);
@@ -295,6 +320,8 @@ function refreshSaveInfo() {
 
 function beginGame(seed, saveState, characterSkin = null) {
   ui.menuError.textContent = "";
+  social.setEnabled(false);
+  social.setClient(null);
 
   try {
     updateUrlSeed(seed);
@@ -509,6 +536,8 @@ function openLanScreen() {
 }
 
 function closeLanConnection() {
+  social.setEnabled(false);
+  social.setClient(null);
   if (lanClient) {
     lanClient.close();
     lanClient = null;
@@ -629,6 +658,12 @@ function startLanGame(message) {
     });
     game.start();
 
+    social.setClient(lanClient);
+    social.setEnabled(true);
+    social.setChatHistory(message.chat);
+    social.setLeaderboard(message.leaderboard);
+    social.setEvent(message.event);
+
     if (new URLSearchParams(window.location.search).has("debug")) {
       window.__rocksoup = game;
     }
@@ -670,7 +705,10 @@ function connectLan() {
     onLobby: (message) => updateLanLobby(message),
     onStart: (message) => startLanGame(message),
     onPlayers: (message) => game?.handleNetworkPlayers(message),
-    onTime: (message) => game?.handleNetworkTime(message),
+    onTime: (message) => {
+      game?.handleNetworkTime(message);
+      social.setEvent(message.event);
+    },
     onHarvest: (message) => game?.applyNetworkHarvest(message),
     onRestore: (message) => game?.applyNetworkRestore(message),
     onPlant: (message) => game?.applyNetworkPlant(message),
@@ -679,6 +717,10 @@ function connectLan() {
     onStructure: (message) => game?.applyNetworkStructure(message),
     onHit: (message) => game?.handleNetworkHit(message),
     onRespawn: (message) => game?.handleNetworkRespawn(message),
+    onChat: (message) => social.pushChat(message),
+    onLeaderboard: (message) => social.setLeaderboard(message.entries),
+    onEvent: (event) => social.setEvent(event),
+    onKill: (message) => social.pushKill(message),
     onError: (message) => {
       if (lanPlaying && game) {
         game.notify(message);
@@ -690,6 +732,8 @@ function connectLan() {
       lanClient = null;
       const wasPlaying = lanPlaying;
       lanPlaying = false;
+      social.setEnabled(false);
+      social.setClient(null);
 
       if (game) {
         game.stop();

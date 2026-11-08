@@ -11,10 +11,35 @@ import { MINERAL_TYPES } from "../js/world/minerals.js";
 import { FISH_SPECIES } from "../js/game/fishing.js";
 import { sanitizeFarmPlot } from "../js/game/farming.js";
 import { sanitizeFeathers } from "../js/game/save.js";
+import {
+  PVP_CONFIG,
+  addParticipants,
+  createPvpState,
+  ensureParticipant,
+  recordKill,
+  snapshotPvp,
+  tickPvp,
+} from "./pvp.mjs";
+import {
+  CHAT_CONFIG,
+  ChatHistory,
+  ChatLimiter,
+  sanitizeChatText,
+} from "./chat.mjs";
+import {
+  createLeaderboard,
+  leaderboardTop,
+  mergeEventResults,
+  sanitizeLeaderboard,
+} from "./leaderboard.mjs";
 
 const ROOT = resolve(process.cwd());
-const SAVE_DIR = join(ROOT, "server");
-const SAVE_PATH = join(SAVE_DIR, "lan-save.json");
+const SAVE_DIR = process.env.SAVE_DIR
+  ? resolve(process.env.SAVE_DIR)
+  : join(ROOT, "server");
+const SAVE_PATH = process.env.SAVE_PATH
+  ? resolve(process.env.SAVE_PATH)
+  : join(SAVE_DIR, "lan-save.json");
 const PORT = Number(process.env.PORT || 3000);
 const MAX_PLAYERS = 6;
 const PLAYER_COLORS = ["#e0a458", "#7ec699", "#6ca9e0", "#d97b6c", "#b58ce0", "#d8c46a"];
@@ -213,6 +238,7 @@ function createInitialState() {
     groundItems: [],
     farmPlots: [],
     profiles: {},
+    leaderboard: createLeaderboard(),
   };
 }
 
@@ -244,6 +270,7 @@ async function loadState() {
     state.harvested = Array.isArray(parsed.harvested) ? parsed.harvested : [];
     state.planted = Array.isArray(parsed.planted) ? parsed.planted : [];
     state.farmPlots = sanitizeFarmPlots(parsed.farmPlots);
+    state.leaderboard = sanitizeLeaderboard(parsed.leaderboard);
 
     return state;
   } catch (error) {
@@ -269,6 +296,19 @@ let hostId = null;
 let started = false;
 let saveTimer = null;
 const clients = new Map();
+const pvpConfig = {
+  ...PVP_CONFIG,
+  intervalMs:
+    Number(process.env.PVP_INTERVAL_MS) > 0
+      ? Math.floor(Number(process.env.PVP_INTERVAL_MS))
+      : PVP_CONFIG.intervalMs,
+  durationMs:
+    Number(process.env.PVP_DURATION_MS) > 0
+      ? Math.floor(Number(process.env.PVP_DURATION_MS))
+      : PVP_CONFIG.durationMs,
+};
+const pvp = createPvpState(Date.now(), pvpConfig);
+const chatHistory = new ChatHistory(CHAT_CONFIG.historyLimit);
 
 function publicPlayer(client) {
   return {
@@ -318,6 +358,82 @@ function broadcastLobby() {
   broadcast(lobbyPayload(), { include: (client) => !started });
 }
 
+function leaderboardEntriesFor(client) {
+  return leaderboardTop(state.leaderboard, { limit: 10 }).map((entry) => ({
+    name: entry.name,
+    color: entry.color,
+    points: entry.points,
+    kills: entry.kills,
+    deaths: entry.deaths,
+    bestStreak: entry.bestStreak,
+    eventsWon: entry.eventsWon,
+    bestEventScore: entry.bestEventScore,
+    isSelf: entry.token === client.token,
+  }));
+}
+
+function sendLeaderboard(client) {
+  send(client.ws, {
+    type: "leaderboard",
+    entries: leaderboardEntriesFor(client),
+  });
+}
+
+function broadcastLeaderboard() {
+  for (const client of clients.values()) {
+    sendLeaderboard(client);
+  }
+}
+
+function pushChat(entry) {
+  chatHistory.push(entry);
+  broadcast(entry);
+}
+
+function pushSystemChat(text) {
+  pushChat({
+    type: "chat",
+    system: true,
+    text: String(text).slice(0, 240),
+    at: Date.now(),
+  });
+}
+
+function currentEventSnapshot() {
+  return snapshotPvp(pvp, Date.now());
+}
+
+function handlePvpTransition(now) {
+  const transition = tickPvp(pvp, now);
+
+  if (!transition) {
+    return;
+  }
+
+  if (transition.type === "active") {
+    addParticipants(pvp, [...clients.values()]);
+    pushSystemChat(
+      `¡Evento PvP! Deathmatch de ${Math.round(pvp.config.durationMs / 1000)} s. Cada kill da puntos.`,
+    );
+  } else if (transition.type === "finished") {
+    mergeEventResults(state.leaderboard, transition.results, {
+      now,
+      winnerToken: transition.winner?.token ?? null,
+    });
+    broadcastLeaderboard();
+
+    if (transition.winner && transition.winner.score > 0) {
+      pushSystemChat(
+        `Evento PvP finalizado. Ganador: ${transition.winner.name} (${transition.winner.score} pts).`,
+      );
+    } else {
+      pushSystemChat("Evento PvP finalizado sin puntuaciones.");
+    }
+
+    scheduleSave();
+  }
+}
+
 function worldSnapshot() {
   return {
     worldBiomes: state.worldBiomes,
@@ -355,6 +471,9 @@ function sendStart(client) {
     profile: profileFor(client),
     selfId: client.id,
     hostId,
+    leaderboard: leaderboardEntriesFor(client),
+    chat: chatHistory.snapshot(),
+    event: currentEventSnapshot(),
   });
 }
 
@@ -407,6 +526,7 @@ async function saveState() {
     structures: state.structures,
     groundItems: state.groundItems,
     profiles,
+    leaderboard: state.leaderboard,
   };
 
   try {
@@ -531,9 +651,14 @@ function handleJoin(ws, message) {
     workers: [],
     lastAttackAt: 0,
     lastStateAt: 0,
+    lastLeaderboardAt: 0,
+    chatLimiter: new ChatLimiter(),
   };
 
   clients.set(ws, client);
+  if (pvp.phase === "active") {
+    ensureParticipant(pvp, client);
+  }
   state.profiles[token] = {
     ...state.profiles[token],
     name: client.name,
@@ -618,6 +743,41 @@ function handleInventory(client, message) {
     client.observatoryDiscoveries = sanitizeDiscoveries(message.observatoryDiscoveries);
   }
   scheduleSave();
+}
+
+function handleChat(client, message) {
+  const text = sanitizeChatText(message?.text);
+
+  if (text.length === 0) {
+    return;
+  }
+
+  if (!client.chatLimiter.allow(Date.now())) {
+    send(client.ws, {
+      type: "error",
+      message: "Espera un poco antes de enviar otro mensaje.",
+    });
+    return;
+  }
+
+  pushChat({
+    type: "chat",
+    id: client.id,
+    name: client.name,
+    color: client.color,
+    text,
+    at: Date.now(),
+  });
+}
+
+function handleLeaderboardRequest(client) {
+  const now = Date.now();
+
+  if (now - client.lastLeaderboardAt < 1500) {
+    return;
+  }
+  client.lastLeaderboardAt = now;
+  sendLeaderboard(client);
 }
 
 function handleHarvest(client, message) {
@@ -818,6 +978,11 @@ function handleAttack(client, message = {}) {
   scheduleSave();
 
   if (health <= 0) {
+    const kill = recordKill(pvp, Date.now(), client, target);
+    if (kill) {
+      broadcast({ type: "kill", ...kill });
+    }
+
     const spawn = findAvailableSpawn(null, target.id);
     target.x = spawn.x;
     target.y = spawn.y;
@@ -862,6 +1027,7 @@ function handleMessage(ws, raw) {
     }
     started = true;
     hostId = client.id;
+    pvp.nextAt = Date.now() + pvp.config.intervalMs;
     broadcast({ type: "lobby", hostId, started, players: [] });
     for (const other of clients.values()) {
       sendStart(other);
@@ -907,6 +1073,16 @@ function handleMessage(ws, raw) {
 
   if (message.type === "structure") {
     handleStructure(client, message);
+    return;
+  }
+
+  if (message.type === "chat") {
+    handleChat(client, message);
+    return;
+  }
+
+  if (message.type === "leaderboard") {
+    handleLeaderboardRequest(client);
     return;
   }
 
@@ -1027,8 +1203,13 @@ setInterval(() => {
     return;
   }
 
+  handlePvpTransition(now);
   state.time += elapsed;
-  broadcast({ type: "time", time: state.time });
+  broadcast({
+    type: "time",
+    time: state.time,
+    event: currentEventSnapshot(),
+  });
 }, 1000);
 
 setInterval(() => {

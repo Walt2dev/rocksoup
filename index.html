@@ -275,6 +275,12 @@
             <button id="btn-attack" class="hud-button" type="button">
               Atacar <kbd>R</kbd>
             </button>
+            <button id="btn-chat" class="hud-button" type="button" aria-expanded="false" aria-controls="chat-panel" hidden>
+              Chat <kbd>T</kbd> <span id="chat-badge" class="social-badge" hidden>0</span>
+            </button>
+            <button id="btn-ranking" class="hud-button" type="button" aria-expanded="false" aria-controls="ranking-panel" hidden>
+              Ranking <kbd>B</kbd>
+            </button>
             <button id="btn-place-selected" class="hud-button" type="button" title="Colocar el objeto seleccionado">
               Colocar
             </button>
@@ -590,6 +596,47 @@
             </div>
           </div>
         </aside>
+
+        <aside id="chat-panel" class="chat-panel" aria-hidden="true" aria-label="Chat multijugador">
+          <div class="chat-card">
+            <header class="chat-header">
+              <div>
+                <span class="craft-eyebrow">Multijugador</span>
+                <h2>Chat</h2>
+              </div>
+              <button id="btn-chat-close" class="craft-close" type="button" aria-label="Cerrar chat">&times;</button>
+            </header>
+            <div id="chat-log" class="chat-log" role="log" aria-live="polite"></div>
+            <form id="chat-form" class="chat-form">
+              <input id="chat-input" type="text" maxlength="180" autocomplete="off" placeholder="Escribe un mensaje..." />
+              <button id="chat-send" class="menu-button primary" type="submit">Enviar</button>
+            </form>
+          </div>
+        </aside>
+
+        <aside id="ranking-panel" class="ranking-panel" aria-hidden="true" aria-label="Ranking PvP">
+          <div class="ranking-card">
+            <header class="chat-header">
+              <div>
+                <span class="craft-eyebrow">Eventos PvP</span>
+                <h2>Ranking</h2>
+              </div>
+              <button id="btn-ranking-close" class="craft-close" type="button" aria-label="Cerrar ranking">&times;</button>
+            </header>
+            <div id="ranking-tabs" class="ranking-tabs">
+              <button class="ranking-tab is-active" type="button" data-ranking-sort="points">Puntos</button>
+              <button class="ranking-tab" type="button" data-ranking-sort="best">Mejor evento</button>
+            </div>
+            <p id="ranking-next" class="ranking-next"></p>
+            <div id="ranking-list" class="ranking-list"></div>
+          </div>
+        </aside>
+
+        <div id="pvp-banner" class="pvp-banner" role="status" aria-live="polite" hidden>
+          <span id="pvp-banner-title" class="pvp-banner-title">Evento PvP · Deathmatch</span>
+          <span id="pvp-banner-timer" class="pvp-banner-timer">01:30</span>
+          <span id="pvp-banner-leader" class="pvp-banner-leader">Sin puntuaciones aún</span>
+        </div>
 
         <div id="cycle-banner" class="cycle-banner" role="status" aria-live="polite" data-phase="day">
           <span class="cycle-banner-icon" aria-hidden="true">
