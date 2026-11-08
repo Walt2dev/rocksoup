@@ -38,6 +38,31 @@ import { loadAssets } from "./render/assets.js";
 
 const byId = (id) => document.getElementById(id);
 
+function syncViewportHeight() {
+  const supportsDvh =
+    typeof CSS !== "undefined" && CSS.supports?.("height", "100dvh");
+  if (supportsDvh) {
+    return;
+  }
+  const apply = () => {
+    const height = window.visualViewport?.height ?? window.innerHeight;
+    if (height > 0) {
+      document.documentElement.style.setProperty(
+        "--app-height",
+        `${Math.round(height)}px`,
+      );
+    }
+  };
+  apply();
+  window.visualViewport?.addEventListener("resize", apply);
+  window.visualViewport?.addEventListener("scroll", apply);
+  window.addEventListener("load", apply);
+  window.addEventListener("resize", apply);
+  window.addEventListener("orientationchange", apply);
+}
+
+syncViewportHeight();
+
 const screens = {
   loading: byId("screen-loading"),
   menu: byId("screen-menu"),

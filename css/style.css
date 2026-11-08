@@ -14,6 +14,13 @@
   --danger: #d97b6c;
   --mono: "Cascadia Code", "Fira Code", Consolas, monospace;
   --sans: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --app-height: 100vh;
+}
+
+@supports (height: 100dvh) {
+  :root {
+    --app-height: 100dvh;
+  }
 }
 
 * {
@@ -71,7 +78,7 @@ kbd {
 
 .app {
   position: relative;
-  height: 100vh;
+  height: var(--app-height);
   overflow: hidden;
   background: var(--bg);
 }
@@ -4653,7 +4660,7 @@ body.touch-enabled .hud-bottom {
   padding:
     0
     max(12px, env(safe-area-inset-right))
-    calc(8px + env(safe-area-inset-bottom))
+    calc(16px + env(safe-area-inset-bottom))
     max(12px, env(safe-area-inset-left));
   flex-wrap: nowrap;
   pointer-events: none;
@@ -5004,7 +5011,7 @@ body.touch-enabled .hud-bottom {
 
   .hud-context-actions {
     right: 6px;
-    bottom: calc(118px + env(safe-area-inset-bottom));
+    bottom: calc(142px + env(safe-area-inset-bottom));
     width: 156px;
     height: 156px;
   }
@@ -5047,19 +5054,19 @@ body.touch-enabled .hud-bottom {
 
   .touch-joystick {
     left: max(12px, env(safe-area-inset-left));
-    bottom: calc(118px + env(safe-area-inset-bottom));
+    bottom: calc(142px + env(safe-area-inset-bottom));
     width: 96px;
     height: 96px;
   }
 
   .touch-rotate {
     left: max(12px, env(safe-area-inset-left));
-    bottom: calc(226px + env(safe-area-inset-bottom));
+    bottom: calc(250px + env(safe-area-inset-bottom));
   }
 
   .touch-zoom {
     left: calc(max(12px, env(safe-area-inset-left)) + 108px);
-    bottom: calc(118px + env(safe-area-inset-bottom));
+    bottom: calc(142px + env(safe-area-inset-bottom));
   }
 }
 
@@ -5069,7 +5076,7 @@ body.touch-enabled .hud-bottom {
   }
 
   .hud-context-actions {
-    bottom: calc(104px + env(safe-area-inset-bottom));
+    bottom: calc(124px + env(safe-area-inset-bottom));
     width: 140px;
     height: 140px;
   }
@@ -5111,18 +5118,18 @@ body.touch-enabled .hud-bottom {
   }
 
   .touch-joystick {
-    bottom: calc(104px + env(safe-area-inset-bottom));
+    bottom: calc(124px + env(safe-area-inset-bottom));
     width: 88px;
     height: 88px;
   }
 
   .touch-rotate {
-    bottom: calc(200px + env(safe-area-inset-bottom));
+    bottom: calc(220px + env(safe-area-inset-bottom));
   }
 
   .touch-zoom {
     left: calc(max(12px, env(safe-area-inset-left)) + 98px);
-    bottom: calc(104px + env(safe-area-inset-bottom));
+    bottom: calc(124px + env(safe-area-inset-bottom));
   }
 }
 
@@ -5169,11 +5176,15 @@ body.touch-enabled .hud-bottom {
 
 .hud-menu {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: auto;
   z-index: 30;
   display: none;
   align-items: flex-end;
   justify-content: center;
+  height: var(--app-height);
   background: rgba(4, 8, 16, 0.55);
   backdrop-filter: blur(2px);
 }
@@ -5183,10 +5194,12 @@ body.touch-enabled .hud-bottom {
 }
 
 .hud-menu-sheet {
+  --menu-pad: 18px;
   width: min(680px, 100%);
-  max-height: 86vh;
+  max-height: min(86vh, calc(var(--app-height) - 12px));
   overflow-y: auto;
-  padding: 18px 18px calc(18px + env(safe-area-inset-bottom));
+  overscroll-behavior: contain;
+  padding: 18px var(--menu-pad) calc(18px + env(safe-area-inset-bottom));
   border: 1px solid var(--glass-border);
   border-radius: 22px 22px 0 0;
   background: #111a24;
@@ -5282,6 +5295,25 @@ body.touch-enabled .hud-bottom {
   display: none;
 }
 
+.hud-menu-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 14px calc(-1 * var(--menu-pad)) calc(-18px - env(safe-area-inset-bottom));
+  padding: 12px var(--menu-pad) calc(18px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+  background: #111a24;
+  box-shadow: 0 -14px 24px rgba(4, 8, 16, 0.32);
+}
+
+.hud-menu-footer .hud-menu-item {
+  min-width: 0;
+  min-height: 44px;
+}
+
 .hud-menu-help {
   margin-top: 12px;
   padding-top: 10px;
@@ -5311,8 +5343,7 @@ body.touch-enabled .hud-bottom {
   }
 
   .hud-menu-sheet {
-    padding-left: 14px;
-    padding-right: 14px;
+    --menu-pad: 14px;
   }
 }
 
@@ -5348,11 +5379,15 @@ select:focus-visible {
 
 .inventory-panel {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: auto;
   z-index: 18;
   display: none;
   align-items: center;
   justify-content: center;
+  height: var(--app-height);
   padding: 20px;
   background: rgba(4, 8, 16, 0.78);
   backdrop-filter: blur(3px);
@@ -5367,7 +5402,7 @@ select:focus-visible {
   flex-direction: column;
   gap: 12px;
   width: min(760px, 96vw);
-  max-height: 88vh;
+  max-height: min(88vh, calc(var(--app-height) - 40px));
   padding: 18px 20px;
   overflow: hidden;
   border: 1px solid var(--glass-border);
@@ -5559,7 +5594,7 @@ select:focus-visible {
 
   .inventory-card {
     width: 100%;
-    max-height: 92vh;
+    max-height: min(92vh, calc(var(--app-height) - 20px));
     padding: 14px;
   }
 
