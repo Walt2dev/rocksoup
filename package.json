@@ -6,6 +6,7 @@
   "description": "Sopa de Piedras: mundo isometrico procedural y determinista",
   "scripts": {
     "start": "node server/lan-server.mjs",
+    "dev": "node --env-file=.env server/lan-server.mjs",
     "test": "node --test \"tests/**/*.test.mjs\"",
     "lan": "node server/lan-server.mjs"
   },

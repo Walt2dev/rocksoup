@@ -736,7 +736,7 @@ function connectLan() {
         setLanStatus(message, true);
       }
     },
-    onClose: () => {
+    onClose: (info) => {
       lanClient = null;
       const wasPlaying = lanPlaying;
       lanPlaying = false;
@@ -749,12 +749,16 @@ function connectLan() {
       }
 
       resetLanUi({ clearStatus: false });
+      const suffix = info?.code
+        ? ` (código ${info.code}${info.reason ? `: ${info.reason}` : ""})`
+        : "";
       setLanStatus(
         wasPlaying
-          ? "Se perdió la conexión con el mundo LAN."
-          : "No se pudo conectar. Comprueba que npm run lan esté activo.",
+          ? `Se perdió la conexión con el mundo LAN.${suffix}`
+          : `No se pudo conectar a ${info?.url ?? "el servidor"}.${suffix}`,
         true,
       );
+      console.warn("[LAN] WebSocket cerrado:", info);
       showScreen("lan");
     },
   });

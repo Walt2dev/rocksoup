@@ -1,4 +1,5 @@
 import { LAN_TOKEN_KEY } from "../game/settings.js";
+import { resolveWsUrl } from "./wsUrl.js";
 
 function createToken() {
   if (globalThis.crypto?.randomUUID) {
@@ -27,14 +28,15 @@ function loadToken() {
 }
 
 function serverUrl() {
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const override = new URLSearchParams(window.location.search).get("ws");
 
-  if (override && /^[a-zA-Z0-9.\-:\[\]]+$/.test(override)) {
-    return `${protocol}//${override}/ws`;
-  }
-
-  return `${protocol}//${window.location.host}/ws`;
+  return resolveWsUrl({
+    protocol: window.location.protocol,
+    host: window.location.host,
+    hostname: window.location.hostname,
+    port: window.location.port,
+    override,
+  });
 }
 
 export class LanClient {
@@ -84,16 +86,24 @@ export class LanClient {
       this.handleMessage(message);
     });
 
-    ws.addEventListener("close", () => {
+    ws.addEventListener("close", (event) => {
+      const url = this.url;
       this.connected = false;
       this.ws = null;
       if (!this.closing) {
-        this.callbacks.onClose?.();
+        this.callbacks.onClose?.({
+          url,
+          code: event.code,
+          reason: event.reason,
+          wasClean: event.wasClean,
+        });
       }
     });
 
     ws.addEventListener("error", () => {
-      this.callbacks.onError?.("No se pudo conectar al servidor LAN.");
+      this.callbacks.onError?.(
+        `No se pudo conectar al servidor LAN (${this.url}).`,
+      );
     });
   }
 

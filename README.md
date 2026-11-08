@@ -67,6 +67,22 @@ Si MySQL no está configurado o falla, el servidor continúa con el ranking JSON
 Para conectarse a un servidor WebSocket distinto del mismo origen, abre la
 página con `?ws=host:puerto`.
 
+### Archivo .env
+
+- Copia `.env.example` a `.env` y rellena los valores reales.
+- `.env` está en `.gitignore`: no se sube al repositorio.
+- En GoDaddy puedes usar **Importar .env** en la configuración del entorno.
+- No incluyas `PORT` en el `.env` del hosting: lo inyecta la plataforma.
+- En local, `npm run dev` carga `.env` automáticamente (Node 20.6+).
+
+El cliente elige el WebSocket automáticamente:
+
+- Mismo origen (`wss://dominio/ws`) cuando el juego lo sirve Node o un proxy
+  HTTPS (GoDaddy, `npm start`).
+- `hostname:3000` cuando la página se sirve desde XAMPP o un servidor estático
+  local (flujo `npm run lan`).
+- `?ws=host:puerto` fuerza otro servidor manualmente.
+
 ## Tests
 
 ```powershell
