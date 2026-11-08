@@ -22,6 +22,19 @@ const NIGHTLING_AGGRO_RADIUS = 14;
 const NIGHTLING_STOP_RADIUS = 1.05;
 const CAMPFIRE_SAFE_RADIUS = 3.6;
 
+export const AMBIENT_MAX_HEALTH = Object.freeze({
+  fox: 35,
+  frog: 20,
+  vulture: 20,
+  goat: 55,
+  sparrow: 20,
+  crow: 20,
+  owl: 20,
+  nightling: 60,
+  spider: 45,
+  donkey: 120,
+});
+
 export function isNearWater(world, x, y, radius = 2) {
   for (let dy = -radius; dy <= radius; dy += 1) {
     for (let dx = -radius; dx <= radius; dx += 1) {
@@ -481,6 +494,7 @@ function updateDonkey(
 export function updateAmbientSystem(ecs, deltaSeconds, {
   playerX,
   playerY,
+  players = null,
   isWalkable,
   time = 0,
   campfires = [],
@@ -490,17 +504,41 @@ export function updateAmbientSystem(ecs, deltaSeconds, {
     const transform = ecs.getComponent(id, Component.TRANSFORM);
     const motion = ecs.getComponent(id, Component.MOTION);
 
-    if (ambient.wave) {
+    if (ambient.wave || ambient.network) {
       continue;
+    }
+
+    let targetX = playerX;
+    let targetY = playerY;
+
+    if (Array.isArray(players) && players.length > 0) {
+      let nearest = null;
+      let nearestDistance = Infinity;
+
+      for (const player of players) {
+        if (!Number.isFinite(player?.x) || !Number.isFinite(player?.y)) {
+          continue;
+        }
+        const distance = Math.hypot(player.x - transform.x, player.y - transform.y);
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          nearest = player;
+        }
+      }
+
+      if (nearest) {
+        targetX = nearest.x;
+        targetY = nearest.y;
+      }
     }
 
     if (
       ambient.species === AMBIENT_SPECIES.FOX ||
       ambient.species === AMBIENT_SPECIES.GOAT
     ) {
-      updateFox(ambient, transform, motion, deltaSeconds, playerX, playerY, isWalkable, time);
+      updateFox(ambient, transform, motion, deltaSeconds, targetX, targetY, isWalkable, time);
     } else if (ambient.species === AMBIENT_SPECIES.FROG) {
-      updateFrog(ambient, transform, motion, deltaSeconds, playerX, playerY, isWalkable, time);
+      updateFrog(ambient, transform, motion, deltaSeconds, targetX, targetY, isWalkable, time);
     } else if (
       ambient.species === AMBIENT_SPECIES.VULTURE ||
       ambient.species === AMBIENT_SPECIES.SPARROW ||
@@ -530,8 +568,8 @@ export function updateAmbientSystem(ecs, deltaSeconds, {
         transform,
         motion,
         deltaSeconds,
-        playerX,
-        playerY,
+        targetX,
+        targetY,
         isWalkable,
         time,
         campfires,

@@ -515,22 +515,34 @@
             </div>
 
             <div class="hud-context-actions" aria-label="Acciones de combate y unidad">
-              <button id="btn-cross-center" class="cross-btn cross-top" type="button" aria-label="Centrar c?mara" title="Centrar">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-target"></use></svg>
-              </button>
-              <button id="btn-cross-workers" class="cross-btn cross-right" type="button" aria-label="Duendes inactivos" title="Duendes">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-worker"></use></svg>
-                <span id="cross-workers-badge" class="cross-badge" hidden>0</span>
+              <button id="btn-cross-attack" class="cross-btn cross-top" type="button" aria-label="Atacar" title="Atacar">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-sword"></use></svg>
+                <span>Atacar</span>
               </button>
               <button id="btn-cross-jump" class="cross-btn cross-left" type="button" aria-label="Saltar" title="Saltar">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-jump"></use></svg>
+                <span>Saltar</span>
+              </button>
+              <button id="btn-cross-workers" class="cross-btn cross-bottom-left" type="button" aria-label="Duendes inactivos" title="Duendes">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-worker"></use></svg>
+                <span>Duendes</span>
+                <span id="cross-workers-badge" class="cross-badge" hidden>0</span>
+              </button>
+              <button id="btn-cross-chat" class="cross-btn cross-right" type="button" aria-label="Chat" title="Chat" hidden>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-chat"></use></svg>
+                <span>Chat</span>
+              </button>
+              <button id="btn-cross-center" class="cross-btn cross-bottom" type="button" aria-label="Centrar cámara" title="Centrar">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-target"></use></svg>
+                <span>Centrar</span>
+              </button>
+              <button id="btn-cross-quest" class="cross-btn cross-bottom-right" type="button" aria-label="Misiones" title="Misiones" hidden>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-target"></use></svg>
+                <span>Misiones</span>
               </button>
               <button id="btn-context-action" class="cross-btn cross-center" type="button" aria-label="Usar o colocar" title="Usar o colocar">
                 <svg class="context-icon" viewBox="0 0 24 24" aria-hidden="true"><use id="context-action-icon-use" href="#icon-use"></use></svg>
                 <span id="context-action-label">Usar/Colocar</span>
-              </button>
-              <button id="btn-cross-quest" class="cross-btn cross-bottom" type="button" aria-label="Misiones" title="Misiones" hidden>
-                <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-target"></use></svg>
               </button>
             </div>
           </div>

@@ -4831,6 +4831,8 @@ body.touch-enabled .hud-bottom {
 .cross-top,
 .cross-right,
 .cross-bottom,
+.cross-bottom-left,
+.cross-bottom-right,
 .cross-left {
   width: 52px;
   height: 52px;
@@ -4849,6 +4851,16 @@ body.touch-enabled .hud-bottom {
 .cross-bottom {
   bottom: 0;
   left: 61px;
+}
+
+.cross-bottom-left {
+  bottom: 0;
+  left: 0;
+}
+
+.cross-bottom-right {
+  bottom: 0;
+  right: 0;
 }
 
 .cross-left {
@@ -5050,6 +5062,8 @@ body.touch-enabled .hud-bottom {
   .cross-top,
   .cross-right,
   .cross-bottom,
+  .cross-bottom-left,
+  .cross-bottom-right,
   .cross-left {
     width: 46px;
     height: 46px;

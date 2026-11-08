@@ -43,6 +43,7 @@ import {
   getAdminToken,
 } from "./admin.mjs";
 import { createWorldStore, normalizeWorldId } from "./worldStore.mjs";
+import { createAmbientSync } from "./ambientSync.mjs";
 
 const ROOT = resolve(process.cwd());
 const SAVE_DIR = process.env.SAVE_DIR
@@ -234,6 +235,23 @@ function sanitizeTorches(value) {
   return result;
 }
 
+function sanitizeDonkey(value) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  if (!Number.isFinite(value.x) || !Number.isFinite(value.y)) {
+    return null;
+  }
+
+  return {
+    x: value.x,
+    y: value.y,
+    skinId: sanitizeSkinId(value.skinId),
+    mounted: value.mounted === true,
+    tamed: value.tamed === true,
+  };
+}
+
 function createInitialState() {
   return {
     version: 1,
@@ -331,6 +349,7 @@ let hostId = null;
 let started = false;
 let saveTimer = null;
 const clients = new Map();
+const ambientSync = createAmbientSync({ world, seed: state.seed });
 const pvpConfig = {
   ...PVP_CONFIG,
   intervalMs:
@@ -357,6 +376,8 @@ function publicPlayer(client) {
     facing: client.facing,
     health: client.health,
     swimSeconds: client.swimSeconds,
+    verticalOffset: client.verticalOffset,
+    donkey: client.donkey,
     workers: client.workers,
     skinId: client.skinId,
     eventScore: pvp.scores[client.id]?.score ?? 0,
@@ -755,8 +776,11 @@ function handleJoin(ws, message) {
     feathers: sanitizeFeathers(saved?.feathers),
     observatoryDiscoveries: sanitizeDiscoveries(saved?.observatoryDiscoveries),
     swimSeconds: clampSwimSeconds(saved?.swimSeconds),
+    verticalOffset: 0,
+    donkey: null,
     workers: [],
     lastAttackAt: 0,
+    lastAmbientAttackAt: 0,
     lastStateAt: 0,
     lastLeaderboardAt: 0,
     connectedAt: Date.now(),
@@ -803,6 +827,10 @@ function handleState(client, message) {
   if (Number.isFinite(message.swimSeconds)) {
     client.swimSeconds = clampSwimSeconds(message.swimSeconds);
   }
+  if (Number.isFinite(message.verticalOffset)) {
+    client.verticalOffset = Math.min(8, Math.max(0, message.verticalOffset));
+  }
+  client.donkey = sanitizeDonkey(message.donkey);
   if (Array.isArray(message.workers)) {
     client.workers = message.workers
       .filter(
@@ -1109,6 +1137,60 @@ function handleAttack(client, message = {}) {
   }
 }
 
+function handleAmbientHit(client, message) {
+  if (!started) {
+    return;
+  }
+
+  const now = Date.now();
+  if (now - client.lastAmbientAttackAt < 120) {
+    return;
+  }
+  client.lastAmbientAttackAt = now;
+
+  const id = Number(message?.id);
+  const damage = Number(message?.damage);
+  if (!Number.isInteger(id) || !Number.isFinite(damage)) {
+    return;
+  }
+
+  const position = ambientSync.position(id);
+  if (!position) {
+    return;
+  }
+
+  if (Math.hypot(position.x - client.x, position.y - client.y) > 12) {
+    return;
+  }
+
+  const result = ambientSync.damage(
+    id,
+    Math.max(1, Math.min(100, Math.round(damage))),
+  );
+  if (!result) {
+    return;
+  }
+
+  broadcast({
+    type: "ambientHit",
+    id: result.id,
+    health: result.health,
+    attackerId: client.id,
+    killerId: result.killed ? client.id : null,
+  });
+
+  if (result.killed) {
+    broadcast({
+      type: "ambientKilled",
+      id: result.id,
+      species: result.species,
+      x: result.x,
+      y: result.y,
+      killerId: client.id,
+    });
+  }
+}
+
 function handleMessage(ws, raw) {
   let message;
   try {
@@ -1121,6 +1203,12 @@ function handleMessage(ws, raw) {
   }
 
   const client = clients.get(ws);
+
+  if (message.type === "leave") {
+    handleClose(ws);
+    ws.close();
+    return;
+  }
 
   if (message.type === "join") {
     handleJoin(ws, message);
@@ -1201,6 +1289,10 @@ function handleMessage(ws, raw) {
   if (message.type === "attack") {
     handleAttack(client, message);
   }
+
+  if (message.type === "ambientHit") {
+    handleAmbientHit(client, message);
+  }
 }
 
 function handleClose(ws) {
@@ -1210,6 +1302,7 @@ function handleClose(ws) {
   }
 
   clients.delete(ws);
+  ambientSync.removeOwner(client.id);
   console.log(`[LAN] ${client.name} desconectado`);
 
   if (client.id === hostId) {
@@ -1440,6 +1533,10 @@ const server = createServer(async (req, res) => {
 const wss = new WebSocketServer({ server, path: "/ws" });
 
 wss.on("connection", (ws) => {
+  ws.isAlive = true;
+  ws.on("pong", () => {
+    ws.isAlive = true;
+  });
   ws.on("message", (raw) => {
     try {
       handleMessage(ws, raw);
@@ -1451,6 +1548,25 @@ wss.on("connection", (ws) => {
   ws.on("error", () => handleClose(ws));
 });
 
+const heartbeatTimer = setInterval(() => {
+  for (const ws of wss.clients) {
+    if (ws.isAlive === false) {
+      ws.terminate();
+      continue;
+    }
+    ws.isAlive = false;
+    try {
+      ws.ping();
+    } catch {
+      ws.terminate();
+    }
+  }
+}, 20000);
+
+wss.on("close", () => {
+  clearInterval(heartbeatTimer);
+});
+
 setInterval(() => {
   if (!started || clients.size === 0) {
     return;
@@ -1459,6 +1575,31 @@ setInterval(() => {
     type: "players",
     players: [...clients.values()].map(publicPlayer),
     hostId,
+  });
+}, 100);
+
+let lastAmbientTick = Date.now();
+
+setInterval(() => {
+  const now = Date.now();
+  const elapsed = Math.max(0, Math.min(0.5, (now - lastAmbientTick) / 1000));
+  lastAmbientTick = now;
+
+  if (!started || clients.size === 0) {
+    ambientSync.clear();
+    return;
+  }
+
+  ambientSync.tick(
+    elapsed,
+    [...clients.values()],
+    state.time,
+    state.structures.campfires,
+  );
+  broadcast({
+    type: "ambient",
+    time: ambientSync.time,
+    entities: ambientSync.snapshot(),
   });
 }, 100);
 

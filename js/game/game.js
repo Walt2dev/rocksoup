@@ -487,6 +487,8 @@ export class Game {
       : 100;
     this.remotePlayers = new Map();
     this.remoteWorkers = new Map();
+    this.networkAmbient = new Map();
+    this.networkAmbientTime = 0;
     this.attackCooldown = 0;
     this.networkTimer = 0;
     this.inventorySendTimer = 0;
@@ -750,7 +752,9 @@ export class Game {
     this.setupWorkers(saveState);
     this.setupDonkey(saveState);
     this.syncAllVillageUnits();
-    this.spawnAmbientBatch(AMBIENT_TARGET);
+    if (!this.network) {
+      this.spawnAmbientBatch(AMBIENT_TARGET);
+    }
     this.hud.seed.textContent = this.world.seed;
     this.updateHud();
   }
@@ -1058,6 +1062,10 @@ export class Game {
   }
 
   updateAmbientPopulation(deltaSeconds) {
+    if (this.network) {
+      return;
+    }
+
     this.ambientSpawnTimer -= deltaSeconds;
 
     if (this.ambientSpawnTimer > 0) {
@@ -1130,6 +1138,10 @@ export class Game {
   }
 
   spawnNightBatch(count) {
+    if (this.network) {
+      return 0;
+    }
+
     const player = this.playerTransform;
     let spawned = 0;
 
@@ -3024,12 +3036,19 @@ export class Game {
       };
     });
 
+    const donkey = this.serializeDonkey();
+    if (donkey) {
+      donkey.mounted = this.donkeyMounted === true;
+    }
+
     this.network.sendState(
       transform.x,
       transform.y,
       motion.facing,
       workers,
       this.swimRemaining,
+      this.playerVerticalOffset,
+      donkey,
     );
   }
 
@@ -3071,25 +3090,56 @@ export class Game {
           id: player.id,
           x: player.x,
           y: player.y,
+          z: player.verticalOffset ?? 0,
           targetX: player.x,
           targetY: player.y,
+          targetZ: player.verticalOffset ?? 0,
           facing: player.facing ?? 1,
           targetFacing: player.facing ?? 1,
           health: player.health ?? 100,
           name: player.name ?? "Jugador",
           color: player.color ?? "#e0a458",
           skinId: player.skinId ?? "explorer",
+          donkey: null,
           moving: false,
           walkTime: 0,
         };
 
         remote.targetX = player.x;
         remote.targetY = player.y;
+        remote.targetZ = player.verticalOffset ?? 0;
         remote.targetFacing = player.facing ?? 1;
         remote.health = player.health ?? remote.health;
         remote.name = player.name ?? remote.name;
         remote.color = player.color ?? remote.color;
         remote.skinId = player.skinId ?? remote.skinId ?? "explorer";
+
+        const donkey =
+          player.donkey &&
+          Number.isFinite(player.donkey.x) &&
+          Number.isFinite(player.donkey.y)
+            ? player.donkey
+            : null;
+
+        if (donkey) {
+          if (!remote.donkey) {
+            remote.donkey = {
+              x: donkey.x,
+              y: donkey.y,
+              targetX: donkey.x,
+              targetY: donkey.y,
+              skinId: donkey.skinId,
+              mounted: donkey.mounted === true,
+            };
+          }
+          remote.donkey.targetX = donkey.x;
+          remote.donkey.targetY = donkey.y;
+          remote.donkey.skinId = donkey.skinId ?? remote.donkey.skinId;
+          remote.donkey.mounted = donkey.mounted === true;
+        } else {
+          remote.donkey = null;
+        }
+
         this.remotePlayers.set(player.id, remote);
       }
 
@@ -3107,6 +3157,168 @@ export class Game {
         this.remotePlayers.delete(id);
       }
     }
+  }
+
+  handleNetworkAmbient(message) {
+    const entities = Array.isArray(message?.entities) ? message.entities : [];
+    const seen = new Set();
+    const clock = Number.isFinite(message?.time)
+      ? message.time
+      : this.networkAmbientTime;
+    this.networkAmbientTime = clock;
+    const speciesList = Object.values(AMBIENT_SPECIES);
+
+    for (const entry of entities) {
+      const networkId = Number(entry?.id);
+      if (
+        !Number.isInteger(networkId) ||
+        !speciesList.includes(entry?.species) ||
+        !Number.isFinite(entry.x) ||
+        !Number.isFinite(entry.y)
+      ) {
+        continue;
+      }
+
+      seen.add(networkId);
+      let localId = this.networkAmbient.get(networkId);
+
+      if (!localId || !this.ecs.hasComponent(localId, Component.AMBIENT)) {
+        const ambient = {
+          species: entry.species,
+          phase: Number.isFinite(entry.phase) ? entry.phase : 0,
+          health: Number.isFinite(entry.health) ? entry.health : 1,
+          network: true,
+          networkId,
+          clock,
+          targetX: entry.x,
+          targetY: entry.y,
+          targetZ: Number.isFinite(entry.z) ? entry.z : 0,
+          targetFacing: entry.facing ?? 1,
+          targetMoving: entry.moving === true,
+          targetWalkTime: Number.isFinite(entry.walkTime) ? entry.walkTime : 0,
+        };
+        localId = createAmbientEntity(this.ecs, {
+          species: entry.species,
+          x: entry.x,
+          y: entry.y,
+          ambient,
+        });
+        this.networkAmbient.set(networkId, localId);
+
+        const transform = this.ecs.getComponent(localId, Component.TRANSFORM);
+        const motion = this.ecs.getComponent(localId, Component.MOTION);
+        if (transform) {
+          transform.z = ambient.targetZ;
+        }
+        if (motion) {
+          motion.facing = ambient.targetFacing;
+          motion.moving = ambient.targetMoving;
+          motion.walkTime = ambient.targetWalkTime;
+        }
+        continue;
+      }
+
+      const ambient = this.ecs.getComponent(localId, Component.AMBIENT);
+      if (!ambient) {
+        continue;
+      }
+      ambient.phase = Number.isFinite(entry.phase) ? entry.phase : ambient.phase;
+      ambient.health = Number.isFinite(entry.health)
+        ? entry.health
+        : ambient.health;
+      ambient.clock = clock;
+      ambient.targetX = entry.x;
+      ambient.targetY = entry.y;
+      ambient.targetZ = Number.isFinite(entry.z) ? entry.z : 0;
+      ambient.targetFacing = entry.facing ?? 1;
+      ambient.targetMoving = entry.moving === true;
+      ambient.targetWalkTime = Number.isFinite(entry.walkTime)
+        ? entry.walkTime
+        : ambient.targetWalkTime;
+    }
+
+    for (const [networkId, localId] of [...this.networkAmbient]) {
+      if (seen.has(networkId)) {
+        continue;
+      }
+      this.ecs.destroyEntity(localId);
+      this.networkAmbient.delete(networkId);
+    }
+  }
+
+  updateNetworkAmbient(deltaSeconds) {
+    const factor = 1 - Math.exp(-18 * deltaSeconds);
+
+    for (const localId of this.networkAmbient.values()) {
+      if (!this.ecs.hasComponent(localId, Component.AMBIENT)) {
+        continue;
+      }
+      const transform = this.ecs.getComponent(localId, Component.TRANSFORM);
+      const motion = this.ecs.getComponent(localId, Component.MOTION);
+      const ambient = this.ecs.getComponent(localId, Component.AMBIENT);
+
+      if (!transform || !motion || !ambient) {
+        continue;
+      }
+
+      transform.x += ((ambient.targetX ?? transform.x) - transform.x) * factor;
+      transform.y += ((ambient.targetY ?? transform.y) - transform.y) * factor;
+      transform.z += ((ambient.targetZ ?? 0) - transform.z) * factor;
+      motion.facing = ambient.targetFacing ?? motion.facing;
+      motion.moving = ambient.targetMoving === true;
+      motion.walkTime = ambient.targetWalkTime ?? motion.walkTime;
+    }
+  }
+
+  handleNetworkAmbientHit(message) {
+    const localId = this.networkAmbient.get(Number(message?.id));
+    if (!localId) {
+      return;
+    }
+    const ambient = this.ecs.getComponent(localId, Component.AMBIENT);
+    const transform = this.ecs.getComponent(localId, Component.TRANSFORM);
+    if (!ambient || !transform) {
+      return;
+    }
+    const health = Number(message.health);
+    if (Number.isFinite(health)) {
+      const damage = Math.max(0, (ambient.health ?? health) - health);
+      ambient.health = health;
+      const selfId = this.networkSelfId ?? this.network?.selfId;
+      if (damage > 0 && message.attackerId !== selfId) {
+        this.effects.addText(`-${damage}`, transform.x, transform.y, {
+          color: "#f0b5ae",
+        });
+      }
+    }
+  }
+
+  handleNetworkAmbientKilled(message) {
+    const networkId = Number(message?.id);
+    const localId = this.networkAmbient.get(networkId);
+    if (localId) {
+      this.ecs.destroyEntity(localId);
+      this.networkAmbient.delete(networkId);
+    }
+
+    const selfId = this.networkSelfId ?? this.network?.selfId;
+    if (message?.killerId !== selfId) {
+      return;
+    }
+
+    const species = String(message.species ?? "");
+    const x = Number(message.x);
+    const y = Number(message.y);
+    if (
+      !Object.values(AMBIENT_SPECIES).includes(species) ||
+      !Number.isFinite(x) ||
+      !Number.isFinite(y)
+    ) {
+      return;
+    }
+
+    this.awardAmbientDrop(species, x, y);
+    this.notify(`${this.ambientLabel(species)} derrotado.`);
   }
 
   handleNetworkHit(message) {
@@ -3350,18 +3562,26 @@ export class Game {
       return;
     }
 
+    this.attackCooldown = cooldown;
+    const range = weapon === "bow" ? PLAYER_BOW_RANGE : weapon === "sword" ? 2.6 : 2.4;
+    const target = this.findAttackTargetInRange(range);
+
     if (this.network) {
-      this.attackCooldown = cooldown;
       if (weapon === "bow") {
         this.inventory.removeItem("arrow", 1);
+      }
+      if (target?.ambient?.network && Number.isInteger(target.ambient.networkId)) {
+        const damage = this.attackDamage(weapon);
+        this.network.sendAmbientHit(target.ambient.networkId, damage);
+        this.effects.addText(`-${damage}`, target.transform.x, target.transform.y, {
+          color: "#f0b5ae",
+        });
+        this.updateHud();
+        return;
       }
       this.network.sendAttack(weapon);
       return;
     }
-
-    this.attackCooldown = cooldown;
-    const range = weapon === "bow" ? PLAYER_BOW_RANGE : weapon === "sword" ? 2.6 : 2.4;
-    const target = this.findAttackTargetInRange(range);
 
     if (!target) {
       this.notify(
@@ -3735,13 +3955,22 @@ export class Game {
       const factor = 1 - Math.exp(-12 * deltaSeconds);
       const dx = remote.targetX - remote.x;
       const dy = remote.targetY - remote.y;
+      const dz = remote.targetZ - remote.z;
       const distance = Math.hypot(dx, dy);
       remote.x += dx * factor;
       remote.y += dy * factor;
+      remote.z += dz * factor;
       remote.facing = remote.targetFacing;
       remote.moving = distance > 0.03;
       if (remote.moving) {
         remote.walkTime += deltaSeconds;
+      }
+
+      if (remote.donkey) {
+        const ddx = remote.donkey.targetX - remote.donkey.x;
+        const ddy = remote.donkey.targetY - remote.donkey.y;
+        remote.donkey.x += ddx * factor;
+        remote.donkey.y += ddy * factor;
       }
     }
 
@@ -3945,6 +4174,7 @@ export class Game {
       time: this.gameTime,
       campfires: [...this.campfires, ...this.tipis, ...this.torches],
     });
+    this.updateNetworkAmbient(deltaSeconds);
     this.updateAmbientPopulation(deltaSeconds);
     this.updateNightCombat(deltaSeconds);
     this.updateAmbientPoison(deltaSeconds);
@@ -10769,12 +10999,36 @@ export class Game {
         this.assets.playerSprites;
       const remoteSprite =
         remoteFrames?.[remoteFrame] ?? remoteFrames?.[0] ?? null;
+      const mounted = remote.donkey?.mounted === true;
+
+      if (remote.donkey) {
+        const remoteDonkeyFrames = this.donkeySkin(remote.donkey)?.frames ?? [];
+        const remoteDonkeyFrame = remote.moving
+          ? 1 + (Math.floor(remote.walkTime * 8) % 2)
+          : 0;
+        const remoteDonkeySprite =
+          remoteDonkeyFrames[remoteDonkeyFrame] ??
+          remoteDonkeyFrames[0] ??
+          null;
+
+        if (remoteDonkeySprite) {
+          actors.push({
+            kind: "donkey",
+            x: mounted ? remote.x : remote.donkey.x,
+            y: mounted ? remote.y : remote.donkey.y,
+            z: mounted ? remote.z ?? 0 : 0,
+            sprite: remoteDonkeySprite,
+            flip: remote.facing,
+            scale: DONKEY_SPRITE_SCALE,
+          });
+        }
+      }
 
       actors.push({
         kind: "remotePlayer",
         x: remote.x,
         y: remote.y,
-        z: 0,
+        z: (remote.z ?? 0) + (mounted ? RIDER_Z_OFFSET : 0),
         sprite: remoteSprite,
         flip: remote.facing,
         scale: PLAYER_SPRITE_SCALE,
@@ -10855,7 +11109,8 @@ export class Game {
         ambient.species === AMBIENT_SPECIES.CROW ||
         ambient.species === AMBIENT_SPECIES.OWL
       ) {
-        ambientFrame = Math.floor(this.gameTime * 7 + ambient.phase) % spriteSet.length;
+        const clock = ambient.network ? ambient.clock ?? this.gameTime : this.gameTime;
+        ambientFrame = Math.floor(clock * 7 + ambient.phase) % spriteSet.length;
       } else if (
         ambient.species === AMBIENT_SPECIES.NIGHTLING ||
         ambient.species === AMBIENT_SPECIES.SPIDER

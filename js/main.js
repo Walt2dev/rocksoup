@@ -277,10 +277,12 @@ const ui = {
     btnContextAction: byId("btn-context-action"),
     contextActionLabel: byId("context-action-label"),
     contextActionIcon: byId("context-action-icon-use"),
+    btnCrossAttack: byId("btn-cross-attack"),
     btnCrossCenter: byId("btn-cross-center"),
     btnCrossWorkers: byId("btn-cross-workers"),
     btnCrossWorkersBadge: byId("cross-workers-badge"),
     btnCrossJump: byId("btn-cross-jump"),
+    btnCrossChat: byId("btn-cross-chat"),
     btnCrossQuest: byId("btn-cross-quest"),
     btnHotbarToggle: byId("btn-hotbar-toggle"),
     btnStatsClose: byId("btn-stats-close"),
@@ -793,6 +795,9 @@ function connectLan() {
     onStructure: (message) => game?.applyNetworkStructure(message),
     onHit: (message) => game?.handleNetworkHit(message),
     onRespawn: (message) => game?.handleNetworkRespawn(message),
+    onAmbient: (message) => game?.handleNetworkAmbient(message),
+    onAmbientHit: (message) => game?.handleNetworkAmbientHit(message),
+    onAmbientKilled: (message) => game?.handleNetworkAmbientKilled(message),
     onChat: (message) => social.pushChat(message),
     onLeaderboard: (message) =>
       social.setLeaderboard(message.entries, message.bestEntries),
@@ -1248,8 +1253,11 @@ window.addEventListener("keydown", (event) => {
   }
 });
 
-window.addEventListener("pagehide", () => {
+window.addEventListener("pagehide", (event) => {
   game?.save();
+  if (!event.persisted) {
+    lanClient?.close();
+  }
 });
 
 boot();

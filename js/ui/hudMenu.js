@@ -11,9 +11,11 @@ export class HudMenu {
     this.handleMenuClick = this.handleMenuClick.bind(this);
     this.handleBackdropClick = this.handleBackdropClick.bind(this);
     this.handleContextAction = this.handleContextAction.bind(this);
+    this.handleCrossAttack = () => this.game?.attack?.();
     this.handleCrossCenter = () => this.game?.recenterCamera?.();
     this.handleCrossWorkers = () => this.game?.handleIdleWorkerRequest?.();
     this.handleCrossJump = () => this.game?.jump?.();
+    this.handleCrossChat = () => this.click("btn-chat");
     this.handleCrossQuest = () => this.click("btn-quest");
     this.handleHotbarToggle = this.handleHotbarToggle.bind(this);
     this.handleStatsClose = this.handleStatsClose.bind(this);
@@ -33,9 +35,11 @@ export class HudMenu {
     this.hud.hudMenu?.addEventListener("click", this.handleBackdropClick);
     this.hud.hudMenu?.addEventListener("click", this.handleMenuClick);
     this.hud.btnContextAction?.addEventListener("click", this.handleContextAction);
+    this.hud.btnCrossAttack?.addEventListener("click", this.handleCrossAttack);
     this.hud.btnCrossCenter?.addEventListener("click", this.handleCrossCenter);
     this.hud.btnCrossWorkers?.addEventListener("click", this.handleCrossWorkers);
     this.hud.btnCrossJump?.addEventListener("click", this.handleCrossJump);
+    this.hud.btnCrossChat?.addEventListener("click", this.handleCrossChat);
     this.hud.btnCrossQuest?.addEventListener("click", this.handleCrossQuest);
     this.hud.btnHotbarToggle?.addEventListener("click", this.handleHotbarToggle);
     this.hud.btnStatsClose?.addEventListener("click", this.handleStatsClose);
@@ -55,9 +59,11 @@ export class HudMenu {
     this.hud.hudMenu?.removeEventListener("click", this.handleBackdropClick);
     this.hud.hudMenu?.removeEventListener("click", this.handleMenuClick);
     this.hud.btnContextAction?.removeEventListener("click", this.handleContextAction);
+    this.hud.btnCrossAttack?.removeEventListener("click", this.handleCrossAttack);
     this.hud.btnCrossCenter?.removeEventListener("click", this.handleCrossCenter);
     this.hud.btnCrossWorkers?.removeEventListener("click", this.handleCrossWorkers);
     this.hud.btnCrossJump?.removeEventListener("click", this.handleCrossJump);
+    this.hud.btnCrossChat?.removeEventListener("click", this.handleCrossChat);
     this.hud.btnCrossQuest?.removeEventListener("click", this.handleCrossQuest);
     this.hud.btnHotbarToggle?.removeEventListener("click", this.handleHotbarToggle);
     this.hud.btnStatsClose?.removeEventListener("click", this.handleStatsClose);
@@ -300,6 +306,9 @@ export class HudMenu {
     if (this.hud.btnCrossQuest) {
       this.hud.btnCrossQuest.hidden = this.hud.btnQuest?.hidden ?? true;
     }
+    if (this.hud.btnCrossChat) {
+      this.hud.btnCrossChat.hidden = this.hud.btnChat?.hidden ?? true;
+    }
   }
 
   refresh() {
@@ -314,6 +323,9 @@ export class HudMenu {
 
     if (this.hud.btnCrossQuest) {
       this.hud.btnCrossQuest.hidden = this.hud.btnQuest?.hidden ?? true;
+    }
+    if (this.hud.btnCrossChat) {
+      this.hud.btnCrossChat.hidden = this.hud.btnChat?.hidden ?? true;
     }
     if (this.hud.btnHotbarToggle) {
       const open = this.game.inventoryOpen === true;

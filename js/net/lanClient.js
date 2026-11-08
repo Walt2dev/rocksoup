@@ -203,6 +203,21 @@ export class LanClient {
       return;
     }
 
+    if (message.type === "ambient") {
+      this.callbacks.onAmbient?.(message);
+      return;
+    }
+
+    if (message.type === "ambientHit") {
+      this.callbacks.onAmbientHit?.(message);
+      return;
+    }
+
+    if (message.type === "ambientKilled") {
+      this.callbacks.onAmbientKilled?.(message);
+      return;
+    }
+
     if (message.type === "error") {
       this.callbacks.onError?.(message.message || "Error del servidor LAN.");
     }
@@ -218,8 +233,25 @@ export class LanClient {
     this.send({ type: "start" });
   }
 
-  sendState(x, y, facing, workers = [], swimSeconds = 0) {
-    this.send({ type: "state", x, y, facing, workers, swimSeconds });
+  sendState(
+    x,
+    y,
+    facing,
+    workers = [],
+    swimSeconds = 0,
+    verticalOffset = 0,
+    donkey = null,
+  ) {
+    this.send({
+      type: "state",
+      x,
+      y,
+      facing,
+      workers,
+      swimSeconds,
+      verticalOffset,
+      donkey,
+    });
   }
 
   sendInventory(
@@ -275,10 +307,15 @@ export class LanClient {
     this.send({ type: "attack", weapon });
   }
 
+  sendAmbientHit(id, damage) {
+    this.send({ type: "ambientHit", id, damage });
+  }
+
   close() {
     this.closing = true;
     this.connected = false;
     if (this.ws) {
+      this.send({ type: "leave" });
       this.ws.close();
       this.ws = null;
     }
