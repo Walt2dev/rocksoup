@@ -28,6 +28,7 @@ import {
   createObservatorySprites,
   createPickedBushSprites,
   createPlayerSprites,
+  createRiderSprites,
   createTipiSprites,
   createVillageSprites,
   createWorkerSprites,
@@ -190,6 +191,11 @@ export async function loadAssets(onProgress = () => {}) {
     };
   }
 
+  const riderSkins = {};
+  for (const skin of BUILTIN_SKINS) {
+    riderSkins[skin.id] = createRiderSprites(skin.archetype);
+  }
+
   const playerSprites = playerSkins.explorer.frames;
   await nextFrame();
 
@@ -246,6 +252,7 @@ export async function loadAssets(onProgress = () => {}) {
     playerSprites,
     playerSkins,
     donkeySkins,
+    riderSkins,
     terrainTextures: {},
     workerSprites,
     ambientSprites,

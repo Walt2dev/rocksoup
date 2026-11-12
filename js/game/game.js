@@ -13466,8 +13466,11 @@ export class Game {
     const transform = this.playerTransform;
     const motion = this.playerMotion;
     const frame = motion.moving ? 1 + (Math.floor(motion.walkTime * 8) % 2) : 0;
+    const riderFrames =
+      this.assets.riderSkins?.[this.characterSkin] ?? this.playerSprites;
+    const activeFrames = this.donkeyMounted ? riderFrames : this.playerSprites;
     const sprite =
-      this.playerSprites?.[frame] ?? this.playerSprites?.[0] ?? null;
+      activeFrames?.[frame] ?? activeFrames?.[0] ?? null;
     const fireFrame = Math.floor(this.gameTime * 5) % 2;
     const fireSprite =
       this.assets.campfireSprites?.[fireFrame] ?? this.assets.campfireSprites?.[0] ?? null;
@@ -13514,12 +13517,15 @@ export class Game {
       const remoteFrame = remote.moving
         ? 1 + (Math.floor(remote.walkTime * 8) % 2)
         : 0;
-      const remoteFrames =
-        this.assets.playerSkins?.[remote.skinId]?.frames ??
-        this.assets.playerSprites;
+      const mounted = remote.donkey?.mounted === true;
+      const remoteFrames = mounted
+        ? this.assets.riderSkins?.[remote.skinId] ??
+          this.assets.playerSkins?.[remote.skinId]?.frames ??
+          this.assets.playerSprites
+        : this.assets.playerSkins?.[remote.skinId]?.frames ??
+          this.assets.playerSprites;
       const remoteSprite =
         remoteFrames?.[remoteFrame] ?? remoteFrames?.[0] ?? null;
-      const mounted = remote.donkey?.mounted === true;
 
       if (remote.donkey) {
         const remoteDonkeyFrames = this.donkeySkin(remote.donkey)?.frames ?? [];

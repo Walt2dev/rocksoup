@@ -1,4 +1,5 @@
 import { MINERAL_TYPES } from "../world/minerals.js";
+import { BUILDING_TYPES, UNIT_TYPES } from "./towerDefense.js";
 
 export const PACK_LIMITS = Object.freeze({
   maxZipBytes: 25 * 1024 * 1024,
@@ -75,8 +76,54 @@ for (let type = 0; type < MINERAL_TYPES.length; type += 1) {
   }
 }
 
+export const VILLAGE_DEFS = [
+  ["village_hut", "villages/hut.png", ["villageSprites", "hut"], 1, "Casa de aldea", 128, 112],
+  ["village_shaman", "villages/shaman.png", ["villageSprites", "shaman"], 1, "Chamán de aldea", 60, 92],
+];
+
+export const FIEF_BUILDING_DEFS = Object.keys(BUILDING_TYPES).map((typeId) => [
+  `fief_${typeId}`,
+  `buildings/fief_${typeId}.png`,
+  ["fiefSprites", "buildings", typeId],
+  1,
+  BUILDING_TYPES[typeId].name,
+  100,
+  96,
+]);
+
+export const FIEF_UNIT_DEFS = Object.keys(UNIT_TYPES).map((typeId) => [
+  `fief_unit_${typeId}`,
+  `units/fief_${typeId}.png`,
+  ["fiefSprites", "units", typeId],
+  1,
+  UNIT_TYPES[typeId].name,
+  48,
+  68,
+]);
+
+export const ANIMATION_DEFS = [
+  ["animation_wolf", "animations/wolf.png", ["ambientSprites", "wolf"], 3, "Lobo", 116, 84],
+];
+
+function spriteSection(file) {
+  if (file.startsWith("buildings/")) return "buildings";
+  if (file.startsWith("villages/")) return "villages";
+  if (file.startsWith("units/")) return "units";
+  if (file.startsWith("animations/")) return "animations";
+  return "objects";
+}
+
 export const SPRITE_DEFS = Object.freeze(
-  [...BUILDING_DEFS, ...BUSH_DEFS, ...TREE_DEFS, ...MINERAL_DEFS].map(
+  [
+    ...BUILDING_DEFS,
+    ...BUSH_DEFS,
+    ...TREE_DEFS,
+    ...MINERAL_DEFS,
+    ...VILLAGE_DEFS,
+    ...FIEF_BUILDING_DEFS,
+    ...FIEF_UNIT_DEFS,
+    ...ANIMATION_DEFS,
+  ].map(
     ([id, file, path, frames, label, width, height]) =>
       Object.freeze({
         id,
@@ -86,6 +133,7 @@ export const SPRITE_DEFS = Object.freeze(
         label,
         width,
         height,
+        section: spriteSection(file),
       }),
   ),
 );
@@ -130,6 +178,22 @@ export const CHARACTER_DEFS = Object.freeze(
   ),
 );
 
+export const RIDER_DEFS = Object.freeze(
+  ["explorer", "artist", "mage", "warrior"].map((id, index) =>
+    Object.freeze({
+      id,
+      label: `Jinete ${CHARACTER_LABELS[index] ?? id}`,
+      files: Object.freeze([
+        `riders/${id}_0.png`,
+        `riders/${id}_1.png`,
+        `riders/${id}_2.png`,
+      ]),
+      width: 128,
+      height: 192,
+    }),
+  ),
+);
+
 function spriteFrameFiles(def) {
   if (def.frames === 1) {
     return [def.file];
@@ -160,7 +224,16 @@ export function getDefaultPackAssetEntries() {
       entries.push({
         path,
         label: def.frames > 1 ? `${def.label} (${index + 1}/${files.length})` : def.label,
-        category: def.file.startsWith("buildings/") ? "Edificios" : "Objetos",
+        category:
+          def.section === "buildings"
+            ? "Edificios"
+            : def.section === "villages"
+              ? "Aldeas"
+              : def.section === "units"
+                ? "Unidades"
+                : def.section === "animations"
+                  ? "Animaciones"
+                  : "Objetos",
         frame: def.frames > 1 ? index : null,
       });
     });
@@ -172,6 +245,17 @@ export function getDefaultPackAssetEntries() {
         path,
         label: `Personaje ${def.label} (${index + 1}/3)`,
         category: "Personajes",
+        frame: index,
+      });
+    });
+  }
+
+  for (const def of RIDER_DEFS) {
+    def.files.forEach((path, index) => {
+      entries.push({
+        path,
+        label: `${def.label} (${index + 1}/3)`,
+        category: "Jinetes",
         frame: index,
       });
     });
@@ -200,8 +284,12 @@ export function buildDefaultPackManifest() {
     terrain: {},
     buildings: {},
     objects: {},
+    villages: {},
+    units: {},
+    animations: {},
     characters: {},
     donkeys: {},
+    riders: {},
   };
 
   for (const def of TERRAIN_DEFS) {
@@ -209,9 +297,16 @@ export function buildDefaultPackManifest() {
   }
 
   for (const def of SPRITE_DEFS) {
-    const target = def.file.startsWith("buildings/")
-      ? manifest.buildings
-      : manifest.objects;
+    const target =
+      def.section === "buildings"
+        ? manifest.buildings
+        : def.section === "villages"
+          ? manifest.villages
+          : def.section === "units"
+            ? manifest.units
+            : def.section === "animations"
+              ? manifest.animations
+              : manifest.objects;
     target[def.id] = def.frames === 1 ? def.file : spriteFrameFiles(def);
   }
 
@@ -224,6 +319,13 @@ export function buildDefaultPackManifest() {
 
   for (const def of DONKEY_DEFS) {
     manifest.donkeys[def.id] = {
+      name: def.label,
+      frames: [...def.files],
+    };
+  }
+
+  for (const def of RIDER_DEFS) {
+    manifest.riders[def.id] = {
       name: def.label,
       frames: [...def.files],
     };
@@ -288,6 +390,30 @@ export function getPackReference(assets = null) {
         frames,
       };
     }),
+    ...VILLAGE_DEFS.map(([id, file, path, frames, label, width, height]) => ({
+      file,
+      label,
+      resolution: `${width}×${height}`,
+      frames,
+    })),
+    ...FIEF_BUILDING_DEFS.map(([id, file, path, frames, label, width, height]) => ({
+      file,
+      label,
+      resolution: `${width}×${height}`,
+      frames,
+    })),
+    ...FIEF_UNIT_DEFS.map(([id, file, path, frames, label, width, height]) => ({
+      file,
+      label,
+      resolution: `${width}×${height}`,
+      frames,
+    })),
+    ...ANIMATION_DEFS.map(([id, file, path, frames, label, width, height]) => ({
+      file: spriteFrameFiles({ file, frames }).join(" / "),
+      label,
+      resolution: `${width}×${height}`,
+      frames,
+    })),
     ...CHARACTER_DEFS.map((def) => ({
       file: def.files[0].replace("_0.png", "_0.png / _1.png / _2.png"),
       label: `Personaje ${def.label}`,
@@ -300,7 +426,14 @@ export function getPackReference(assets = null) {
       resolution: `${def.width}×${def.height}`,
       frames: 3,
     })),
+    ...RIDER_DEFS.map((def) => ({
+      file: def.files[0].replace("_0.png", "_0.png / _1.png / _2.png"),
+      label: def.label,
+      resolution: `${def.width}×${def.height}`,
+      frames: 3,
+    })),
   ];
 
   return rows;
 }
+

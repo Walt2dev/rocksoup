@@ -36,6 +36,7 @@ import { SocialUI } from "./net/social.js";
 import { HudMenu } from "./ui/hudMenu.js";
 import { loadAssets } from "./render/assets.js";
 import { DIFFICULTIES } from "./game/towerDefense.js";
+import { exportAnimationPack } from "./game/packExport.js";
 
 const byId = (id) => document.getElementById(id);
 
@@ -117,6 +118,7 @@ const ui = {
   devPackActivate: byId("dev-pack-activate"),
   devPackDelete: byId("dev-pack-delete"),
   devPackTemplate: byId("dev-pack-template"),
+  devAnimationPack: byId("dev-animation-pack"),
   devReference: byId("dev-reference"),
   devSkins: byId("dev-skins"),
   devDonkeys: byId("dev-donkeys"),
@@ -1054,6 +1056,26 @@ function downloadPackTemplate() {
   URL.revokeObjectURL(url);
 }
 
+async function downloadAnimationPack() {
+  if (!assets) {
+    ui.devStatus.textContent = "Los assets aún no están cargados.";
+    return;
+  }
+  try {
+    ui.devStatus.textContent = "Generando pack de animación...";
+    const result = await exportAnimationPack(assets);
+    const url = URL.createObjectURL(result.blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "pack_animaciones_rocksoup.zip";
+    link.click();
+    URL.revokeObjectURL(url);
+    ui.devStatus.textContent = `Pack generado: ${result.fileNames.length} archivos.`;
+  } catch (error) {
+    ui.devStatus.textContent = error.message;
+  }
+}
+
 async function refreshDevPacks() {
   const packs = await listInstalledPacks();
   const activeId = getActivePackId();
@@ -1325,6 +1347,7 @@ ui.devPackFile.addEventListener("change", () => {
 ui.devPackActivate.addEventListener("click", activateDevPack);
 ui.devPackDelete.addEventListener("click", removeDevPack);
 ui.devPackTemplate.addEventListener("click", downloadPackTemplate);
+ui.devAnimationPack.addEventListener("click", downloadAnimationPack);
 ui.devDefaultFiles.addEventListener("change", () => {
   uploadDefaultPngs(ui.devDefaultFiles.files);
 });

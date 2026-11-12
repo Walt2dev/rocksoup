@@ -9,6 +9,7 @@ import {
 import {
   CHARACTER_DEFS,
   DONKEY_DEFS,
+  RIDER_DEFS,
   PACK_LIMITS,
   SPRITE_DEFS,
   TERRAIN_DEFS,
@@ -51,7 +52,12 @@ test("el registro de packs cubre terreno, edificios, objetos y personajes", () =
   assert.equal(new Set(CHARACTER_DEFS.map((def) => def.id)).size, 4);
   assert.equal(DONKEY_DEFS.length, 3);
   assert.equal(new Set(DONKEY_DEFS.map((def) => def.id)).size, 3);
+  assert.equal(RIDER_DEFS.length, 4);
+  assert.equal(new Set(RIDER_DEFS.map((def) => def.id)).size, 4);
   assert.ok(SPRITE_DEFS.some((def) => def.id === "university"));
+  assert.ok(SPRITE_DEFS.some((def) => def.id === "fief_soldier" || def.id === "fief_unit_soldier"));
+  assert.ok(SPRITE_DEFS.some((def) => def.id === "village_hut"));
+  assert.ok(SPRITE_DEFS.some((def) => def.id === "animation_wolf"));
   assert.ok(SPRITE_DEFS.some((def) => def.id.startsWith("tree_roble_")));
   assert.ok(SPRITE_DEFS.some((def) => def.id.startsWith("mineral_")));
   assert.ok(PACK_LIMITS.maxZipBytes > 0);
@@ -65,7 +71,8 @@ test("la referencia del modo desarrollador incluye todas las entradas", () => {
     TERRAIN_DEFS.length +
       SPRITE_DEFS.length +
       CHARACTER_DEFS.length +
-      DONKEY_DEFS.length,
+      DONKEY_DEFS.length +
+      RIDER_DEFS.length,
   );
   assert.equal(new Set(rows.map((row) => row.file)).size, rows.length);
   assert.ok(rows.every((row) => row.resolution.includes("×")));
@@ -91,5 +98,21 @@ test("el pack por defecto conoce todos los PNG y genera su manifiesto", () => {
     "donkeys/castano_0.png",
     "donkeys/castano_1.png",
     "donkeys/castano_2.png",
+  ]);
+});
+
+test("el manifiesto incluye jinetes, aldeas, unidades y animaciones", () => {
+  const manifest = buildDefaultPackManifest();
+  assert.deepEqual(manifest.riders.explorer.frames, [
+    "riders/explorer_0.png",
+    "riders/explorer_1.png",
+    "riders/explorer_2.png",
+  ]);
+  assert.equal(manifest.villages.village_hut, "villages/hut.png");
+  assert.equal(manifest.units.fief_unit_soldier, "units/fief_soldier.png");
+  assert.deepEqual(manifest.animations.animation_wolf, [
+    "animations/wolf_0.png",
+    "animations/wolf_1.png",
+    "animations/wolf_2.png",
   ]);
 });

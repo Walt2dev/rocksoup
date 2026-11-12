@@ -266,6 +266,140 @@ export function createPlayerSprites(archetype = "explorer") {
   return [0, 1, 2].map((frame) => createPlayerSprite(frame, archetype));
 }
 
+function createRiderSprite(frame, archetype = "explorer") {
+  const canvas = document.createElement("canvas");
+  canvas.width = WIDTH * RESOLUTION;
+  canvas.height = HEIGHT * RESOLUTION;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(RESOLUTION, RESOLUTION);
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+
+  const centerX = WIDTH / 2;
+  const baseY = HEIGHT - 5;
+  const bob = frame === 0 ? 0 : frame === 1 ? -0.8 : 0.4;
+  const sway = frame === 1 ? -1.2 : frame === 2 ? 1.2 : 0;
+  const style =
+    PLAYER_ARCHETYPE_STYLES[archetype] ?? PLAYER_ARCHETYPE_STYLES.explorer;
+  const outline = "#261a12";
+  const skin = "#e4b189";
+  const skinShadow = "#c98e69";
+
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = 1;
+
+  roundedRectPath(ctx, centerX - 8, baseY - 13 + bob, 6, 12, 2.5);
+  ctx.fillStyle = style.pants;
+  ctx.fill();
+  ctx.stroke();
+  roundedRectPath(ctx, centerX + 2, baseY - 13 + bob, 6, 12, 2.5);
+  ctx.fillStyle = style.pants;
+  ctx.fill();
+  ctx.stroke();
+
+  roundedRectPath(ctx, centerX - 10, baseY - 4 + bob, 8, 5, 2);
+  ctx.fillStyle = style.boots;
+  ctx.fill();
+  ctx.stroke();
+  roundedRectPath(ctx, centerX + 2, baseY - 4 + bob, 8, 5, 2);
+  ctx.fillStyle = style.boots;
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(centerX - 11 + sway, baseY - 29 + bob);
+  ctx.quadraticCurveTo(
+    centerX - 14 + sway,
+    baseY - 18 + bob,
+    centerX - 9 + sway,
+    baseY - 10 + bob,
+  );
+  ctx.lineTo(centerX + 9 + sway, baseY - 10 + bob);
+  ctx.quadraticCurveTo(
+    centerX + 14 + sway,
+    baseY - 18 + bob,
+    centerX + 11 + sway,
+    baseY - 29 + bob,
+  );
+  ctx.closePath();
+  ctx.fillStyle = style.cloak;
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(centerX - 9 + sway, baseY - 27 + bob);
+  ctx.quadraticCurveTo(
+    centerX - 11 + sway,
+    baseY - 18 + bob,
+    centerX - 7 + sway,
+    baseY - 11 + bob,
+  );
+  ctx.lineTo(centerX - 3 + sway, baseY - 11 + bob);
+  ctx.lineTo(centerX - 3 + sway, baseY - 27 + bob);
+  ctx.closePath();
+  ctx.fillStyle = style.cloakLight;
+  ctx.fill();
+
+  roundedRectPath(ctx, centerX - 12 + sway, baseY - 23 + bob, 23, 3.5, 1.5);
+  ctx.fillStyle = style.scarf;
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(centerX + 1 + sway, baseY - 40 + bob, 10.5, 0, Math.PI * 2);
+  ctx.fillStyle = style.hood;
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(centerX + 2.5 + sway, baseY - 39 + bob, 7, 0, Math.PI * 2);
+  ctx.fillStyle = skin;
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(
+    centerX + 1 + sway,
+    baseY - 40 + bob,
+    7,
+    Math.PI * 0.68,
+    Math.PI * 1.55,
+  );
+  ctx.strokeStyle = skinShadow;
+  ctx.lineWidth = 1.4;
+  ctx.stroke();
+
+  ctx.fillStyle = outline;
+  ctx.beginPath();
+  ctx.arc(centerX + 5.2 + sway, baseY - 40.5 + bob, 0.9, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(centerX - 6 + sway, baseY - 25 + bob);
+  ctx.lineTo(centerX + 2 + sway, baseY - 19 + bob);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(centerX + 7 + sway, baseY - 25 + bob);
+  ctx.lineTo(centerX + 2 + sway, baseY - 19 + bob);
+  ctx.stroke();
+
+  drawPlayerArchetypeAccessory(ctx, archetype, centerX + sway, baseY, bob);
+
+  return {
+    canvas,
+    width: WIDTH,
+    height: HEIGHT,
+    anchorX: centerX,
+    anchorY: baseY,
+  };
+}
+
+export function createRiderSprites(archetype = "explorer") {
+  return [0, 1, 2].map((frame) => createRiderSprite(frame, archetype));
+}
+
 export const PLAYER_ARCHETYPES = Object.freeze(
   Object.keys(PLAYER_ARCHETYPE_STYLES),
 );

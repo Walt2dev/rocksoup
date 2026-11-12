@@ -195,6 +195,9 @@ export function applyPackToAssets(assets, pack) {
   const spriteManifest = {
     ...(manifest.buildings && typeof manifest.buildings === "object" ? manifest.buildings : {}),
     ...(manifest.objects && typeof manifest.objects === "object" ? manifest.objects : {}),
+    ...(manifest.villages && typeof manifest.villages === "object" ? manifest.villages : {}),
+    ...(manifest.units && typeof manifest.units === "object" ? manifest.units : {}),
+    ...(manifest.animations && typeof manifest.animations === "object" ? manifest.animations : {}),
   };
 
   for (const def of SPRITE_DEFS) {
@@ -221,7 +224,7 @@ export function applyPackToAssets(assets, pack) {
       continue;
     }
 
-    if (def.path.length === 1 && def.frames > 1) {
+    if (def.frames > 1) {
       writeAt(assets, def.path, frames);
     } else {
       writeAt(assets, def.path, frames[0]);
@@ -313,6 +316,42 @@ export function applyPackToAssets(assets, pack) {
       frames,
       custom: !builtin,
     };
+  }
+
+  const riderManifest =
+    manifest.riders && typeof manifest.riders === "object"
+      ? manifest.riders
+      : {};
+  const riderReference =
+    assets.riderSkins?.explorer?.[0] ??
+    assets.playerSkins?.explorer?.frames?.[0] ??
+    null;
+  assets.riderSkins = assets.riderSkins ?? {};
+
+  for (const [rawId, rawEntry] of Object.entries(riderManifest)) {
+    if (
+      !rawEntry ||
+      typeof rawEntry !== "object" ||
+      !/^[a-zA-Z0-9_-]{1,64}$/.test(rawId)
+    ) {
+      continue;
+    }
+    const frames = [];
+
+    for (const pathValue of Array.isArray(rawEntry.frames) ? rawEntry.frames : []) {
+      const path = safePath(pathValue);
+      const image = path ? pack.images.get(path) : null;
+      if (!image) {
+        break;
+      }
+      frames.push(makeExternalSprite(image, riderReference, pack.pixelArt));
+    }
+
+    if (frames.length !== 3) {
+      continue;
+    }
+
+    assets.riderSkins[rawId] = frames;
   }
 
   assets.playerSprites = assets.playerSkins.explorer.frames;
