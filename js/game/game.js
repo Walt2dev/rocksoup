@@ -845,6 +845,23 @@ export class Game {
     }
     this.hud.seed.textContent = this.world.seed;
     this.updateHud();
+
+    if (this.wolfDen && !this.wolfMission.discovered) {
+      this.wolfHintTimer = window.setTimeout(() => {
+        if (this.wolfMission.discovered || !this.wolfDen) {
+          return;
+        }
+        const distance = Math.round(
+          Math.hypot(
+            this.wolfDen.x - this.playerTransform.x,
+            this.wolfDen.y - this.playerTransform.y,
+          ),
+        );
+        this.notify(
+          `Rastros de lobos: hay una cueva a ${distance} m. Los lobos merodean cerca.`,
+        );
+      }, 7000);
+    }
   }
 
   get playerTransform() {
@@ -3071,6 +3088,10 @@ export class Game {
     this.running = false;
     window.cancelAnimationFrame(this.raf);
     this.raf = null;
+    if (this.wolfHintTimer) {
+      window.clearTimeout(this.wolfHintTimer);
+      this.wolfHintTimer = null;
+    }
     this.input.detach();
     this.hud.btnCraft?.removeEventListener("click", this.toggleCrafting);
     this.hud.btnRecipes?.removeEventListener("click", this.toggleRecipeBook);
@@ -6291,7 +6312,7 @@ export class Game {
       this.wolfDen.y - this.playerTransform.y,
     );
 
-    if (distance <= 15) {
+    if (distance <= 55) {
       this.wolfMission.discovered = true;
       this.wolfDen.discovered = true;
       this.wolfNotified = true;
@@ -12752,8 +12773,8 @@ export class Game {
     const width = this.camera.width;
     const height = this.camera.height;
     const progress = active.progress ?? 0;
-    const x = width * (0.2 + progress * 0.6);
-    const y = height * (0.17 - (active.elevation ?? 0) * 0.05);
+    const x = width * (0.18 + progress * 0.64);
+    const y = height * (0.26 - (active.elevation ?? 0) * 0.05);
 
     ctx.save();
 
@@ -12823,6 +12844,20 @@ export class Game {
       ctx.arc(x, y, radius, 0, Math.PI * 2);
       ctx.fill();
     }
+
+    ctx.fillStyle = celestial.night
+      ? "rgba(224, 234, 255, 0.72)"
+      : "rgba(255, 236, 180, 0.75)";
+    ctx.font = "10px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText(
+      celestial.night
+        ? `Luna · ${celestial.moon.phase.name}`
+        : "Sol",
+      x,
+      y + radius + 18,
+    );
 
     ctx.restore();
   }
