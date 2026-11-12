@@ -300,6 +300,7 @@ const ui = {
     btnCrossChat: byId("btn-cross-chat"),
     btnCrossQuest: byId("btn-cross-quest"),
     btnHotbarToggle: byId("btn-hotbar-toggle"),
+    btnDrop: byId("btn-drop"),
     btnStatsClose: byId("btn-stats-close"),
     playerPanel: byId("player-panel"),
     fiefMultiSelect: byId("fief-multi-select"),

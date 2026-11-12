@@ -8,7 +8,7 @@ import {
   wolfMissionState,
 } from "../js/game/wolfDen.js";
 
-function fakeWorld({ wolf = true, snow = true } = {}) {
+function fakeWorld({ wolf = true, snow = true, walkable = true } = {}) {
   return {
     biomeAt(x, y) {
       if (wolf) return BIOME.WOLF;
@@ -16,7 +16,7 @@ function fakeWorld({ wolf = true, snow = true } = {}) {
       return BIOME.GRASS;
     },
     isWalkableAt() {
-      return true;
+      return walkable;
     },
   };
 }
@@ -53,10 +53,20 @@ test("si no hay bosque de lobos se usa la nieve como respaldo", () => {
   assert.equal(site.biome, BIOME.SNOW);
 });
 
-test("sin biomas válidos no se crea cueva", () => {
-  const site = findWolfDenSite(fakeWorld({ wolf: false, snow: false }), "seed", {
+test("si no hay biomas fríos se usa la pradera como último recurso", () => {
+  const site = findWolfDenSite(fakeWorld({ wolf: false, snow: false }), "seed-grass", {
     x: 0,
     y: 0,
   });
+  assert.ok(site);
+  assert.equal(site.biome, BIOME.GRASS);
+});
+
+test("sin terreno transitable no se crea cueva", () => {
+  const site = findWolfDenSite(
+    fakeWorld({ wolf: false, snow: false, walkable: false }),
+    "seed",
+    { x: 0, y: 0 },
+  );
   assert.equal(site, null);
 });

@@ -4802,6 +4802,31 @@ body.touch-enabled .hud-bottom {
   color: var(--accent-light);
 }
 
+.drop-toggle {
+  position: absolute;
+  top: -20px;
+  right: 8px;
+  display: inline-grid;
+  place-items: center;
+  min-width: 60px;
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid rgba(217, 123, 108, 0.55);
+  border-radius: 12px;
+  background: rgba(44, 24, 22, 0.85);
+  color: #f0b5ae;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  pointer-events: auto;
+  backdrop-filter: blur(var(--glass-blur));
+}
+
+.drop-toggle:active {
+  transform: translateY(1px);
+}
+
 .hud-context-actions {
   position: absolute;
   right: max(8px, env(safe-area-inset-right));
@@ -5729,6 +5754,11 @@ select:focus-visible {
 .bird-panel.is-open,
 .wolf-panel.is-open {
   display: flex;
+}
+
+.bird-panel[hidden],
+.wolf-panel[hidden] {
+  display: none !important;
 }
 
 .bird-card,

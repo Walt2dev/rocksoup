@@ -38,7 +38,7 @@ export function findWolfDenSite(world, seed, spawn, avoid = []) {
       (point) => Number.isFinite(point?.x) && Number.isFinite(point?.y),
     ),
   ];
-  const preferred = [BIOME.WOLF, BIOME.SNOW];
+  const preferred = [BIOME.WOLF, BIOME.SNOW, BIOME.GRASS, BIOME.FOREST];
   const seedOffset = String(seed ?? "").length % 7;
 
   for (let biomeIndex = 0; biomeIndex < preferred.length; biomeIndex += 1) {
@@ -48,8 +48,9 @@ export function findWolfDenSite(world, seed, spawn, avoid = []) {
     }
 
     let found = null;
+    const maxRadius = biomeIndex < 2 ? 280 : 140;
 
-    for (let radius = 26; radius <= 170 && !found; radius += 5) {
+    for (let radius = 26; radius <= maxRadius && !found; radius += 5) {
       for (let step = 0; step < 24 && !found; step += 1) {
         const angle =
           (step / 24) * Math.PI * 2 + biomeIndex * 0.37 + seedOffset;

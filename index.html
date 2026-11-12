@@ -6,8 +6,8 @@
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#0b0f14" />
     <title>Sopa de Piedras — DracxGames</title>
-    <link rel="icon" type="image/png" href="logo_sopa_de_rocas.png" />
-    <link rel="stylesheet" href="css/style.css" />
+    <link rel="icon" type="image/png" href="logo_sopa_de_rocas.png?v=3" />
+    <link rel="stylesheet" href="css/style.css?v=3" />
   </head>
   <body>
     <svg class="svg-defs" aria-hidden="true" focusable="false">
@@ -133,7 +133,7 @@
         <div class="loading-card">
           <img
             class="game-logo"
-            src="logo_sopa_de_rocas.png"
+            src="logo_sopa_de_rocas.png?v=3"
             alt="RockSoup — Sopa de Piedras"
             width="435"
             height="309"
@@ -172,7 +172,7 @@
           <div class="menu-card">
             <img
               class="game-logo menu-logo"
-              src="logo_sopa_de_rocas.png"
+              src="logo_sopa_de_rocas.png?v=3"
               alt="RockSoup — Sopa de Piedras"
               width="435"
               height="309"
@@ -525,6 +525,9 @@
               <button id="btn-hotbar-toggle" class="hotbar-toggle" type="button" aria-expanded="false" aria-controls="inventory-panel" title="Abrir inventario">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-backpack"></use></svg>
               </button>
+              <button id="btn-drop" class="drop-toggle" type="button" title="Soltar el objeto seleccionado" aria-label="Soltar objeto seleccionado">
+                Soltar
+              </button>
             </div>
 
             <div class="hud-context-actions" aria-label="Acciones de combate y unidad">
@@ -741,7 +744,7 @@
           </div>
         </aside>
 
-        <aside id="bird-panel" class="bird-panel" aria-hidden="true" aria-label="Cuaderno de aves">
+        <aside id="bird-panel" class="bird-panel" aria-hidden="true" aria-label="Cuaderno de aves" hidden>
           <div class="bird-card">
             <header class="bird-header">
               <div>
@@ -757,7 +760,7 @@
           </div>
         </aside>
 
-        <aside id="wolf-panel" class="wolf-panel" aria-hidden="true" aria-label="Cueva de lobos">
+        <aside id="wolf-panel" class="wolf-panel" aria-hidden="true" aria-label="Cueva de lobos" hidden>
           <div class="wolf-card">
             <header class="wolf-header">
               <div>
@@ -1055,6 +1058,7 @@
       </section>
     </div>
 
-    <script type="module" src="js/main.js"></script>
+    <script type="module" src="js/main.js?v=3"></script>
   </body>
 </html>
+

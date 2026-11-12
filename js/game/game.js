@@ -766,6 +766,7 @@ export class Game {
     this.handleRecipeBookSearch = this.handleRecipeBookSearch.bind(this);
     this.handlePlaceRequest = this.handlePlaceRequest.bind(this);
     this.handlePlaceSelected = this.handlePlaceSelected.bind(this);
+    this.handleDropButton = this.handleDropButton.bind(this);
     this.handleRotateLeft = this.handleRotateLeft.bind(this);
     this.handleRotateRight = this.handleRotateRight.bind(this);
     this.handleRecipeListClick = this.handleRecipeListClick.bind(this);
@@ -1177,6 +1178,69 @@ export class Game {
     return spawned;
   }
 
+  spawnRoamingWolves() {
+    if (this.network) {
+      return 0;
+    }
+
+    const player = this.playerTransform;
+    const biome = this.world.biomeAt(player.x, player.y);
+    const inWolfBiome = biome === BIOME.WOLF || biome === BIOME.SNOW;
+    const night = this.isNight();
+
+    let nearby = 0;
+    for (const id of this.getAmbientIds()) {
+      const ambient = this.ecs.getComponent(id, Component.AMBIENT);
+      if (ambient?.species !== AMBIENT_SPECIES.WOLF) {
+        continue;
+      }
+      const transform = this.ecs.getComponent(id, Component.TRANSFORM);
+      if (
+        transform &&
+        Math.hypot(transform.x - player.x, transform.y - player.y) <= 32
+      ) {
+        nearby += 1;
+      }
+    }
+
+    const target = inWolfBiome ? 2 : 1;
+    if (nearby >= target) {
+      return 0;
+    }
+
+    for (let attempt = 0; attempt < 32; attempt += 1) {
+      const angle = this.ambientRng.float(0, Math.PI * 2);
+      const distance = this.ambientRng.float(8, 16);
+      const x = Math.round(player.x + Math.cos(angle) * distance) + 0.5;
+      const y = Math.round(player.y + Math.sin(angle) * distance) + 0.5;
+
+      if (!this.world.isActorWalkableAt(x, y)) {
+        continue;
+      }
+
+      const ambient = buildAmbientData(
+        this.ambientRng,
+        AMBIENT_SPECIES.WOLF,
+        x,
+        y,
+      );
+      ambient.health = WOLF_HEALTH;
+      if (this.wolfDen) {
+        ambient.denX = this.wolfDen.x;
+        ambient.denY = this.wolfDen.y;
+      }
+      createAmbientEntity(this.ecs, {
+        species: AMBIENT_SPECIES.WOLF,
+        x,
+        y,
+        ambient,
+      });
+      return 1;
+    }
+
+    return 0;
+  }
+
   spawnAmbientBatch(count) {
     const player = this.playerTransform;
     let spawned = 0;
@@ -1257,6 +1321,7 @@ export class Game {
     const player = this.playerTransform;
     const night = this.isNight();
     this.spawnWolvesNearDen();
+    this.spawnRoamingWolves();
 
     for (const id of this.getAmbientIds()) {
       if (id === this.donkeyId || id === this.companionId) {
@@ -2890,6 +2955,7 @@ export class Game {
     this.hud.craftSearch?.addEventListener("input", this.handleCraftSearch);
     this.hud.btnPlaceFire?.addEventListener("click", this.handlePlaceRequest);
     this.hud.btnPlaceSelected?.addEventListener("click", this.handlePlaceSelected);
+    this.hud.btnDrop?.addEventListener("click", this.handleDropButton);
     this.hud.btnCoffee?.addEventListener("click", this.drinkCoffee);
     this.hud.recipeList?.addEventListener("click", this.handleRecipeListClick);
     this.hud.inventory?.addEventListener("click", this.handleInventoryClick);
@@ -3017,6 +3083,7 @@ export class Game {
     this.hud.craftSearch?.removeEventListener("input", this.handleCraftSearch);
     this.hud.btnPlaceFire?.removeEventListener("click", this.handlePlaceRequest);
     this.hud.btnPlaceSelected?.removeEventListener("click", this.handlePlaceSelected);
+    this.hud.btnDrop?.removeEventListener("click", this.handleDropButton);
     this.hud.btnCoffee?.removeEventListener("click", this.drinkCoffee);
     this.hud.recipeList?.removeEventListener("click", this.handleRecipeListClick);
     this.hud.inventory?.removeEventListener("click", this.handleInventoryClick);
@@ -6139,6 +6206,9 @@ export class Game {
     this.closeVillage();
     this.closeWolfDen();
     this.birdPanelOpen = true;
+    if (this.hud.birdPanel) {
+      this.hud.birdPanel.hidden = false;
+    }
     this.hud.birdPanel?.classList.add("is-open");
     this.hud.birdPanel?.setAttribute("aria-hidden", "false");
     this.hud.btnBirds?.setAttribute("aria-expanded", "true");
@@ -6147,6 +6217,9 @@ export class Game {
 
   closeBirdPanel() {
     this.birdPanelOpen = false;
+    if (this.hud.birdPanel) {
+      this.hud.birdPanel.hidden = true;
+    }
     this.hud.birdPanel?.classList.remove("is-open");
     this.hud.birdPanel?.setAttribute("aria-hidden", "true");
     this.hud.btnBirds?.setAttribute("aria-expanded", "false");
@@ -6255,6 +6328,9 @@ export class Game {
     this.closeTrade();
     this.closeVillage();
     this.wolfOpen = true;
+    if (this.hud.wolfPanel) {
+      this.hud.wolfPanel.hidden = false;
+    }
     this.hud.wolfPanel?.classList.add("is-open");
     this.hud.wolfPanel?.setAttribute("aria-hidden", "false");
     this.renderWolfPanel();
@@ -6262,6 +6338,9 @@ export class Game {
 
   closeWolfDen() {
     this.wolfOpen = false;
+    if (this.hud.wolfPanel) {
+      this.hud.wolfPanel.hidden = true;
+    }
     this.hud.wolfPanel?.classList.remove("is-open");
     this.hud.wolfPanel?.setAttribute("aria-hidden", "true");
   }
@@ -12367,6 +12446,7 @@ export class Game {
       celestial: celestialStateAt(this.gameTime),
     });
 
+    this.drawCelestialSky();
     this.drawFarmPlots();
     this.drawQuestRings();
     this.drawProjectiles();
@@ -12658,6 +12738,93 @@ export class Game {
     };
 
     return sprites[itemId] ?? null;
+  }
+
+  drawCelestialSky() {
+    const celestial = celestialStateAt(this.gameTime);
+    const active = celestial.night ? celestial.moon : celestial.sun;
+
+    if (!active || !active.visible) {
+      return;
+    }
+
+    const ctx = this.ctx;
+    const width = this.camera.width;
+    const height = this.camera.height;
+    const progress = active.progress ?? 0;
+    const x = width * (0.2 + progress * 0.6);
+    const y = height * (0.17 - (active.elevation ?? 0) * 0.05);
+
+    ctx.save();
+
+    if (celestial.night) {
+      ctx.fillStyle = "rgba(220, 232, 255, 0.55)";
+      for (let index = 0; index < 28; index += 1) {
+        const sx = (Math.sin(index * 12.9898) * 43758.5453) % 1;
+        const sy = (Math.sin(index * 78.233) * 12543.791) % 1;
+        const px = Math.abs(sx) * width;
+        const py = Math.abs(sy) * height * 0.34;
+        const size = index % 5 === 0 ? 1.4 : 0.8;
+        ctx.globalAlpha = 0.35 + ((index * 7) % 5) * 0.08;
+        ctx.fillRect(px, py, size, size);
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    const radius = Math.max(16, Math.min(width, height) * 0.035);
+    const glow = ctx.createRadialGradient(x, y, 1, x, y, radius * 4.2);
+    if (celestial.night) {
+      glow.addColorStop(0, "rgba(220, 232, 255, 0.4)");
+      glow.addColorStop(0.45, "rgba(150, 180, 235, 0.16)");
+      glow.addColorStop(1, "rgba(120, 150, 210, 0)");
+    } else {
+      glow.addColorStop(0, "rgba(255, 238, 178, 0.55)");
+      glow.addColorStop(0.45, "rgba(255, 200, 110, 0.2)");
+      glow.addColorStop(1, "rgba(255, 176, 74, 0)");
+    }
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(x, y, radius * 4.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (celestial.night) {
+      const illumination = Math.max(0, Math.min(1, celestial.moon.illumination ?? 0));
+      if (illumination <= 0.02) {
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.strokeStyle = "rgba(220, 232, 255, 0.6)";
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = "#e2eaff";
+        ctx.fill();
+
+        if (illumination < 0.96) {
+          const offset =
+            (1 - illumination) *
+            radius *
+            1.95 *
+            ((celestial.moon.phaseIndex ?? 0) <= 4 ? -1 : 1);
+          ctx.beginPath();
+          ctx.arc(x + offset, y, radius * 1.02, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(14, 20, 36, 0.92)";
+          ctx.fill();
+        }
+      }
+    } else {
+      const sun = ctx.createRadialGradient(x, y, 1, x, y, radius);
+      sun.addColorStop(0, "#fff9dc");
+      sun.addColorStop(0.55, "#ffd071");
+      sun.addColorStop(1, "#f2a93c");
+      ctx.fillStyle = sun;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
   }
 
   drawNightOverlay() {
@@ -13900,6 +14067,14 @@ export class Game {
     }
 
     this.notify(`${entry.label} no se puede usar directamente.`);
+  }
+
+  handleDropButton() {
+    if (!this.getSelectedEntry()) {
+      this.notify("Selecciona primero un objeto o recurso.");
+      return;
+    }
+    this.dropSelected(false);
   }
 
   dropSelected(wholeStack = false) {
