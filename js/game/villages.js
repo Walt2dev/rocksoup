@@ -112,9 +112,10 @@ export function findVillageSites(world, seed, spawn, avoid = []) {
       y: found.y + 0.5,
       shamanName,
       huts: [
-        { x: found.x - 2.2, y: found.y + 0.4 },
-        { x: found.x + 2.1, y: found.y - 0.8 },
-        { x: found.x + 0.3, y: found.y + 2.1 },
+        { x: found.x - 3.2, y: found.y + 0.2 },
+        { x: found.x + 3.1, y: found.y - 0.4 },
+        { x: found.x + 0.2, y: found.y - 3.2 },
+        { x: found.x + 0.4, y: found.y + 3.1 },
       ],
       request: null,
     };

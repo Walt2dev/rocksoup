@@ -253,6 +253,7 @@ const ui = {
     btnVillagePrepare: byId("btn-village-prepare"),
     btnVillageDeliver: byId("btn-village-deliver"),
     btnVillageMarket: byId("btn-village-market"),
+    btnVillageSettlements: byId("btn-village-settlements"),
     btnVillageClose: byId("btn-village-close"),
     tradePanel: byId("trade-panel"),
     tradeVillages: byId("trade-villages"),

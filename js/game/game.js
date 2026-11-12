@@ -747,6 +747,7 @@ export class Game {
     this.selectedUnitId = null;
     this.fiefOpen = false;
     this.fiefSelectedVillageId = null;
+    this.fiefFocusSlot = null;
     this.fiefStatusText = "";
     this.villages = findVillageSites(
       this.world,
@@ -775,6 +776,9 @@ export class Game {
             ? Math.max(0, Math.min(maxHp, building.hp))
             : maxHp,
           maxHp,
+          production: Number.isFinite(building.production)
+            ? Math.max(0, Math.min(1, building.production))
+            : 0,
         };
       });
       this.villageProgress[village.id] = {
@@ -918,6 +922,7 @@ export class Game {
     this.startSkyAlignment = this.startSkyAlignment.bind(this);
     this.observeSelectedSky = this.observeSelectedSky.bind(this);
     this.openVillage = this.openVillage.bind(this);
+    this.openVillageSettlements = this.openVillageSettlements.bind(this);
     this.closeVillage = this.closeVillage.bind(this);
     this.prepareVillagePotion = this.prepareVillagePotion.bind(this);
     this.deliverVillageRequest = this.deliverVillageRequest.bind(this);
@@ -3215,6 +3220,7 @@ export class Game {
     this.hud.btnVillagePrepare?.addEventListener("click", this.prepareVillagePotion);
     this.hud.btnVillageDeliver?.addEventListener("click", this.deliverVillageRequest);
     this.hud.btnVillageMarket?.addEventListener("click", this.openTrade);
+    this.hud.btnVillageSettlements?.addEventListener("click", this.openVillageSettlements);
     this.hud.btnTradeClose?.addEventListener("click", this.closeTrade);
     this.hud.btnTradeCreate?.addEventListener("click", this.createTradeRoute);
     this.hud.tradeVillages?.addEventListener("click", this.handleTradeClick);
@@ -3361,6 +3367,7 @@ export class Game {
     this.hud.btnVillagePrepare?.removeEventListener("click", this.prepareVillagePotion);
     this.hud.btnVillageDeliver?.removeEventListener("click", this.deliverVillageRequest);
     this.hud.btnVillageMarket?.removeEventListener("click", this.openTrade);
+    this.hud.btnVillageSettlements?.removeEventListener("click", this.openVillageSettlements);
     this.hud.btnTradeClose?.removeEventListener("click", this.closeTrade);
     this.hud.btnTradeCreate?.removeEventListener("click", this.createTradeRoute);
     this.hud.tradeVillages?.removeEventListener("click", this.handleTradeClick);
@@ -5061,6 +5068,12 @@ export class Game {
         this.handleDonkeyInteraction(donkeyId);
         return;
       }
+    }
+
+    const house = this.pickVillageHouseAt(screenX, screenY);
+    if (house) {
+      this.openSettlement(house.village, house.slot);
+      return;
     }
 
     const shamanVillage = this.pickShamanAt(screenX, screenY);
@@ -7854,6 +7867,76 @@ export class Game {
     return null;
   }
 
+  pickVillageHouseAt(screenX, screenY) {
+    const hutSprite = this.assets.villageSprites?.hut;
+    const fiefSprites = this.assets.fiefSprites?.buildings;
+    if (!hutSprite) {
+      return null;
+    }
+
+    for (const village of this.villages) {
+      const progress = this.villageProgress[village.id];
+      const slots = buildingsForVillage(progress);
+      for (let slot = 0; slot < slots.length; slot += 1) {
+        const building = slots[slot];
+        const sprite =
+          building && building.hp > 0
+            ? fiefSprites?.[building.type]
+            : hutSprite;
+        if (!sprite) {
+          continue;
+        }
+        const position = this.fiefBuildingPosition(village, slot);
+        const base = this.camera.project(
+          position.x,
+          position.y,
+          this.world.heightAt(position.x, position.y) * 0.72,
+        );
+        const scale = this.camera.zoom * (building ? 0.92 : 1);
+        const left = base.x - sprite.anchorX * scale;
+        const top = base.y - sprite.anchorY * scale;
+        if (
+          screenX >= left &&
+          screenX <= left + sprite.width * scale &&
+          screenY >= top &&
+          screenY <= top + sprite.height * scale
+        ) {
+          return { village, slot };
+        }
+      }
+    }
+
+    return null;
+  }
+
+  openSettlement(village, slot) {
+    const progress = this.villageProgress[village.id];
+    if (!progress || progress.lost) {
+      this.notify("Esta aldea ha caído.");
+      return;
+    }
+    if (progress.delivered < 1) {
+      this.notify(
+        `${village.name}: completa la primera misión para habilitar sus casas.`,
+      );
+      return;
+    }
+    this.openFief();
+    this.fiefSelectedVillageId = village.id;
+    this.fiefFocusSlot = slot;
+    this.renderFief();
+    this.notify(`${village.name}: asentamiento ${slot + 1} seleccionado.`);
+  }
+
+  openVillageSettlements() {
+    if (!this.activeVillage) {
+      return;
+    }
+    const village = this.activeVillage;
+    this.closeVillage();
+    this.openSettlement(village, 0);
+  }
+
   pickFiefUnitAt(screenX, screenY) {
     const sprites = this.assets.fiefSprites?.units;
     if (!sprites) {
@@ -8430,6 +8513,10 @@ export class Game {
   }
 
   fiefBuildingPosition(village, slot) {
+    const hut = village?.huts?.[slot];
+    if (hut) {
+      return { x: hut.x, y: hut.y };
+    }
     const offsets = [
       [-3.2, 0.2],
       [3.1, -0.4],
@@ -8478,62 +8565,107 @@ export class Game {
     });
   }
 
-  syncVillageUnits(villageId) {
-    this.units = this.units.filter((unit) => unit.villageId !== villageId);
+  pruneVillageUnits(villageId) {
     const village = this.villages.find((entry) => entry.id === villageId);
     const progress = this.villageProgress[villageId];
-    if (!village || !progress || progress.lost || progress.delivered < 1) {
-      return;
-    }
-    const populationCap = this.populationCap();
-    const slots = buildingsForVillage(progress);
-    for (let slot = 0; slot < slots.length; slot += 1) {
-      const building = slots[slot];
-      if (!building || building.hp <= 0) {
-        continue;
-      }
-      const type = BUILDING_TYPES[building.type];
-      if (!type?.primaryUnit) {
-        continue;
-      }
-      const count = Math.min(3, building.level);
-      for (let index = 0; index < count; index += 1) {
-        if (this.units.length >= populationCap) {
-          return;
+    const validSlots = new Set();
+    if (village && progress && !progress.lost && progress.delivered >= 1) {
+      buildingsForVillage(progress).forEach((building, slot) => {
+        if (building && building.hp > 0) {
+          validSlots.add(slot);
         }
-        const unitType = index === 2 ? type.secondaryUnit : type.primaryUnit;
-        const stats = UNIT_TYPES[unitType];
-        if (!stats) {
-          continue;
-        }
-        const position = this.fiefBuildingPosition(village, slot);
-        this.unitSeq += 1;
-        this.units.push({
-          id: `unit:${this.unitSeq}`,
-          villageId,
-          bannerUnit: false,
-          type: unitType,
-          name: stats.name,
-          x: position.x + (index - 1) * 0.55,
-          y: position.y + 0.8,
-          hp: stats.hp,
-          maxHp: stats.hp,
-          damage: stats.damage,
-          range: stats.range,
-          speed: stats.speed,
-          role: stats.role,
-          color: stats.color,
-          cooldown: 0,
-          rally: null,
-          manual: false,
-        });
-      }
+      });
     }
+    this.units = this.units.filter(
+      (unit) =>
+        unit.villageId !== villageId ||
+        (validSlots.has(unit.buildingSlot) && unit.hp > 0),
+    );
+  }
+
+  syncVillageUnits(villageId) {
+    this.pruneVillageUnits(villageId);
   }
 
   syncAllVillageUnits() {
+    for (const village of this.villages) {
+      this.pruneVillageUnits(village.id);
+    }
+  }
+
+  spawnGarrisonUnit(village, slot, building, index) {
+    const type = BUILDING_TYPES[building.type];
+    if (!type?.primaryUnit) {
+      return;
+    }
+    const unitType =
+      index % 3 === 2 ? type.secondaryUnit : type.primaryUnit;
+    const stats = UNIT_TYPES[unitType];
+    if (!stats) {
+      return;
+    }
+    const position = this.fiefBuildingPosition(village, slot);
+    this.unitSeq += 1;
+    this.units.push({
+      id: `unit:${this.unitSeq}`,
+      villageId: village.id,
+      buildingSlot: slot,
+      bannerUnit: false,
+      type: unitType,
+      name: stats.name,
+      x: position.x + ((index % 3) - 1) * 0.55,
+      y: position.y + 0.8,
+      hp: stats.hp,
+      maxHp: stats.hp,
+      damage: stats.damage,
+      range: stats.range,
+      speed: stats.speed,
+      role: stats.role,
+      color: stats.color,
+      cooldown: 0,
+      rally: null,
+      manual: false,
+    });
+  }
+
+  updateFiefProduction(deltaSeconds) {
+    const populationCap = this.populationCap();
     for (const village of this.fiefVillages()) {
-      this.syncVillageUnits(village.id);
+      const progress = this.villageProgress[village.id];
+      if (!progress || progress.lost) {
+        continue;
+      }
+      const slots = buildingsForVillage(progress);
+      for (let slot = 0; slot < slots.length; slot += 1) {
+        const building = slots[slot];
+        if (!building || building.hp <= 0) {
+          continue;
+        }
+        const type = BUILDING_TYPES[building.type];
+        if (!type?.primaryUnit) {
+          continue;
+        }
+        const current = this.units.filter(
+          (unit) =>
+            unit.villageId === village.id &&
+            unit.buildingSlot === slot &&
+            unit.hp > 0,
+        ).length;
+        const target = unitCapForBuilding(building.level);
+        if (current >= target || this.populationUsed() >= populationCap) {
+          building.production = Math.min(1, building.production ?? 1);
+          continue;
+        }
+        const interval = Math.max(8, 22 - building.level * 3);
+        building.production = Math.min(
+          1,
+          (building.production ?? 0) + Math.max(0, deltaSeconds) / interval,
+        );
+        if (building.production >= 1) {
+          this.spawnGarrisonUnit(village, slot, building, current);
+          building.production = 0;
+        }
+      }
     }
   }
 
@@ -8563,7 +8695,13 @@ export class Game {
       return false;
     }
     this.inventory.spend(costs);
-    slots[slot] = { type: typeId, level: 1, hp: type.hp, maxHp: type.hp };
+    slots[slot] = {
+      type: typeId,
+      level: 1,
+      hp: type.hp,
+      maxHp: type.hp,
+      production: 0,
+    };
     progress.buildings = slots;
     this.syncVillageUnits(villageId);
     this.save();
@@ -8758,12 +8896,19 @@ export class Game {
 
   openFief() {
     this.fiefOpen = true;
-    const allied = this.fiefVillages();
+    this.fiefFocusSlot = null;
+    const unlocked = this.fiefVillages();
+    const seen = this.villages.filter(
+      (village) =>
+        this.villageSeen.has(village.id) ||
+        this.villageProgress[village.id]?.delivered > 0,
+    );
     this.fiefSelectedVillageId =
-      this.fiefSelectedVillageId && allied.some((village) => village.id === this.fiefSelectedVillageId)
+      this.fiefSelectedVillageId &&
+      seen.some((village) => village.id === this.fiefSelectedVillageId)
         ? this.fiefSelectedVillageId
-        : allied[0]?.id ?? null;
-    this.fiefStatusText = allied.length
+        : unlocked[0]?.id ?? seen[0]?.id ?? null;
+    this.fiefStatusText = unlocked.length
       ? ""
       : "Aún no tienes aldeas desbloqueadas. Completa la primera misión de una aldea.";
     this.hud.fiefPanel?.classList.add("is-open");
@@ -8781,7 +8926,11 @@ export class Game {
     if (!this.fiefOpen) {
       return;
     }
-    const allied = this.fiefVillages();
+    const seen = this.villages.filter(
+      (village) =>
+        this.villageSeen.has(village.id) ||
+        this.villageProgress[village.id]?.delivered > 0,
+    );
     if (this.hud.fiefModes) {
       this.hud.fiefModes.replaceChildren(
         ...Object.values(DIFFICULTIES).map((mode) => {
@@ -8800,14 +8949,21 @@ export class Game {
     }
     if (this.hud.fiefVillages) {
       this.hud.fiefVillages.replaceChildren(
-        ...allied.map((village) => {
+        ...seen.map((village) => {
           const button = document.createElement("button");
           const progress = this.villageProgress[village.id];
+          const status = progress?.lost
+            ? "caída"
+            : progress?.allied
+              ? "aliada"
+              : progress?.delivered >= 1
+                ? "desbloqueada"
+                : `${progress?.delivered ?? 0}/1 misión`;
           button.type = "button";
           button.className = "fief-village";
           button.classList.toggle("is-active", village.id === this.fiefSelectedVillageId);
           button.dataset.fiefVillage = village.id;
-          button.textContent = `${village.name} · ${Math.round(progress.stability)}%`;
+          button.textContent = `${village.name} · ${status}`;
           return button;
         }),
       );
@@ -8822,6 +8978,17 @@ export class Game {
       return;
     }
     const progress = this.villageProgress[village.id];
+    if (!progress || progress.lost || progress.delivered < 1) {
+      const cards = this.createFiefGlobalCards();
+      const note = document.createElement("p");
+      note.className = "lan-note";
+      note.textContent = progress?.lost
+        ? "Esta aldea ha caído y ya no puede producir unidades."
+        : `${village.name}: completa la primera misión para habilitar sus 4 casas como asentamientos.`;
+      cards.push(note);
+      this.hud.fiefContent.replaceChildren(...cards);
+      return;
+    }
     const slots = buildingsForVillage(progress);
     const cards = this.createFiefGlobalCards();
 
@@ -8829,6 +8996,7 @@ export class Game {
       const building = slots[slot];
       const card = document.createElement("article");
       card.className = "fief-building";
+      card.classList.toggle("is-focused", this.fiefFocusSlot === slot);
       if (!building) {
         const title = document.createElement("strong");
         const housing = housingCountForVillage(progress);
@@ -8844,9 +9012,15 @@ export class Game {
           button.dataset.fiefVillage = village.id;
           const costs = buildingCost(type.id, 1);
           button.textContent = `${type.name} (${Object.entries(costs).map(([key, amount]) => `${RESOURCE_INFO[key]?.label ?? key} ${amount}`).join(", ")})`;
-          button.disabled =
+          button.classList.toggle(
+            "is-unaffordable",
+            !this.inventory.has(costs),
+          );
+          button.classList.toggle(
+            "is-limit",
             type.id === "vivienda" &&
-            housing >= MAX_HOUSING_PER_VILLAGE;
+              housing >= MAX_HOUSING_PER_VILLAGE,
+          );
           actions.append(button);
         }
         card.append(actions);
@@ -8856,7 +9030,35 @@ export class Game {
         title.textContent = `${type.name} · Nivel ${building.level}`;
         const info = document.createElement("span");
         info.textContent = `Vida ${Math.round(building.hp)}/${building.maxHp}`;
-        card.append(title, info);
+        const current = this.units.filter(
+          (unit) =>
+            unit.villageId === village.id &&
+            unit.buildingSlot === slot &&
+            unit.hp > 0,
+        ).length;
+        const target = unitCapForBuilding(building.level);
+        const populationFull =
+          this.populationUsed() >= this.populationCap();
+        const production = Math.min(1, building.production ?? 0);
+        const productionEl = document.createElement("div");
+        productionEl.className = "fief-production";
+        productionEl.dataset.fiefProductionVillage = village.id;
+        productionEl.dataset.fiefProductionSlot = String(slot);
+        const fill = document.createElement("span");
+        fill.style.width = `${Math.round(production * 100)}%`;
+        productionEl.append(fill);
+        const productionText = document.createElement("small");
+        productionText.dataset.fiefProductionTextVillage = village.id;
+        productionText.dataset.fiefProductionTextSlot = String(slot);
+        productionText.textContent = type.primaryUnit
+          ? populationFull && current < target
+            ? `Población llena · Guarnición ${current}/${target}`
+            : current >= target
+              ? `Guarnición completa: ${current}/${target}`
+              : `Generando ${UNIT_TYPES[type.primaryUnit]?.name ?? "unidad"} · ${Math.round(production * 100)}% · Guarnición ${current}/${target}`
+          : "Aumenta la población máxima";
+        card.append(title, info, productionEl, productionText);
+        card.classList.toggle("is-focused", this.fiefFocusSlot === slot);
         const actions = document.createElement("div");
         actions.className = "fief-building-actions";
         if (building.level < 3) {
@@ -8896,6 +9098,51 @@ export class Game {
     }
   }
 
+  refreshFiefProgress() {
+    if (!this.fiefOpen || !this.hud.fiefContent) {
+      return;
+    }
+    for (const bar of this.hud.fiefContent.querySelectorAll(
+      "[data-fief-production-village]",
+    )) {
+      const villageId = bar.dataset.fiefProductionVillage;
+      const slot = Number(bar.dataset.fiefProductionSlot);
+      const progress = this.villageProgress[villageId];
+      const building = buildingsForVillage(progress)[slot];
+      if (!building) {
+        continue;
+      }
+      const production = Math.min(1, building.production ?? 0);
+      const fill = bar.firstElementChild;
+      if (fill) {
+        fill.style.width = `${Math.round(production * 100)}%`;
+      }
+      const text = this.hud.fiefContent.querySelector(
+        `[data-fief-production-text-village="${villageId}"][data-fief-production-text-slot="${slot}"]`,
+      );
+      if (!text) {
+        continue;
+      }
+      const type = BUILDING_TYPES[building.type];
+      const current = this.units.filter(
+        (unit) =>
+          unit.villageId === villageId &&
+          unit.buildingSlot === slot &&
+          unit.hp > 0,
+      ).length;
+      const target = unitCapForBuilding(building.level);
+      const populationFull =
+        this.populationUsed() >= this.populationCap();
+      text.textContent = type?.primaryUnit
+        ? populationFull && current < target
+          ? `Población llena · Guarnición ${current}/${target}`
+          : current >= target
+            ? `Guarnición completa: ${current}/${target}`
+            : `Generando ${UNIT_TYPES[type.primaryUnit]?.name ?? "unidad"} · ${Math.round(production * 100)}% · Guarnición ${current}/${target}`
+        : "Aumenta la población máxima";
+    }
+  }
+
   createFiefGlobalCards() {
     const cards = [];
 
@@ -8920,7 +9167,7 @@ export class Game {
         .map(([key, amount]) => `${RESOURCE_INFO[key]?.label ?? key} ${amount}`)
         .join(", ");
       button.textContent = `${recruit.category === "attack" ? "Ataque" : "Defensa"}: ${stats.name} (${cost})`;
-      button.disabled = !this.inventory.has(recruit.cost);
+      button.classList.toggle("is-unaffordable", !this.inventory.has(recruit.cost));
       bannerActions.append(button);
     }
     const regroupBanner = document.createElement("button");
@@ -8983,6 +9230,7 @@ export class Game {
     if (villageButton && !event.target.closest("button[data-fief-build]")) {
       if (!event.target.dataset.fiefBuild && !event.target.dataset.fiefUpgrade && !event.target.dataset.fiefRepair && !event.target.dataset.fiefRegroup) {
         this.fiefSelectedVillageId = villageButton.dataset.fiefVillage;
+        this.fiefFocusSlot = null;
         this.renderFief();
         return;
       }
@@ -9038,6 +9286,7 @@ export class Game {
     }
 
     this.updateFiefUnits(deltaSeconds);
+    this.updateFiefProduction(deltaSeconds);
 
     if (this.waveActive) {
       const night = this.isNight();
@@ -13632,19 +13881,10 @@ export class Game {
 
     const hutSprite = this.assets.villageSprites?.hut;
     const shamanSprite = this.assets.villageSprites?.shaman;
-    if (hutSprite && shamanSprite) {
+    const fiefSprites = this.assets.fiefSprites;
+
+    if (shamanSprite) {
       for (const village of this.villages) {
-        for (const hut of village.huts) {
-          actors.push({
-            kind: "structure",
-            x: hut.x,
-            y: hut.y,
-            z: 0,
-            sprite: hutSprite,
-            flip: 1,
-            scale: 1,
-          });
-        }
         actors.push({
           kind: "structure",
           x: village.x,
@@ -13657,18 +13897,19 @@ export class Game {
       }
     }
 
-    const fiefSprites = this.assets.fiefSprites;
-    if (fiefSprites) {
+    if (hutSprite) {
       for (const village of this.villages) {
         const progress = this.villageProgress[village.id];
-        if (!progress?.allied) {
-          continue;
-        }
+        const unlocked =
+          progress && !progress.lost && progress.delivered >= 1;
         const slots = buildingsForVillage(progress);
-        for (let slot = 0; slot < slots.length; slot += 1) {
-          const building = slots[slot];
-          const sprite = building ? fiefSprites.buildings[building.type] : null;
-          if (!building || !sprite || building.hp <= 0) {
+        for (let slot = 0; slot < BUILDING_SLOTS; slot += 1) {
+          const building = unlocked ? slots[slot] : null;
+          const sprite =
+            building && building.hp > 0
+              ? fiefSprites?.buildings?.[building.type]
+              : hutSprite;
+          if (!sprite) {
             continue;
           }
           const position = this.fiefBuildingPosition(village, slot);
@@ -13679,11 +13920,13 @@ export class Game {
             z: 0,
             sprite,
             flip: 1,
-            scale: 0.92,
+            scale: building ? 0.92 : 1,
           });
         }
       }
+    }
 
+    if (fiefSprites) {
       for (const unit of this.units) {
         if (unit.hp <= 0) {
           continue;
@@ -14776,6 +15019,7 @@ export class Game {
     this.updateWorkerPanel();
     this.updateQuestButton();
     this.updateCompassHud();
+    this.refreshFiefProgress();
     const dropEntry = this.getSelectedEntry();
     if (this.hud.btnDrop) {
       const canDrop = Boolean(dropEntry) && dropEntry.kind !== "tool";

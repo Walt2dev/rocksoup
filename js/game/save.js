@@ -670,6 +670,9 @@ function sanitizeVillageProgress(value) {
           hp: Number.isFinite(building.hp)
             ? Math.max(0, Math.min(maxHp, building.hp))
             : maxHp,
+          production: Number.isFinite(building.production)
+            ? Math.max(0, Math.min(1, building.production))
+            : 0,
         };
       }),
     };
