@@ -1395,6 +1395,101 @@ export function createPerdizSprites() {
   return [0, 1, 2].map((frame) => createPerdizSprite(frame));
 }
 
+const CHICKEN_WIDTH = 34;
+const CHICKEN_HEIGHT = 30;
+
+function createChickenSprite(frame) {
+  const canvas = document.createElement("canvas");
+  canvas.width = CHICKEN_WIDTH * RESOLUTION;
+  canvas.height = CHICKEN_HEIGHT * RESOLUTION;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(RESOLUTION, RESOLUTION);
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+
+  const cx = CHICKEN_WIDTH / 2;
+  const baseY = CHICKEN_HEIGHT - 5;
+  const step = frame === 0 ? 0 : frame === 1 ? 1.1 : -1.1;
+  const outline = "#3a3027";
+  const body = "#f2efe6";
+  const bodyShade = "#d8d2c4";
+  const comb = "#d45b4f";
+  const beak = "#e0a458";
+
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = 0.8;
+
+  ctx.beginPath();
+  ctx.moveTo(cx - 2 + step, baseY - 8);
+  ctx.lineTo(cx - 4 + step, baseY);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx + 4 - step, baseY - 8);
+  ctx.lineTo(cx + 6 - step, baseY);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.ellipse(cx, baseY - 13, 10, 7.5, -0.05, 0, Math.PI * 2);
+  ctx.fillStyle = body;
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.ellipse(cx - 1, baseY - 12, 7, 4.4, 0.05, 0, Math.PI * 2);
+  ctx.fillStyle = bodyShade;
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(cx + 8, baseY - 20, 4.6, 0, Math.PI * 2);
+  ctx.fillStyle = body;
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(cx + 7, baseY - 24);
+  ctx.quadraticCurveTo(cx + 7, baseY - 28, cx + 9, baseY - 26);
+  ctx.quadraticCurveTo(cx + 10, baseY - 28, cx + 11, baseY - 25);
+  ctx.quadraticCurveTo(cx + 12, baseY - 27, cx + 12, baseY - 23);
+  ctx.closePath();
+  ctx.fillStyle = comb;
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(cx + 12, baseY - 20);
+  ctx.lineTo(cx + 17, baseY - 19);
+  ctx.lineTo(cx + 12, baseY - 17.5);
+  ctx.closePath();
+  ctx.fillStyle = beak;
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(cx + 8, baseY - 24);
+  ctx.lineTo(cx + 9, baseY - 27);
+  ctx.lineTo(cx + 10.5, baseY - 24);
+  ctx.closePath();
+  ctx.fillStyle = comb;
+  ctx.fill();
+
+  ctx.fillStyle = outline;
+  ctx.beginPath();
+  ctx.arc(cx + 9.5, baseY - 21, 0.75, 0, Math.PI * 2);
+  ctx.fill();
+
+  return {
+    canvas,
+    width: CHICKEN_WIDTH,
+    height: CHICKEN_HEIGHT,
+    anchorX: cx,
+    anchorY: baseY,
+  };
+}
+
+export function createChickenSprites() {
+  return [0, 1, 2].map((frame) => createChickenSprite(frame));
+}
+
 const WOLF_DEN_WIDTH = 108;
 const WOLF_DEN_HEIGHT = 88;
 
@@ -1570,6 +1665,7 @@ export function createAmbientSprites() {
     donkey: createDonkeySprites(builtinDonkeySkin("gris")),
     perdiz: createPerdizSprites(),
     wolf: createWolfSprites(),
+    chicken: createChickenSprites(),
   };
 }
 

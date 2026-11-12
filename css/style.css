@@ -4690,17 +4690,37 @@ body.touch-enabled .hud-bottom {
 }
 
 .cycle-top {
-  top: 72px;
-  right: max(14px, env(safe-area-inset-right));
-  left: auto;
+  top: 14px;
+  right: auto;
+  left: 50%;
   z-index: 3;
-  transform: none;
+  transform: translateX(-50%);
 }
 
 .cycle-top .cycle-stat {
   background: var(--glass-bg);
   border-color: var(--glass-border);
   backdrop-filter: blur(var(--glass-blur));
+}
+
+.cycle-stat {
+  cursor: pointer;
+  user-select: none;
+}
+
+.cycle-extra {
+  display: none;
+  align-items: center;
+  gap: 6px;
+}
+
+.cycle-stat.is-expanded .cycle-extra {
+  display: inline-flex;
+}
+
+.cycle-stat.is-expanded {
+  border-color: rgba(143, 209, 232, 0.5);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34);
 }
 
 .hud-bottom {
@@ -4876,6 +4896,7 @@ body.touch-enabled .hud-bottom {
 }
 
 .cross-top,
+.cross-top-right,
 .cross-right,
 .cross-bottom,
 .cross-bottom-left,
@@ -4889,6 +4910,11 @@ body.touch-enabled .hud-bottom {
   top: 0;
   left: 61px;
   z-index: 2;
+}
+
+.cross-top-right {
+  top: 0;
+  right: 0;
 }
 
 .cross-right {
@@ -5108,6 +5134,7 @@ body.touch-enabled .hud-bottom {
   }
 
   .cross-top,
+  .cross-top-right,
   .cross-right,
   .cross-bottom,
   .cross-bottom-left,
@@ -5175,8 +5202,11 @@ body.touch-enabled .hud-bottom {
   }
 
   .cross-top,
+  .cross-top-right,
   .cross-right,
   .cross-bottom,
+  .cross-bottom-left,
+  .cross-bottom-right,
   .cross-left {
     width: 42px;
     height: 42px;

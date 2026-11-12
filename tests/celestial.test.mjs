@@ -6,6 +6,7 @@ import {
   dayProgressAt,
   moonStateAt,
   nightProgressAt,
+  reflectionWorldPoint,
   skyColorsAt,
   sunStateAt,
 } from "../js/game/celestial.js";
@@ -79,7 +80,7 @@ test("el reflejo del sol se mueve de este a oeste", () => {
   assert.ok(dawn.x >= 0.1 && dusk.x <= 0.9);
 });
 
-test("el reflejo lunar conserva la fase y también avanza", () => {
+test("el reflejo lunar conserva la fase y tambiï¿½n avanza", () => {
   const early = celestialStateAt(DAY_LENGTH_SECONDS + 1).reflection;
   const late = celestialStateAt(DAY_NIGHT_CYCLE - 1).reflection;
 
@@ -87,4 +88,14 @@ test("el reflejo lunar conserva la fase y también avanza", () => {
   assert.equal(early.night, true);
   assert.ok(early.x < late.x);
   assert.ok(early.illumination >= 0 && early.illumination <= 1);
+});
+
+test("el ancla del reflejo se desplaza de forma continua con el jugador", () => {
+  const celestial = celestialStateAt(DAY_LENGTH_SECONDS / 2);
+  const first = reflectionWorldPoint({ x: 0, y: 0 }, celestial);
+  const second = reflectionWorldPoint({ x: 1.5, y: -2 }, celestial);
+
+  assert.ok(first && second);
+  assert.equal(second.x - first.x, 1.5);
+  assert.equal(second.y - first.y, -2);
 });

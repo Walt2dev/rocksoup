@@ -148,10 +148,10 @@ function sanitizeCompanion(value) {
   if (!value || typeof value !== "object") {
     return null;
   }
-  if (value.species !== "perdiz") {
+  if (value.species !== "perdiz" && value.species !== "wolf") {
     return null;
   }
-  return { species: "perdiz" };
+  return { species: value.species };
 }
 
 function sanitizeWolfMission(value) {

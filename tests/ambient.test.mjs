@@ -186,3 +186,9 @@ test("la perdiz es fácil de asustar y el lobo persigue", () => {
   assert.equal(wolfComponent.state, "chase");
   assert.ok(wolfTransform.x < 8);
 });
+
+test("el pollo existe y es mas fragil que el lobo", () => {
+  assert.ok(AMBIENT_SPECIES_LIST.includes(AMBIENT_SPECIES.CHICKEN));
+  assert.ok(AMBIENT_MAX_HEALTH.chicken > 0);
+  assert.ok(AMBIENT_MAX_HEALTH.chicken < AMBIENT_MAX_HEALTH.wolf);
+});

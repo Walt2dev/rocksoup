@@ -24,6 +24,7 @@ export const RESOURCE_SOURCES = Object.freeze({
   oro: "Vetas raras de oro junto a ríos y costas (requiere pico); también del comercio entre aldeas y caravanas.",
   piel: "Se obtiene al cazar zorros.",
   pielLobo: "Se obtiene al derrotar lobos del bosque de lobos.",
+  huesoPollo: "Se obtiene al derrotar pollos. Con 3 puedes domesticar un lobo.",
   telarana: "Se obtiene al derrotar arañas nocturnas.",
 });
 

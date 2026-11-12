@@ -15,6 +15,7 @@ export const AMBIENT_SPECIES = Object.freeze({
   DONKEY: "donkey",
   PERDIZ: "perdiz",
   WOLF: "wolf",
+  CHICKEN: "chicken",
 });
 
 export const AMBIENT_SPECIES_LIST = Object.freeze(Object.values(AMBIENT_SPECIES));
@@ -41,6 +42,7 @@ export const AMBIENT_MAX_HEALTH = Object.freeze({
   donkey: 120,
   perdiz: 16,
   wolf: 70,
+  chicken: 14,
 });
 
 export function isHostileSpecies(species) {
@@ -81,15 +83,17 @@ export function pickAmbientSpawn(rng, world, centerX, centerY, {
         ? AMBIENT_SPECIES.FOX
         : roll < 0.42
           ? AMBIENT_SPECIES.FROG
-          : roll < 0.54
-            ? AMBIENT_SPECIES.VULTURE
-            : roll < 0.66
-              ? AMBIENT_SPECIES.GOAT
-              : roll < 0.74
+        : roll < 0.54
+          ? AMBIENT_SPECIES.VULTURE
+          : roll < 0.62
+            ? AMBIENT_SPECIES.GOAT
+            : roll < 0.70
+              ? AMBIENT_SPECIES.CHICKEN
+              : roll < 0.78
                 ? AMBIENT_SPECIES.PERDIZ
-                : roll < 0.84
+                : roll < 0.86
                   ? AMBIENT_SPECIES.SPARROW
-                  : roll < 0.93
+                  : roll < 0.94
                     ? AMBIENT_SPECIES.CROW
                     : AMBIENT_SPECIES.OWL);
 
@@ -132,6 +136,17 @@ export function pickAmbientSpawn(rng, world, centerX, centerY, {
         biome !== BIOME.GRASS &&
         biome !== BIOME.FOREST &&
         biome !== BIOME.WOLF
+      ) {
+        continue;
+      }
+      if (!world.isWalkableAt(x, y)) {
+        continue;
+      }
+    } else if (species === AMBIENT_SPECIES.CHICKEN) {
+      if (
+        biome !== BIOME.GRASS &&
+        biome !== BIOME.FOREST &&
+        biome !== BIOME.BEACH
       ) {
         continue;
       }
@@ -221,6 +236,10 @@ export function buildAmbientData(rng, species, x, y) {
     radius = rng.float(0.8, 1.8);
     speed = rng.float(1, 1.5);
     timer = rng.float(0.9, 1.9);
+  } else if (species === AMBIENT_SPECIES.CHICKEN) {
+    radius = rng.float(0.8, 1.6);
+    speed = rng.float(0.9, 1.3);
+    timer = rng.float(1, 2.1);
   } else if (species === AMBIENT_SPECIES.WOLF) {
     radius = rng.float(2.2, 4.4);
     speed = rng.float(2.3, 2.9);
@@ -806,7 +825,10 @@ export function updateAmbientSystem(ecs, deltaSeconds, {
         isWalkable,
         time,
       );
-    } else if (ambient.species === AMBIENT_SPECIES.PERDIZ) {
+    } else if (
+      ambient.species === AMBIENT_SPECIES.PERDIZ ||
+      ambient.species === AMBIENT_SPECIES.CHICKEN
+    ) {
       updatePerdiz(
         ambient,
         transform,

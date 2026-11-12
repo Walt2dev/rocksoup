@@ -24,6 +24,7 @@ export const RESOURCE_INFO = Object.freeze({
   oro: Object.freeze({ label: "Oro", color: "#e0b84f", symbol: "O" }),
   piel: Object.freeze({ label: "Piel de zorro", color: "#c97d45", symbol: "Pz" }),
   pielLobo: Object.freeze({ label: "Piel de lobo", color: "#8b97a8", symbol: "PL" }),
+  huesoPollo: Object.freeze({ label: "Hueso de pollo", color: "#e8dfc8", symbol: "Hp" }),
   telarana: Object.freeze({ label: "Tela de ara\u00F1a", color: "#cfd6e6", symbol: "Ta" }),
 });
 

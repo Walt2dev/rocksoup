@@ -448,8 +448,7 @@
 
 
         <div class="cycle-top" id="cycle-top">
-          <div class="stat cycle-stat" id="cycle-stat">
-                <span>Ciclo</span>
+          <div class="stat cycle-stat" id="cycle-stat" role="button" tabindex="0" aria-expanded="false" title="Toca para ver el ciclo completo">
                 <div class="cycle-value">
                   <span id="hud-cycle-indicator" class="cycle-indicator" data-phase="day" aria-hidden="true">
                     <svg class="cycle-icon cycle-sun" viewBox="0 0 24 24">
@@ -461,9 +460,11 @@
                     </svg>
                   </span>
                   <strong id="hud-cycle">Día 1</strong>
-                  <span id="hud-cycle-phase" class="cycle-phase">Día 00:00</span>
-                  <span id="hud-moon" class="cycle-phase" title="Fase lunar">Luna nueva</span>
-                  <canvas id="hud-celestial" class="hud-celestial" width="30" height="30" aria-hidden="true"></canvas>
+                  <span id="hud-cycle-phase" class="cycle-phase">00:00</span>
+                  <span class="cycle-extra">
+                    <span id="hud-moon" class="cycle-phase" title="Fase lunar">Luna nueva</span>
+                    <canvas id="hud-celestial" class="hud-celestial" width="30" height="30" aria-hidden="true"></canvas>
+                  </span>
                 </div>
               </div>
         </div>
@@ -554,9 +555,13 @@
                 <span>Duendes</span>
                 <span id="cross-workers-badge" class="cross-badge" hidden>0</span>
               </button>
-              <button id="btn-cross-chat" class="cross-btn cross-bottom-right" type="button" aria-label="Chat" title="Chat" hidden>
+              <button id="btn-cross-chat" class="cross-btn cross-top-right" type="button" aria-label="Chat" title="Chat" hidden>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-chat"></use></svg>
                 <span>Chat</span>
+              </button>
+              <button id="btn-cross-waypoint" class="cross-btn cross-bottom-right" type="button" aria-label="Abrir mapa" title="Mapa / Ir al destino" hidden>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-target"></use></svg>
+                <span id="cross-waypoint-label">Mapa</span>
               </button>
               <button id="btn-cross-center" class="cross-btn cross-bottom" type="button" aria-label="Centrar cámara" title="Centrar">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-target"></use></svg>
@@ -806,6 +811,7 @@
             </div>
             <div id="map-landmarks" class="map-landmarks" aria-label="Lugares conocidos"></div>
             <div class="map-actions">
+              <button id="btn-map-walk" class="menu-button primary" type="button">Ir al destino</button>
               <button id="btn-map-center" class="menu-button" type="button">Centrar en mí</button>
               <button id="btn-map-clear" class="menu-button danger" type="button">Borrar destino</button>
             </div>

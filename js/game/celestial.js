@@ -124,9 +124,25 @@ export function reflectionAnchorAt(celestial) {
     night,
     x: 0.18 + (active.progress ?? 0) * 0.64,
     y: 0.26 - (active.elevation ?? 0) * 0.05,
+    azimuth: active.azimuth ?? 0,
     intensity: active.intensity ?? 0.6,
     phaseIndex: celestial.moon?.phaseIndex ?? 0,
     illumination: celestial.moon?.illumination ?? 0,
+  };
+}
+
+export function reflectionWorldPoint(
+  player,
+  celestial,
+  { distance = 8, yOffset = 3 } = {},
+) {
+  if (!player || !celestial?.reflection) {
+    return null;
+  }
+  const azimuth = Math.max(-1, Math.min(1, celestial.reflection.azimuth ?? 0));
+  return {
+    x: player.x + azimuth * distance,
+    y: player.y + yOffset,
   };
 }
 

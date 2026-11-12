@@ -3,7 +3,7 @@ import { Camera } from "../render/camera.js";
 import { Effects } from "../render/effects.js";
 import { TouchControls } from "../ui/touchControls.js";
 import { resolveContextAction } from "./contextAction.js";
-import { celestialStateAt } from "./celestial.js";
+import { celestialStateAt, reflectionWorldPoint } from "./celestial.js";
 import {
   compassState,
   normalizeWaypoint,
@@ -219,9 +219,12 @@ const GOAT_HEALTH = 55;
 const BIRD_HEALTH = 20;
 const PERDIZ_HEALTH = 16;
 const WOLF_HEALTH = 70;
+const CHICKEN_HEALTH = 14;
 const WOLF_DAMAGE = 12;
 const PERDIZ_CAPTURE_RANGE = 2.8;
 const BIRD_WATCH_RANGE = 10;
+const WOLF_TAME_RANGE = 3;
+const WOLF_TAME_BONES = 3;
 const NIGHT_MOB_DAMAGE = 9;
 const NIGHT_MOB_ATTACK_INTERVAL = 1.25;
 const PLAYER_ATTACK_RANGE = 2.4;
@@ -241,6 +244,7 @@ const ATTACKABLE_AMBIENT_SPECIES = new Set([
   AMBIENT_SPECIES.OWL,
   AMBIENT_SPECIES.PERDIZ,
   AMBIENT_SPECIES.WOLF,
+  AMBIENT_SPECIES.CHICKEN,
 ]);
 const HEALTH_REGEN_DELAY = 8;
 const HEALTH_REGEN_RATE = 3;
@@ -284,6 +288,7 @@ const AMBIENT_SCALES = Object.freeze({
   [AMBIENT_SPECIES.DONKEY]: DONKEY_SPRITE_SCALE,
   [AMBIENT_SPECIES.PERDIZ]: 0.78,
   [AMBIENT_SPECIES.WOLF]: 1.12,
+  [AMBIENT_SPECIES.CHICKEN]: 0.72,
 });
 
 export class Game {
@@ -452,6 +457,7 @@ export class Game {
     this.saveTimer = 0;
     this.toastTimer = null;
     this.cycleBannerTimer = null;
+    this.cycleExpanded = false;
     this.statsCollapsed = loadStatsCollapsed();
     this.cameraFollow = true;
     this.craftingOpen = false;
@@ -524,8 +530,12 @@ export class Game {
     this.birdRecords = sanitizeBirdRecords(saveState?.birdRecords);
     this.birdMissionCompleted = saveState?.birdMissionCompleted === true;
     this.companionSpecies =
-      saveState?.companion?.species === "perdiz" ? "perdiz" : null;
+      saveState?.companion?.species === "perdiz" ||
+      saveState?.companion?.species === "wolf"
+        ? saveState.companion.species
+        : null;
     this.companionId = null;
+    this.pendingTameNetworkId = null;
     this.wolfTotems = Array.isArray(saveState?.wolfTotems)
       ? saveState.wolfTotems
           .filter(
@@ -575,6 +585,7 @@ export class Game {
     this.hudMenu = null;
     this.ambientRng = createRng(`${this.world.seed}:ambient`);
     this.ambientSpawnTimer = 0;
+    this.wolfSpawnCooldown = 0;
     this.ambientSpawnSlot = 0;
     this.donkeyId = null;
     this.donkeyMounted = false;
@@ -845,9 +856,13 @@ export class Game {
     this.closeMap = this.closeMap.bind(this);
     this.handleMapPointer = this.handleMapPointer.bind(this);
     this.clearWaypoint = this.clearWaypoint.bind(this);
+    this.walkToWaypoint = this.walkToWaypoint.bind(this);
+    this.handleCrossWaypoint = this.handleCrossWaypoint.bind(this);
     this.renderMap = this.renderMap.bind(this);
     this.handleMapLandmarkClick = this.handleMapLandmarkClick.bind(this);
     this.toggleStatsCollapsed = this.toggleStatsCollapsed.bind(this);
+    this.toggleCycleInfo = this.toggleCycleInfo.bind(this);
+    this.handleCycleKey = this.handleCycleKey.bind(this);
     this.applyStatsCollapsed = this.applyStatsCollapsed.bind(this);
     this.drinkCoffee = this.drinkCoffee.bind(this);
     this.attack = this.attack.bind(this);
@@ -1122,23 +1137,53 @@ export class Game {
     );
   }
 
+  companionInfo(species = this.companionSpecies) {
+    if (species === "wolf") {
+      return {
+        species: AMBIENT_SPECIES.WOLF,
+        health: WOLF_HEALTH,
+        offsetX: -1.6,
+        offsetY: 1,
+      };
+    }
+    if (species === "perdiz") {
+      return {
+        species: AMBIENT_SPECIES.PERDIZ,
+        health: PERDIZ_HEALTH,
+        offsetX: -1.4,
+        offsetY: 0.8,
+      };
+    }
+    return null;
+  }
+
+  releaseCompanion() {
+    if (
+      this.companionId &&
+      this.ecs.hasComponent(this.companionId, Component.AMBIENT)
+    ) {
+      this.ecs.destroyEntity(this.companionId);
+    }
+    this.companionId = null;
+    this.companionSpecies = null;
+  }
+
   setupCompanion() {
-    if (this.companionSpecies !== "perdiz") {
+    const info = this.companionInfo();
+    if (!info) {
       return;
     }
     const transform = this.playerTransform;
-    const ambient = buildAmbientData(
-      this.ambientRng,
-      AMBIENT_SPECIES.PERDIZ,
-      transform.x - 1.4,
-      transform.y + 0.8,
-    );
+    const x = transform.x + info.offsetX;
+    const y = transform.y + info.offsetY;
+    const ambient = buildAmbientData(this.ambientRng, info.species, x, y);
     ambient.companion = true;
-    ambient.health = PERDIZ_HEALTH;
+    ambient.tamed = true;
+    ambient.health = info.health;
     this.companionId = createAmbientEntity(this.ecs, {
-      species: AMBIENT_SPECIES.PERDIZ,
-      x: transform.x - 1.4,
-      y: transform.y + 0.8,
+      species: info.species,
+      x,
+      y,
       ambient,
     });
   }
@@ -1174,12 +1219,16 @@ export class Game {
     let wolves = 0;
     for (const id of this.getAmbientIds()) {
       const ambient = this.ecs.getComponent(id, Component.AMBIENT);
-      if (ambient?.species === AMBIENT_SPECIES.WOLF) {
+      if (
+        ambient?.species === AMBIENT_SPECIES.WOLF &&
+        !ambient.companion &&
+        !ambient.tamed
+      ) {
         wolves += 1;
       }
     }
 
-    const target = 3;
+    const target = 2;
     let spawned = 0;
 
     while (wolves < target) {
@@ -1224,10 +1273,18 @@ export class Game {
     const inWolfBiome = biome === BIOME.WOLF || biome === BIOME.SNOW;
     const night = this.isNight();
 
+    if (!inWolfBiome || this.wolfSpawnCooldown > 0) {
+      return 0;
+    }
+
     let nearby = 0;
     for (const id of this.getAmbientIds()) {
       const ambient = this.ecs.getComponent(id, Component.AMBIENT);
-      if (ambient?.species !== AMBIENT_SPECIES.WOLF) {
+      if (
+        ambient?.species !== AMBIENT_SPECIES.WOLF ||
+        ambient.companion ||
+        ambient.tamed
+      ) {
         continue;
       }
       const transform = this.ecs.getComponent(id, Component.TRANSFORM);
@@ -1239,18 +1296,24 @@ export class Game {
       }
     }
 
-    const target = inWolfBiome ? 2 : 1;
+    const target = night ? 2 : 1;
     if (nearby >= target) {
       return 0;
     }
 
     for (let attempt = 0; attempt < 32; attempt += 1) {
       const angle = this.ambientRng.float(0, Math.PI * 2);
-      const distance = this.ambientRng.float(8, 16);
+      const distance = this.ambientRng.float(10, 18);
       const x = Math.round(player.x + Math.cos(angle) * distance) + 0.5;
       const y = Math.round(player.y + Math.sin(angle) * distance) + 0.5;
 
       if (!this.world.isActorWalkableAt(x, y)) {
+        continue;
+      }
+      if (
+        this.world.biomeAt(Math.floor(x), Math.floor(y)) !== BIOME.WOLF &&
+        this.world.biomeAt(Math.floor(x), Math.floor(y)) !== BIOME.SNOW
+      ) {
         continue;
       }
 
@@ -1271,6 +1334,7 @@ export class Game {
         y,
         ambient,
       });
+      this.wolfSpawnCooldown = 16;
       return 1;
     }
 
@@ -1289,6 +1353,8 @@ export class Game {
       AMBIENT_SPECIES.SPARROW,
       AMBIENT_SPECIES.CROW,
       AMBIENT_SPECIES.OWL,
+      AMBIENT_SPECIES.PERDIZ,
+      AMBIENT_SPECIES.CHICKEN,
     ];
 
     while (
@@ -1323,6 +1389,8 @@ export class Game {
         ambient.health = GOAT_HEALTH;
       } else if (spawn.species === AMBIENT_SPECIES.PERDIZ) {
         ambient.health = PERDIZ_HEALTH;
+      } else if (spawn.species === AMBIENT_SPECIES.CHICKEN) {
+        ambient.health = CHICKEN_HEALTH;
       } else if (
         spawn.species === AMBIENT_SPECIES.SPARROW ||
         spawn.species === AMBIENT_SPECIES.CROW ||
@@ -1347,6 +1415,10 @@ export class Game {
       return;
     }
 
+    this.wolfSpawnCooldown = Math.max(
+      0,
+      this.wolfSpawnCooldown - deltaSeconds,
+    );
     this.ambientSpawnTimer -= deltaSeconds;
 
     if (this.ambientSpawnTimer > 0) {
@@ -1886,6 +1958,23 @@ export class Game {
     };
   }
 
+  toggleCycleInfo() {
+    this.cycleExpanded = !this.cycleExpanded;
+    this.hud.cycleStat?.classList.toggle("is-expanded", this.cycleExpanded);
+    this.hud.cycleStat?.setAttribute(
+      "aria-expanded",
+      String(this.cycleExpanded),
+    );
+  }
+
+  handleCycleKey(event) {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+    event.preventDefault();
+    this.toggleCycleInfo();
+  }
+
   toggleStatsCollapsed() {
     this.statsCollapsed = !this.statsCollapsed;
     saveStatsCollapsed(this.statsCollapsed);
@@ -1954,7 +2043,7 @@ export class Game {
     for (const id of this.getAmbientIds()) {
       const ambient = this.ecs.getComponent(id, Component.AMBIENT);
 
-      if (ambient.wave) {
+      if (ambient.wave || ambient.companion || ambient.tamed) {
         continue;
       }
 
@@ -3010,8 +3099,10 @@ export class Game {
     this.hud.universityTabs?.addEventListener("click", this.handleUniversityTabsClick);
     this.hud.universityBody?.addEventListener("click", this.handleUniversityBodyClick);
     this.hud.compassHud?.addEventListener("click", this.toggleMap);
+    this.hud.btnCrossWaypoint?.addEventListener("click", this.handleCrossWaypoint);
     this.hud.btnMapClose?.addEventListener("click", this.closeMap);
     this.hud.btnMapClear?.addEventListener("click", this.clearWaypoint);
+    this.hud.btnMapWalk?.addEventListener("click", this.walkToWaypoint);
     this.hud.btnMapCenter?.addEventListener("click", this.renderMap);
     this.hud.mapCanvas?.addEventListener("click", this.handleMapPointer);
     this.hud.mapLandmarks?.addEventListener("click", this.handleMapLandmarkClick);
@@ -3040,6 +3131,8 @@ export class Game {
     this.hud.skyCanvas?.addEventListener("pointercancel", this.handleSkyPointerUp);
     this.hud.skyCanvas?.addEventListener("wheel", this.handleSkyWheel, { passive: false });
     this.hud.btnStatsToggle?.addEventListener("click", this.toggleStatsCollapsed);
+    this.hud.cycleStat?.addEventListener("click", this.toggleCycleInfo);
+    this.hud.cycleStat?.addEventListener("keydown", this.handleCycleKey);
     this.hud.btnWorkerAuto?.addEventListener("click", this.handleWorkerAutoToggle);
     this.hud.btnWorkerRestore?.addEventListener("click", this.handleWorkerRestore);
     this.hud.btnWorkerCancel?.addEventListener("click", this.handleWorkerCancel);
@@ -3150,8 +3243,10 @@ export class Game {
     this.hud.universityTabs?.removeEventListener("click", this.handleUniversityTabsClick);
     this.hud.universityBody?.removeEventListener("click", this.handleUniversityBodyClick);
     this.hud.compassHud?.removeEventListener("click", this.toggleMap);
+    this.hud.btnCrossWaypoint?.removeEventListener("click", this.handleCrossWaypoint);
     this.hud.btnMapClose?.removeEventListener("click", this.closeMap);
     this.hud.btnMapClear?.removeEventListener("click", this.clearWaypoint);
+    this.hud.btnMapWalk?.removeEventListener("click", this.walkToWaypoint);
     this.hud.btnMapCenter?.removeEventListener("click", this.renderMap);
     this.hud.mapCanvas?.removeEventListener("click", this.handleMapPointer);
     this.hud.mapLandmarks?.removeEventListener("click", this.handleMapLandmarkClick);
@@ -3180,6 +3275,8 @@ export class Game {
     this.hud.skyCanvas?.removeEventListener("pointercancel", this.handleSkyPointerUp);
     this.hud.skyCanvas?.removeEventListener("wheel", this.handleSkyWheel);
     this.hud.btnStatsToggle?.removeEventListener("click", this.toggleStatsCollapsed);
+    this.hud.cycleStat?.removeEventListener("click", this.toggleCycleInfo);
+    this.hud.cycleStat?.removeEventListener("keydown", this.handleCycleKey);
     this.hud.btnWorkerAuto?.removeEventListener("click", this.handleWorkerAutoToggle);
     this.hud.btnWorkerRestore?.removeEventListener("click", this.handleWorkerRestore);
     this.hud.btnWorkerCancel?.removeEventListener("click", this.handleWorkerCancel);
@@ -3638,6 +3735,23 @@ export class Game {
 
     const selfId = this.networkSelfId ?? this.network?.selfId;
     if (message?.killerId !== selfId) {
+      return;
+    }
+
+    if (this.pendingTameNetworkId === networkId) {
+      this.pendingTameNetworkId = null;
+      if (this.inventory.remove("huesoPollo", WOLF_TAME_BONES) <= 0) {
+        this.notify("Faltan huesos de pollo para completar la domesticación.");
+        return;
+      }
+      if (this.companionSpecies) {
+        this.releaseCompanion();
+      }
+      this.companionSpecies = "wolf";
+      this.setupCompanion();
+      this.notify("¡Lobo domesticado! Ahora te acompaña y ya no es hostil.");
+      this.updateHud();
+      this.save();
       return;
     }
 
@@ -4106,6 +4220,9 @@ export class Game {
     if (species === AMBIENT_SPECIES.PERDIZ) {
       return PERDIZ_HEALTH;
     }
+    if (species === AMBIENT_SPECIES.CHICKEN) {
+      return CHICKEN_HEALTH;
+    }
     if (species === AMBIENT_SPECIES.WOLF) {
       return WOLF_HEALTH;
     }
@@ -4145,6 +4262,9 @@ export class Game {
     if (species === AMBIENT_SPECIES.PERDIZ) {
       return "Perdiz";
     }
+    if (species === AMBIENT_SPECIES.CHICKEN) {
+      return "Pollo";
+    }
     if (species === AMBIENT_SPECIES.WOLF) {
       return "Lobo";
     }
@@ -4166,6 +4286,9 @@ export class Game {
       amount = 1;
     } else if (species === AMBIENT_SPECIES.WOLF) {
       key = "pielLobo";
+      amount = 1;
+    } else if (species === AMBIENT_SPECIES.CHICKEN) {
+      key = "huesoPollo";
       amount = 1;
     } else if (
       species === AMBIENT_SPECIES.VULTURE ||
@@ -4215,7 +4338,11 @@ export class Game {
     for (const id of this.getAmbientIds()) {
       const ambient = this.ecs.getComponent(id, Component.AMBIENT);
 
-      if (ambient.companion || !ATTACKABLE_AMBIENT_SPECIES.has(ambient.species)) {
+      if (
+        ambient.companion ||
+        ambient.tamed ||
+        !ATTACKABLE_AMBIENT_SPECIES.has(ambient.species)
+      ) {
         continue;
       }
 
@@ -4739,6 +4866,15 @@ export class Game {
     }
 
     if (selectedEntry?.kind === "resource") {
+      if (selectedEntry.key === "huesoPollo") {
+        const wolfId = this.pickAmbientAt(screenX, screenY, {
+          species: AMBIENT_SPECIES.WOLF,
+        });
+        if (wolfId) {
+          this.tameWolf(wolfId);
+          return;
+        }
+      }
       const perdizId = this.pickAmbientAt(screenX, screenY, {
         species: AMBIENT_SPECIES.PERDIZ,
       });
@@ -5136,7 +5272,7 @@ export class Game {
     for (const id of this.getAmbientIds()) {
       const ambient = this.ecs.getComponent(id, Component.AMBIENT);
 
-      if (ambient.companion) {
+      if (ambient.companion || ambient.tamed) {
         continue;
       }
 
@@ -6476,9 +6612,9 @@ export class Game {
       return;
     }
 
-    if (this.companionSpecies === "perdiz") {
-      this.notify("Ya tienes una perdiz compañera.");
-      return;
+    if (this.companionSpecies) {
+      this.releaseCompanion();
+      this.notify("Tu mascota anterior se marchó para dejar sitio a la perdiz.");
     }
 
     const distance = Math.hypot(
@@ -6511,6 +6647,64 @@ export class Game {
       color: "#7ec699",
     });
     this.notify("Perdiz capturada. Ahora te acompaña como mascota.");
+    this.updateHud();
+    this.save();
+  }
+
+  tameWolf(id) {
+    const ambient = this.ecs.getComponent(id, Component.AMBIENT);
+    const transform = this.ecs.getComponent(id, Component.TRANSFORM);
+    if (!ambient || !transform || ambient.species !== AMBIENT_SPECIES.WOLF) {
+      return;
+    }
+    if (ambient.companion || ambient.tamed) {
+      this.notify("Ese lobo ya te acompaña.");
+      return;
+    }
+
+    const distance = Math.hypot(
+      transform.x - this.playerTransform.x,
+      transform.y - this.playerTransform.y,
+    );
+    if (distance > WOLF_TAME_RANGE) {
+      this.notify("Acércate más al lobo con los huesos de pollo.");
+      return;
+    }
+    if (this.inventory.count("huesoPollo") < WOLF_TAME_BONES) {
+      this.notify(`Necesitas ${WOLF_TAME_BONES} huesos de pollo para domesticar un lobo.`);
+      return;
+    }
+
+    if (ambient.network) {
+      this.pendingTameNetworkId = ambient.networkId;
+      this.network?.sendAmbientHit(ambient.networkId, 9999);
+      this.notify("Ofreces los huesos al lobo...");
+      this.save();
+      return;
+    }
+
+    if (this.inventory.remove("huesoPollo", WOLF_TAME_BONES) <= 0) {
+      this.notify("No tienes suficientes huesos de pollo.");
+      return;
+    }
+
+    if (this.companionSpecies) {
+      this.releaseCompanion();
+      this.notify("Tu mascota anterior se marchó para dejar sitio al lobo.");
+    }
+
+    ambient.companion = true;
+    ambient.tamed = true;
+    ambient.health = WOLF_HEALTH;
+    ambient.state = "idle";
+    ambient.anchorX = transform.x;
+    ambient.anchorY = transform.y;
+    this.companionId = id;
+    this.companionSpecies = "wolf";
+    this.effects.addText("¡Lobo domesticado!", transform.x, transform.y, {
+      color: "#7ec699",
+    });
+    this.notify("¡Lobo domesticado! Ahora te acompaña y ya no es hostil.");
     this.updateHud();
     this.save();
   }
@@ -9622,6 +9816,77 @@ export class Game {
     this.notify("Punto marcado. La flecha de la brújula te guiará.");
   }
 
+  walkToWaypoint() {
+    if (!this.waypoint) {
+      this.openMap();
+      return;
+    }
+
+    const goal = this.waypoint;
+    const baseX = Math.floor(goal.x);
+    const baseY = Math.floor(goal.y);
+    let target = null;
+
+    for (let radius = 0; radius <= 8 && !target; radius += 1) {
+      for (let dy = -radius; dy <= radius && !target; dy += 1) {
+        for (let dx = -radius; dx <= radius; dx += 1) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) {
+            continue;
+          }
+          const x = baseX + dx;
+          const y = baseY + dy;
+          if (this.isPlayerWalkableAt(x, y)) {
+            target = { x, y };
+            break;
+          }
+        }
+      }
+    }
+
+    if (!target) {
+      this.notify("No hay una casilla transitable cerca del destino.");
+      return;
+    }
+
+    const transform = this.playerTransform;
+    const path = findPath({
+      startX: Math.floor(transform.x),
+      startY: Math.floor(transform.y),
+      goalX: target.x,
+      goalY: target.y,
+      isWalkable: (x, y) => this.isPlayerWalkableAt(x, y),
+      getHeight: (x, y) => this.world.heightAt(x, y),
+      maxStepHeight: 1,
+      maxDropHeight: Infinity,
+      maxNodes: PATH_MAX_NODES,
+    });
+
+    if (path === null) {
+      this.notify("No hay camino hasta el destino.");
+      return;
+    }
+
+    this.closeMap();
+    this.cameraFollow = true;
+    this.cancelPlayerAction();
+    if (path.length > 0) {
+      this.setPlayerPath(path, null);
+    }
+    this.notify(`Caminando hacia ${goal.label}.`);
+  }
+
+  handleCrossWaypoint() {
+    if (!this.compassOwned) {
+      this.notify("La biblioteca de la Universidad puede darte una brújula.");
+      return;
+    }
+    if (this.waypoint) {
+      this.walkToWaypoint();
+    } else {
+      this.openMap();
+    }
+  }
+
   renderMap() {
     const canvas = this.hud.mapCanvas;
     const panel = this.hud.mapPanel;
@@ -9840,13 +10105,42 @@ export class Game {
 
   updateCompassHud() {
     const compass = this.hud.compassHud;
-    if (!compass) {
+    const cross = this.hud.btnCrossWaypoint;
+    const crossLabel = this.hud.btnCrossWaypointLabel;
+
+    if (!this.compassOwned) {
+      if (compass) {
+        compass.hidden = true;
+      }
+      if (cross) {
+        cross.hidden = true;
+      }
       return;
     }
 
-    compass.hidden = !this.compassOwned;
-    if (!this.compassOwned) {
-      return;
+    if (compass) {
+      compass.hidden = false;
+    }
+    if (cross) {
+      cross.hidden = false;
+    }
+
+    if (!this.waypoint) {
+      if (cross) {
+        cross.setAttribute("aria-label", "Abrir mapa y marcar destino");
+        cross.title = "Abrir mapa y marcar destino";
+      }
+      if (crossLabel) {
+        crossLabel.textContent = "Mapa";
+      }
+    } else {
+      if (cross) {
+        cross.setAttribute("aria-label", `Ir a ${this.waypoint.label}`);
+        cross.title = `Ir a ${this.waypoint.label}`;
+      }
+      if (crossLabel) {
+        crossLabel.textContent = "Ir";
+      }
     }
 
     const arrow = this.hud.compassArrow;
@@ -9860,7 +10154,9 @@ export class Game {
       if (this.hud.compassLabel) {
         this.hud.compassLabel.textContent = "Sin destino";
       }
-      compass.setAttribute("aria-label", "Abrir mapa y marcar destino");
+      if (compass) {
+        compass.setAttribute("aria-label", "Abrir mapa y marcar destino");
+      }
       return;
     }
 
@@ -9878,10 +10174,12 @@ export class Game {
     if (this.hud.compassLabel) {
       this.hud.compassLabel.textContent = state.label;
     }
-    compass.setAttribute(
-      "aria-label",
-      `Brújula hacia ${state.label}, ${Math.round(state.distance)} metros`,
-    );
+    if (compass) {
+      compass.setAttribute(
+        "aria-label",
+        `Brújula hacia ${state.label}, ${Math.round(state.distance)} metros`,
+      );
+    }
   }
 
   renderUniversityTabs() {
@@ -12555,7 +12853,8 @@ export class Game {
         ambient.species === AMBIENT_SPECIES.GOAT ||
         ambient.species === AMBIENT_SPECIES.DONKEY ||
         ambient.species === AMBIENT_SPECIES.PERDIZ ||
-        ambient.species === AMBIENT_SPECIES.WOLF
+        ambient.species === AMBIENT_SPECIES.WOLF ||
+        ambient.species === AMBIENT_SPECIES.CHICKEN
       ) {
         ambientFrame = ambientMotion.moving
           ? 1 + (Math.floor(ambientMotion.walkTime * 8) % 2)
@@ -12886,6 +13185,8 @@ export class Game {
       }
     }
 
+    const celestial = celestialStateAt(this.gameTime);
+    celestial.reflectionWorld = reflectionWorldPoint(transform, celestial);
     this.renderer.render(this.ctx, {
       world: this.world,
       camera: this.camera,
@@ -12894,11 +13195,12 @@ export class Game {
       height: this.camera.height,
       actors,
       stonePaths: this.stonePaths,
-      celestial: celestialStateAt(this.gameTime),
+      celestial,
     });
 
     this.drawFarmPlots();
     this.drawQuestRings();
+    this.drawWaypointMarker();
     this.drawProjectiles();
     this.drawSwimRipple();
     this.drawFishingLine();
@@ -12936,6 +13238,126 @@ export class Game {
     ctx.lineTo(points[2].x, points[2].y);
     ctx.lineTo(points[3].x, points[3].y);
     ctx.closePath();
+  }
+
+  drawWaypointMarker() {
+    if (!this.compassOwned || !this.waypoint) {
+      return;
+    }
+
+    const ctx = this.ctx;
+    const camera = this.camera;
+    const point = camera.project(this.waypoint.x, this.waypoint.y, 0);
+    const margin = 42;
+    const onScreen =
+      point.x >= -margin &&
+      point.x <= camera.width + margin &&
+      point.y >= -margin &&
+      point.y <= camera.height + margin;
+
+    if (!onScreen) {
+      const centerX = camera.width / 2;
+      const centerY = camera.height / 2;
+      const dx = point.x - centerX;
+      const dy = point.y - centerY;
+      const angle = Math.atan2(dy, dx);
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      const limitX = centerX - 46;
+      const limitY = centerY - 46;
+      const scale = Math.min(
+        limitX / Math.max(0.001, Math.abs(cos)),
+        limitY / Math.max(0.001, Math.abs(sin)),
+      );
+      const x = centerX + cos * scale;
+      const y = centerY + sin * scale;
+      const distance = Math.round(
+        Math.hypot(
+          this.waypoint.x - this.playerTransform.x,
+          this.waypoint.y - this.playerTransform.y,
+        ),
+      );
+
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle);
+      ctx.fillStyle = "rgba(240, 192, 122, 0.95)";
+      ctx.strokeStyle = "rgba(20, 26, 32, 0.9)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(12, 0);
+      ctx.lineTo(-7, -7);
+      ctx.lineTo(-7, 7);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.save();
+      ctx.fillStyle = "rgba(240, 192, 122, 0.9)";
+      ctx.font = "10px monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(`${distance} m`, x, y + 20);
+      ctx.restore();
+      return;
+    }
+
+    const zoom = camera.zoom;
+    const pulse = (Math.sin(this.gameTime * 2.6) + 1) / 2;
+    const radius = (16 + pulse * 7) * zoom;
+    const beamHeight = 108 * zoom;
+    const diamondY = point.y - beamHeight - Math.sin(this.gameTime * 2.2) * 5 * zoom;
+
+    ctx.save();
+
+    ctx.beginPath();
+    ctx.ellipse(point.x, point.y, radius, radius * 0.5, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(240, 192, 122, ${0.45 + pulse * 0.4})`;
+    ctx.lineWidth = Math.max(1.5, 2 * zoom);
+    ctx.stroke();
+
+    const beam = ctx.createLinearGradient(
+      point.x,
+      point.y,
+      point.x,
+      point.y - beamHeight,
+    );
+    beam.addColorStop(0, `rgba(240, 192, 122, ${0.32 + pulse * 0.16})`);
+    beam.addColorStop(1, "rgba(240, 192, 122, 0)");
+    ctx.fillStyle = beam;
+    ctx.fillRect(
+      point.x - 2.5 * zoom,
+      point.y - beamHeight,
+      5 * zoom,
+      beamHeight,
+    );
+
+    ctx.beginPath();
+    ctx.moveTo(point.x, diamondY - 9 * zoom);
+    ctx.lineTo(point.x + 8 * zoom, diamondY);
+    ctx.lineTo(point.x, diamondY + 9 * zoom);
+    ctx.lineTo(point.x - 8 * zoom, diamondY);
+    ctx.closePath();
+    ctx.fillStyle = "rgba(240, 192, 122, 0.95)";
+    ctx.strokeStyle = "rgba(20, 26, 32, 0.9)";
+    ctx.lineWidth = 1.5;
+    ctx.fill();
+    ctx.stroke();
+
+    const distance = Math.round(
+      Math.hypot(
+        this.waypoint.x - this.playerTransform.x,
+        this.waypoint.y - this.playerTransform.y,
+      ),
+    );
+    ctx.fillStyle = "rgba(240, 236, 220, 0.92)";
+    ctx.font = `600 ${Math.max(10, Math.round(11 * zoom))}px monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(`${this.waypoint.label} · ${distance} m`, point.x, diamondY - 14 * zoom);
+
+    ctx.restore();
   }
 
   drawQuestRings() {
@@ -13736,10 +14158,10 @@ export class Game {
     }
     const cycleInfo = this.cycleHudInfo();
     if (this.hud.cycle) {
-      this.hud.cycle.textContent = `Día ${cycleInfo.day}`;
+      this.hud.cycle.textContent = `${cycleInfo.phase} ${cycleInfo.day}`;
     }
     if (this.hud.cyclePhase) {
-      this.hud.cyclePhase.textContent = `${cycleInfo.phase} ${cycleInfo.time}`;
+      this.hud.cyclePhase.textContent = cycleInfo.time;
     }
     if (this.hud.moon) {
       this.hud.moon.textContent = `${cycleInfo.moon.icon} ${cycleInfo.moon.name}`;

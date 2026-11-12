@@ -1021,18 +1021,14 @@ export class WorldRenderer {
     let anchorX = anchorXTarget;
     let anchorY = height * Math.max(0.12, Math.min(0.36, reflection.y ?? 0.26));
 
-    if (waterSamples.length > 0) {
-      let nearest = waterSamples[0];
-      let nearestDistance = Infinity;
-      for (const sample of waterSamples) {
-        const distance = Math.abs(sample.x - anchorXTarget);
-        if (distance < nearestDistance) {
-          nearestDistance = distance;
-          nearest = sample;
-        }
-      }
-      anchorX = nearest.x;
-      anchorY = Math.max(18, nearest.y - 6);
+    if (celestial.reflectionWorld && camera?.project) {
+      const screen = camera.project(
+        celestial.reflectionWorld.x,
+        celestial.reflectionWorld.y,
+        0,
+      );
+      anchorX = screen.x;
+      anchorY = screen.y;
     }
 
     const glowRadius = Math.max(width, height) * 0.42;
