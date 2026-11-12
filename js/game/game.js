@@ -5,6 +5,10 @@ import { TouchControls } from "../ui/touchControls.js";
 import { resolveContextAction } from "./contextAction.js";
 import { celestialStateAt } from "./celestial.js";
 import {
+  compassState,
+  normalizeWaypoint,
+} from "./compass.js";
+import {
   BIRD_MISSION,
   BIRD_SPECIES,
   birdById,
@@ -465,6 +469,10 @@ export class Game {
     this.universityOpen = false;
     this.universityTab = "shop";
     this.university = null;
+    this.compassOwned = saveState?.compassOwned === true;
+    this.waypoint = normalizeWaypoint(saveState?.waypoint);
+    this.mapOpen = false;
+    this.mapView = null;
     this.placingItem = null;
     this.hoverScreen = null;
     this.hover = null;
@@ -737,6 +745,7 @@ export class Game {
       onRecipes: () => this.toggleRecipeBook(),
       onQuest: () => this.toggleQuest(),
       onBirds: () => this.toggleBirdPanel(),
+      onMap: () => this.toggleMap(),
       onPlace: () => this.handlePlaceRequest(),
       onHotbar: (index) => this.selectHotbar(index),
       onUseSelected: () => this.useSelectedItem(),
@@ -767,6 +776,9 @@ export class Game {
     this.handlePlaceRequest = this.handlePlaceRequest.bind(this);
     this.handlePlaceSelected = this.handlePlaceSelected.bind(this);
     this.handleDropButton = this.handleDropButton.bind(this);
+    this.handleHudDrop = this.handleHudDrop.bind(this);
+    this.handleInventoryDrop = this.handleInventoryDrop.bind(this);
+    this.handleInventoryDropStack = this.handleInventoryDropStack.bind(this);
     this.handleRotateLeft = this.handleRotateLeft.bind(this);
     this.handleRotateRight = this.handleRotateRight.bind(this);
     this.handleRecipeListClick = this.handleRecipeListClick.bind(this);
@@ -828,6 +840,13 @@ export class Game {
     this.handleUniversityTabsClick = this.handleUniversityTabsClick.bind(this);
     this.handleUniversityBodyClick = this.handleUniversityBodyClick.bind(this);
     this.closeUniversity = this.closeUniversity.bind(this);
+    this.toggleMap = this.toggleMap.bind(this);
+    this.openMap = this.openMap.bind(this);
+    this.closeMap = this.closeMap.bind(this);
+    this.handleMapPointer = this.handleMapPointer.bind(this);
+    this.clearWaypoint = this.clearWaypoint.bind(this);
+    this.renderMap = this.renderMap.bind(this);
+    this.handleMapLandmarkClick = this.handleMapLandmarkClick.bind(this);
     this.toggleStatsCollapsed = this.toggleStatsCollapsed.bind(this);
     this.applyStatsCollapsed = this.applyStatsCollapsed.bind(this);
     this.drinkCoffee = this.drinkCoffee.bind(this);
@@ -2972,7 +2991,9 @@ export class Game {
     this.hud.craftSearch?.addEventListener("input", this.handleCraftSearch);
     this.hud.btnPlaceFire?.addEventListener("click", this.handlePlaceRequest);
     this.hud.btnPlaceSelected?.addEventListener("click", this.handlePlaceSelected);
-    this.hud.btnDrop?.addEventListener("click", this.handleDropButton);
+    this.hud.btnDrop?.addEventListener("click", this.handleHudDrop);
+    this.hud.btnInventoryDrop?.addEventListener("click", this.handleInventoryDrop);
+    this.hud.btnInventoryDropStack?.addEventListener("click", this.handleInventoryDropStack);
     this.hud.btnCoffee?.addEventListener("click", this.drinkCoffee);
     this.hud.recipeList?.addEventListener("click", this.handleRecipeListClick);
     this.hud.inventory?.addEventListener("click", this.handleInventoryClick);
@@ -2988,6 +3009,12 @@ export class Game {
     this.hud.btnUniversityClose?.addEventListener("click", this.closeUniversity);
     this.hud.universityTabs?.addEventListener("click", this.handleUniversityTabsClick);
     this.hud.universityBody?.addEventListener("click", this.handleUniversityBodyClick);
+    this.hud.compassHud?.addEventListener("click", this.toggleMap);
+    this.hud.btnMapClose?.addEventListener("click", this.closeMap);
+    this.hud.btnMapClear?.addEventListener("click", this.clearWaypoint);
+    this.hud.btnMapCenter?.addEventListener("click", this.renderMap);
+    this.hud.mapCanvas?.addEventListener("click", this.handleMapPointer);
+    this.hud.mapLandmarks?.addEventListener("click", this.handleMapLandmarkClick);
     this.hud.btnGameMode?.addEventListener("click", this.toggleGameMode);
     this.hud.btnFief?.addEventListener("click", this.toggleFief);
     this.hud.btnFiefClose?.addEventListener("click", this.closeFief);
@@ -3104,7 +3131,9 @@ export class Game {
     this.hud.craftSearch?.removeEventListener("input", this.handleCraftSearch);
     this.hud.btnPlaceFire?.removeEventListener("click", this.handlePlaceRequest);
     this.hud.btnPlaceSelected?.removeEventListener("click", this.handlePlaceSelected);
-    this.hud.btnDrop?.removeEventListener("click", this.handleDropButton);
+    this.hud.btnDrop?.removeEventListener("click", this.handleHudDrop);
+    this.hud.btnInventoryDrop?.removeEventListener("click", this.handleInventoryDrop);
+    this.hud.btnInventoryDropStack?.removeEventListener("click", this.handleInventoryDropStack);
     this.hud.btnCoffee?.removeEventListener("click", this.drinkCoffee);
     this.hud.recipeList?.removeEventListener("click", this.handleRecipeListClick);
     this.hud.inventory?.removeEventListener("click", this.handleInventoryClick);
@@ -3120,6 +3149,12 @@ export class Game {
     this.hud.btnUniversityClose?.removeEventListener("click", this.closeUniversity);
     this.hud.universityTabs?.removeEventListener("click", this.handleUniversityTabsClick);
     this.hud.universityBody?.removeEventListener("click", this.handleUniversityBodyClick);
+    this.hud.compassHud?.removeEventListener("click", this.toggleMap);
+    this.hud.btnMapClose?.removeEventListener("click", this.closeMap);
+    this.hud.btnMapClear?.removeEventListener("click", this.clearWaypoint);
+    this.hud.btnMapCenter?.removeEventListener("click", this.renderMap);
+    this.hud.mapCanvas?.removeEventListener("click", this.handleMapPointer);
+    this.hud.mapLandmarks?.removeEventListener("click", this.handleMapLandmarkClick);
     this.hud.btnGameMode?.removeEventListener("click", this.toggleGameMode);
     this.hud.btnFief?.removeEventListener("click", this.toggleFief);
     this.hud.btnFiefClose?.removeEventListener("click", this.closeFief);
@@ -3215,6 +3250,8 @@ export class Game {
       characterSkin: this.characterSkin,
       donkey: this.serializeDonkey(),
       companion: this.serializeCompanion(),
+      compassOwned: this.compassOwned,
+      waypoint: this.waypoint ? { ...this.waypoint } : null,
       time: this.gameTime,
       camera: {
         x: this.camera.x,
@@ -6226,6 +6263,7 @@ export class Game {
     this.closeTrade();
     this.closeVillage();
     this.closeWolfDen();
+    this.closeMap();
     this.birdPanelOpen = true;
     if (this.hud.birdPanel) {
       this.hud.birdPanel.hidden = false;
@@ -6348,6 +6386,7 @@ export class Game {
     this.closeUniversity();
     this.closeTrade();
     this.closeVillage();
+    this.closeMap();
     this.wolfOpen = true;
     if (this.hud.wolfPanel) {
       this.hud.wolfPanel.hidden = false;
@@ -6841,6 +6880,11 @@ export class Game {
       return;
     }
 
+    if (this.mapOpen) {
+      this.closeMap();
+      return;
+    }
+
     if (this.wolfOpen) {
       this.closeWolfDen();
       return;
@@ -6993,6 +7037,7 @@ export class Game {
     this.closeChest();
     this.closeUniversity();
     this.closeObservatory();
+    this.closeMap();
     this.recipeBookOpen = true;
     this.recipeBookSearch = "";
     if (this.hud.recipeBookSearch) {
@@ -7164,6 +7209,7 @@ export class Game {
     this.closeObservatory();
     this.closeChest();
     this.closeUniversity();
+    this.closeMap();
 
     if (this.craftingOpen && !this.activeStation) {
       this.closeCrafting();
@@ -7437,6 +7483,7 @@ export class Game {
     this.closeCrafting();
     this.closeChest();
     this.closeUniversity();
+    this.closeMap();
     this.observatoryOpen = true;
     this.hud.observatoryPanel?.classList.add("is-open");
     this.hud.observatoryPanel?.setAttribute("aria-hidden", "false");
@@ -7635,6 +7682,7 @@ export class Game {
     this.closeVillage();
     this.closeBirdPanel();
     this.closeWolfDen();
+    this.closeMap();
     this.questOpen = true;
     this.hud.questPanel?.classList.add("is-open");
     this.hud.questPanel?.setAttribute("aria-hidden", "false");
@@ -9453,6 +9501,18 @@ export class Game {
     this.closeRecipeBook();
     this.closeCrafting();
     this.closeChest();
+    this.closeMap();
+    if (!this.compassOwned) {
+      this.compassOwned = true;
+      this.notify(
+        "La biblioteca te regala una brújula. Pulsa G o toca la brújula para abrir el mapa.",
+      );
+      this.effects.addText("Brújula obtenida", this.playerTransform.x, this.playerTransform.y, {
+        color: "#8fd1e8",
+      });
+      this.updateHud();
+      this.save();
+    }
     this.universityOpen = true;
     this.hud.universityPanel?.classList.add("is-open");
     this.hud.universityPanel?.setAttribute("aria-hidden", "false");
@@ -9463,6 +9523,365 @@ export class Game {
     this.universityOpen = false;
     this.hud.universityPanel?.classList.remove("is-open");
     this.hud.universityPanel?.setAttribute("aria-hidden", "true");
+  }
+
+  toggleMap() {
+    if (this.mapOpen) {
+      this.closeMap();
+    } else {
+      this.openMap();
+    }
+  }
+
+  openMap() {
+    if (!this.compassOwned) {
+      this.notify("La biblioteca de la Universidad puede darte una brújula.");
+      return;
+    }
+
+    this.closeQuest();
+    this.closeBirdPanel();
+    this.closeWolfDen();
+    this.closeObservatory();
+    this.closeCrafting();
+    this.closeRecipeBook();
+    this.closeChest();
+    this.closeUniversity();
+    this.closeTrade();
+    this.closeVillage();
+    this.mapOpen = true;
+    if (this.hud.mapPanel) {
+      this.hud.mapPanel.hidden = false;
+    }
+    this.hud.mapPanel?.classList.add("is-open");
+    this.hud.mapPanel?.setAttribute("aria-hidden", "false");
+    this.renderMap();
+  }
+
+  closeMap() {
+    this.mapOpen = false;
+    if (this.hud.mapPanel) {
+      this.hud.mapPanel.hidden = true;
+    }
+    this.hud.mapPanel?.classList.remove("is-open");
+    this.hud.mapPanel?.setAttribute("aria-hidden", "true");
+  }
+
+  setWaypoint(x, y, label = "Destino") {
+    this.waypoint = normalizeWaypoint({ x, y, label });
+    this.updateCompassHud();
+    this.renderMap();
+    this.save();
+  }
+
+  clearWaypoint() {
+    this.waypoint = null;
+    this.updateCompassHud();
+    this.renderMap();
+    this.save();
+    this.notify("Destino borrado. La brújula queda libre.");
+  }
+
+  handleMapLandmarkClick(event) {
+    const button = event.target.closest("[data-map-target]");
+    if (!button) {
+      return;
+    }
+    const x = Number(button.dataset.mapX);
+    const y = Number(button.dataset.mapY);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      return;
+    }
+    this.setWaypoint(x, y, button.dataset.mapTarget || "Destino");
+    this.notify(`Destino marcado: ${button.dataset.mapTarget}.`);
+  }
+
+  handleMapPointer(event) {
+    if (!this.mapOpen || !this.mapView || !this.hud.mapCanvas) {
+      return;
+    }
+    const rect = this.hud.mapCanvas.getBoundingClientRect();
+    const localX = event.clientX - rect.left;
+    const localY = event.clientY - rect.top;
+    const view = this.mapView;
+
+    if (
+      localX < view.offsetX ||
+      localX > view.offsetX + view.size ||
+      localY < view.offsetY ||
+      localY > view.offsetY + view.size
+    ) {
+      return;
+    }
+
+    const ratioX = (localX - view.offsetX) / view.size;
+    const ratioY = (localY - view.offsetY) / view.size;
+    const worldX = view.centerX - view.range + ratioX * view.range * 2;
+    const worldY = view.centerY - view.range + ratioY * view.range * 2;
+    this.setWaypoint(worldX, worldY, "Punto marcado");
+    this.notify("Punto marcado. La flecha de la brújula te guiará.");
+  }
+
+  renderMap() {
+    const canvas = this.hud.mapCanvas;
+    const panel = this.hud.mapPanel;
+    if (!canvas || !panel || !this.mapOpen) {
+      return;
+    }
+
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) {
+      return;
+    }
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    if (
+      canvas.width !== Math.floor(rect.width * dpr) ||
+      canvas.height !== Math.floor(rect.height * dpr)
+    ) {
+      canvas.width = Math.floor(rect.width * dpr);
+      canvas.height = Math.floor(rect.height * dpr);
+    }
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      return;
+    }
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const width = rect.width;
+    const height = rect.height;
+    const size = Math.min(width, height);
+    const offsetX = (width - size) / 2;
+    const offsetY = (height - size) / 2;
+    const range = 100;
+    const step = 3;
+    const cells = Math.ceil((range * 2) / step);
+    const cellSize = size / cells;
+    const player = this.playerTransform;
+    const centerX = player.x;
+    const centerY = player.y;
+    const view = {
+      centerX,
+      centerY,
+      range,
+      size,
+      offsetX,
+      offsetY,
+      cells,
+      cellSize,
+    };
+    this.mapView = view;
+
+    ctx.fillStyle = "#0b141d";
+    ctx.fillRect(0, 0, width, height);
+
+    for (let row = 0; row < cells; row += 1) {
+      for (let col = 0; col < cells; col += 1) {
+        const worldX = centerX - range + col * step + step / 2;
+        const worldY = centerY - range + row * step + step / 2;
+        const biome = this.world.biomeAt(
+          Math.floor(worldX),
+          Math.floor(worldY),
+        );
+        const info = biomeById(biome);
+        ctx.fillStyle = info?.shades?.[0] ?? "#1b4058";
+        ctx.fillRect(
+          offsetX + col * cellSize,
+          offsetY + row * cellSize,
+          cellSize + 0.6,
+          cellSize + 0.6,
+        );
+      }
+    }
+
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(offsetX, offsetY, size, size);
+
+    const toMap = (worldX, worldY) => ({
+      x: offsetX + ((worldX - (centerX - range)) / (range * 2)) * size,
+      y: offsetY + ((worldY - (centerY - range)) / (range * 2)) * size,
+    });
+
+    const inView = (worldX, worldY) =>
+      Math.abs(worldX - centerX) <= range && Math.abs(worldY - centerY) <= range;
+
+    const drawMarker = (worldX, worldY, color, radius = 4, shape = "circle") => {
+      if (!inView(worldX, worldY)) {
+        return;
+      }
+      const point = toMap(worldX, worldY);
+      ctx.save();
+      ctx.fillStyle = color;
+      ctx.strokeStyle = "rgba(4, 8, 12, 0.9)";
+      ctx.lineWidth = 1.5;
+      if (shape === "diamond") {
+        ctx.beginPath();
+        ctx.moveTo(point.x, point.y - radius);
+        ctx.lineTo(point.x + radius, point.y);
+        ctx.lineTo(point.x, point.y + radius);
+        ctx.lineTo(point.x - radius, point.y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      } else if (shape === "triangle") {
+        ctx.beginPath();
+        ctx.moveTo(point.x, point.y - radius);
+        ctx.lineTo(point.x + radius, point.y + radius);
+        ctx.lineTo(point.x - radius, point.y + radius);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.restore();
+    };
+
+    if (this.university) {
+      drawMarker(this.university.x, this.university.y, "#8fd1e8", 5);
+    }
+    if (this.observatory) {
+      drawMarker(this.observatory.x, this.observatory.y, "#b58ce0", 5);
+    }
+    if (this.wolfDen) {
+      drawMarker(this.wolfDen.x, this.wolfDen.y, "#d97b6c", 5, "triangle");
+    }
+    for (const village of this.villages) {
+      drawMarker(village.x, village.y, "#f0c07a", 4);
+    }
+    if (this.spawnPoint) {
+      drawMarker(this.spawnPoint.x, this.spawnPoint.y, "#7ec699", 4);
+    }
+    if (this.waypoint) {
+      drawMarker(this.waypoint.x, this.waypoint.y, "#f4f1ea", 6, "diamond");
+    }
+
+    const playerPoint = toMap(player.x, player.y);
+    ctx.save();
+    ctx.fillStyle = "#ffffff";
+    ctx.strokeStyle = "#0b141d";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(playerPoint.x, playerPoint.y, 5.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    if (this.hud.mapStatus) {
+      const distance = this.waypoint
+        ? Math.round(
+            Math.hypot(
+              this.waypoint.x - player.x,
+              this.waypoint.y - player.y,
+            ),
+          )
+        : null;
+      this.hud.mapStatus.textContent = this.waypoint
+        ? `Destino: ${this.waypoint.label} · ${distance} m`
+        : "Toca el mapa para marcar un destino.";
+    }
+
+    this.renderMapLandmarks();
+  }
+
+  renderMapLandmarks() {
+    const container = this.hud.mapLandmarks;
+    if (!container) {
+      return;
+    }
+
+    const landmarks = [
+      this.university && {
+        x: this.university.x,
+        y: this.university.y,
+        label: "Universidad",
+      },
+      this.observatory && {
+        x: this.observatory.x,
+        y: this.observatory.y,
+        label: "Observatorio",
+      },
+      this.wolfDen && {
+        x: this.wolfDen.x,
+        y: this.wolfDen.y,
+        label: "Cueva de lobos",
+      },
+      ...this.villages.map((village) => ({
+        x: village.x,
+        y: village.y,
+        label: village.name,
+      })),
+      this.spawnPoint && {
+        x: this.spawnPoint.x,
+        y: this.spawnPoint.y,
+        label: "Cama / reaparición",
+      },
+    ].filter(Boolean);
+
+    const fragment = document.createDocumentFragment();
+    for (const landmark of landmarks) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "map-landmark";
+      button.dataset.mapTarget = landmark.label;
+      button.dataset.mapX = String(landmark.x);
+      button.dataset.mapY = String(landmark.y);
+      button.textContent = landmark.label;
+      fragment.append(button);
+    }
+
+    container.replaceChildren(fragment);
+  }
+
+  updateCompassHud() {
+    const compass = this.hud.compassHud;
+    if (!compass) {
+      return;
+    }
+
+    compass.hidden = !this.compassOwned;
+    if (!this.compassOwned) {
+      return;
+    }
+
+    const arrow = this.hud.compassArrow;
+    if (!this.waypoint) {
+      if (arrow) {
+        arrow.style.transform = "rotate(0deg)";
+      }
+      if (this.hud.compassDistance) {
+        this.hud.compassDistance.textContent = "Mapa";
+      }
+      if (this.hud.compassLabel) {
+        this.hud.compassLabel.textContent = "Sin destino";
+      }
+      compass.setAttribute("aria-label", "Abrir mapa y marcar destino");
+      return;
+    }
+
+    const state = compassState({
+      player: this.playerTransform,
+      target: this.waypoint,
+      camera: this.camera,
+    });
+    if (arrow) {
+      arrow.style.transform = `rotate(${(state.angle * 180) / Math.PI + 90}deg)`;
+    }
+    if (this.hud.compassDistance) {
+      this.hud.compassDistance.textContent = `${Math.round(state.distance)} m`;
+    }
+    if (this.hud.compassLabel) {
+      this.hud.compassLabel.textContent = state.label;
+    }
+    compass.setAttribute(
+      "aria-label",
+      `Brújula hacia ${state.label}, ${Math.round(state.distance)} metros`,
+    );
   }
 
   renderUniversityTabs() {
@@ -9675,6 +10094,17 @@ export class Game {
     const fragment = document.createDocumentFragment();
     const entries = this.libraryEntries;
     const bookCosts = { Fe: 4, Cu: 3, piel: 2 };
+
+    fragment.append(
+      this.createUniversityCard({
+        name: "Brújula de la biblioteca",
+        description:
+          "Regalo de bienvenida: marca un punto en el mapa y una flecha te guiará hasta él.",
+        tag: this.compassOwned ? "Obtenida" : "Pendiente",
+        costs: {},
+        actions: [],
+      }),
+    );
 
     if (!this.researchBookOwned) {
       fragment.append(
@@ -12467,7 +12897,6 @@ export class Game {
       celestial: celestialStateAt(this.gameTime),
     });
 
-    this.drawCelestialSky();
     this.drawFarmPlots();
     this.drawQuestRings();
     this.drawProjectiles();
@@ -13340,6 +13769,16 @@ export class Game {
     this.refreshRecipeStates();
     this.updateWorkerPanel();
     this.updateQuestButton();
+    this.updateCompassHud();
+    const dropEntry = this.getSelectedEntry();
+    if (this.hud.btnDrop) {
+      const canDrop = Boolean(dropEntry) && dropEntry.kind !== "tool";
+      this.hud.btnDrop.disabled = !canDrop;
+      this.hud.btnDrop.textContent = canDrop ? "Soltar 1" : "Soltar";
+      this.hud.btnDrop.title = canDrop
+        ? `Soltar 1 ${dropEntry.label}`
+        : "Selecciona un objeto o recurso para soltar";
+    }
     const idleWorkers = this.getIdleWorkerIds().length;
     if (this.hud.btnIdleWorker) {
       this.hud.btnIdleWorker.textContent =
@@ -13677,6 +14116,7 @@ export class Game {
     if (!this.hud.inventoryPanel) {
       return;
     }
+    this.closeMap();
     this.inventoryOpen = true;
     this.input?.keys?.clear();
     this.hud.inventoryPanel.classList.add("is-open");
@@ -13969,6 +14409,20 @@ export class Game {
       this.hud.inventoryCapacity.textContent = `${this.inventory.slotsUsed()}/${this.inventory.capacity}`;
     }
 
+    const canDrop = Boolean(selected) && selected.kind !== "tool";
+    if (this.hud.btnInventoryDrop) {
+      this.hud.btnInventoryDrop.disabled = !canDrop;
+      this.hud.btnInventoryDrop.textContent = canDrop
+        ? `Soltar 1 ${selected.label}`
+        : "Soltar 1";
+    }
+    if (this.hud.btnInventoryDropStack) {
+      this.hud.btnInventoryDropStack.disabled = !canDrop;
+      this.hud.btnInventoryDropStack.textContent = canDrop
+        ? `Soltar pila (${selected.count})`
+        : "Soltar pila";
+    }
+
     const hotbar = this.hud.inventoryHotbar;
     if (!hotbar) {
       return;
@@ -14104,12 +14558,24 @@ export class Game {
     this.notify(`${entry.label} no se puede usar directamente.`);
   }
 
-  handleDropButton() {
+  handleDropButton(wholeStack = false) {
     if (!this.getSelectedEntry()) {
       this.notify("Selecciona primero un objeto o recurso.");
       return;
     }
-    this.dropSelected(false);
+    this.dropSelected(wholeStack === true);
+  }
+
+  handleInventoryDrop() {
+    this.handleDropButton(false);
+  }
+
+  handleHudDrop() {
+    this.handleDropButton(false);
+  }
+
+  handleInventoryDropStack() {
+    this.handleDropButton(true);
   }
 
   dropSelected(wholeStack = false) {

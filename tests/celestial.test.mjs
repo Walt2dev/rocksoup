@@ -67,3 +67,24 @@ test("los colores del cielo son estables para el mismo instante", () => {
   assert.deepEqual(skyColorsAt(1234), skyColorsAt(1234));
   assert.notDeepEqual(skyColorsAt(10), skyColorsAt(DAY_LENGTH_SECONDS + 10));
 });
+
+test("el reflejo del sol se mueve de este a oeste", () => {
+  const dawn = celestialStateAt(1).reflection;
+  const noon = celestialStateAt(DAY_LENGTH_SECONDS / 2).reflection;
+  const dusk = celestialStateAt(DAY_LENGTH_SECONDS - 1).reflection;
+
+  assert.equal(dawn.kind, "sun");
+  assert.ok(dawn.x < noon.x);
+  assert.ok(noon.x < dusk.x);
+  assert.ok(dawn.x >= 0.1 && dusk.x <= 0.9);
+});
+
+test("el reflejo lunar conserva la fase y también avanza", () => {
+  const early = celestialStateAt(DAY_LENGTH_SECONDS + 1).reflection;
+  const late = celestialStateAt(DAY_NIGHT_CYCLE - 1).reflection;
+
+  assert.equal(early.kind, "moon");
+  assert.equal(early.night, true);
+  assert.ok(early.x < late.x);
+  assert.ok(early.illumination >= 0 && early.illumination <= 1);
+});

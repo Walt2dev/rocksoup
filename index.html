@@ -6,8 +6,8 @@
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#0b0f14" />
     <title>Sopa de Piedras — DracxGames</title>
-    <link rel="icon" type="image/png" href="logo_sopa_de_rocas.png?v=3" />
-    <link rel="stylesheet" href="css/style.css?v=3" />
+    <link rel="icon" type="image/png" href="characters/logo_sopa_de_rocas.png?v=4" />
+    <link rel="stylesheet" href="css/style.css?v=4" />
   </head>
   <body>
     <svg class="svg-defs" aria-hidden="true" focusable="false">
@@ -133,7 +133,7 @@
         <div class="loading-card">
           <img
             class="game-logo"
-            src="logo_sopa_de_rocas.png?v=3"
+            src="characters/logo_sopa_de_rocas.png?v=4"
             alt="RockSoup — Sopa de Piedras"
             width="435"
             height="309"
@@ -172,7 +172,7 @@
           <div class="menu-card">
             <img
               class="game-logo menu-logo"
-              src="logo_sopa_de_rocas.png?v=3"
+              src="characters/logo_sopa_de_rocas.png?v=4"
               alt="RockSoup — Sopa de Piedras"
               width="435"
               height="309"
@@ -379,6 +379,16 @@
             </button>
           </div>
 
+          <button id="compass-hud" class="compass-hud" type="button" aria-label="Abrir mapa y marcar destino" hidden>
+            <svg id="compass-arrow" class="compass-arrow" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3 19 21 12 17 5 21Z"></path>
+            </svg>
+            <span class="compass-copy">
+              <strong id="compass-distance">Mapa</strong>
+              <small id="compass-label">Sin destino</small>
+            </span>
+          </button>
+
           <div class="hud-legacy" aria-hidden="true">
             <div class="hud-fief-actions">
               <button id="btn-game-mode" class="hud-button" type="button" title="Cambiar modo de juego">
@@ -564,7 +574,7 @@
           </div>
 
           <p class="hud-help">
-            WASD mover · Q/E girar · Shift+E usar · Shift+Q soltar · Space saltar · Home centrar · M modo juego · V feudo · J misiones · R atacar · C crafteo · L recetas · T chat · B ranking · P jugadores · F colocar · clic derecho cancelar · rueda zoom
+            WASD mover · Q/E girar · Shift+E usar · Shift+Q soltar · Space saltar · Home centrar · M modo juego · V feudo · J misiones · K aves · G mapa · R atacar · C crafteo · L recetas · T chat · B ranking · P jugadores · F colocar · clic derecho cancelar · rueda zoom
           </p>
         </div>
 
@@ -779,6 +789,30 @@
           </div>
         </aside>
 
+        <aside id="map-panel" class="map-panel" aria-hidden="true" aria-label="Mapa y brújula" hidden>
+          <div class="map-card">
+            <header class="map-header">
+              <div>
+                <span class="craft-eyebrow">Brújula de la biblioteca</span>
+                <h2>Mapa y destino</h2>
+              </div>
+              <button id="btn-map-close" class="craft-close" type="button" aria-label="Cerrar mapa">
+                &times;
+              </button>
+            </header>
+            <p id="map-status" class="map-status">Toca el mapa para marcar un destino.</p>
+            <div class="map-canvas-wrap">
+              <canvas id="map-canvas" aria-label="Mapa local del mundo"></canvas>
+            </div>
+            <div id="map-landmarks" class="map-landmarks" aria-label="Lugares conocidos"></div>
+            <div class="map-actions">
+              <button id="btn-map-center" class="menu-button" type="button">Centrar en mí</button>
+              <button id="btn-map-clear" class="menu-button danger" type="button">Borrar destino</button>
+            </div>
+            <p class="map-legend">Blanco: tú · Rombo: destino · Azul: universidad · Morado: observatorio · Rojo: cueva de lobos · Dorado: aldeas · Verde: cama</p>
+          </div>
+        </aside>
+
         <aside id="trade-panel" class="trade-panel" aria-hidden="true" aria-label="Mercado y caravanas">
           <div class="trade-card">
             <header class="trade-header">
@@ -866,7 +900,7 @@
             </header>
             <p class="inventory-hint">
               Arrastra objetos a la fila inferior. Toca un objeto para asignarlo
-              al primer hueco libre.
+              al primer hueco libre y usa Soltar 1 o Soltar pila.
             </p>
             <div id="inventory-grid" class="inventory-grid"></div>
             <div class="inventory-hotbar-label">
@@ -874,6 +908,10 @@
               <span id="inventory-capacity"></span>
             </div>
             <div id="inventory-hotbar" class="inventory-hotbar"></div>
+            <div class="inventory-drop-row">
+              <button id="btn-inventory-drop" class="menu-button" type="button">Soltar 1</button>
+              <button id="btn-inventory-drop-stack" class="menu-button danger" type="button">Soltar pila</button>
+            </div>
           </div>
         </aside>
 
@@ -906,6 +944,10 @@
                 <button class="hud-menu-item" type="button" data-hud-action="birds">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-book"></use></svg>
                   <span>Cuaderno de aves</span><kbd>K</kbd>
+                </button>
+                <button class="hud-menu-item" type="button" data-hud-action="map" data-requires="compass">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-target"></use></svg>
+                  <span>Mapa / Brújula</span><kbd>G</kbd>
                 </button>
                 <button class="hud-menu-item" type="button" data-hud-action="fief">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-trophy"></use></svg>
@@ -1058,7 +1100,7 @@
       </section>
     </div>
 
-    <script type="module" src="js/main.js?v=3"></script>
+    <script type="module" src="js/main.js?v=4"></script>
   </body>
 </html>
 

@@ -23,6 +23,7 @@ export class GameInput {
     onRecipes,
     onQuest,
     onBirds,
+    onMap,
     onPlace,
     onHotbar,
     onUseSelected,
@@ -50,6 +51,7 @@ export class GameInput {
     this.onRecipes = onRecipes;
     this.onQuest = onQuest;
     this.onBirds = onBirds;
+    this.onMap = onMap;
     this.onPlace = onPlace;
     this.onHotbar = onHotbar;
     this.onUseSelected = onUseSelected;
@@ -212,6 +214,14 @@ export class GameInput {
       event.preventDefault();
       if (!event.repeat) {
         this.onBirds?.();
+      }
+      return;
+    }
+
+    if (event.code === "KeyG") {
+      event.preventDefault();
+      if (!event.repeat) {
+        this.onMap?.();
       }
       return;
     }

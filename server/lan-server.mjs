@@ -1500,6 +1500,7 @@ const server = createServer(async (req, res) => {
       pathname === "/index.html" ||
       pathname === "/admin.html" ||
       pathname === "/favicon.svg" ||
+      pathname === "/logo_sopa_de_rocas.png" ||
       pathname.startsWith("/css/") ||
       pathname.startsWith("/characters/") ||
       pathname.startsWith("/js/");

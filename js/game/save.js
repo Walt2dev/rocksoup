@@ -2,6 +2,7 @@ import { createRng } from "../core/rng.js";
 import { normalizeSkinId } from "./skins.js";
 import { FISH_SPECIES } from "./fishing.js";
 import { BIRD_SPECIES } from "./birdwatching.js";
+import { normalizeWaypoint } from "./compass.js";
 import { sanitizeFarmPlots } from "./farming.js";
 import { sanitizeSciencePoints } from "./science.js";
 import {
@@ -774,6 +775,8 @@ export function sanitizeSave(value) {
     wolfBiome: value.wolfBiome === true,
     wolfMission: sanitizeWolfMission(value.wolfMission),
     wolfTotems: sanitizeStructureList(value.wolfTotems, 100),
+    compassOwned: value.compassOwned === true,
+    waypoint: normalizeWaypoint(value.waypoint),
     craftXp: Number.isFinite(value.craftXp)
       ? Math.max(0, Math.min(10000000, Math.floor(value.craftXp)))
       : 0,

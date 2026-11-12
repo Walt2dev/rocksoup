@@ -111,14 +111,35 @@ export function skyColorsAt(time) {
   };
 }
 
+export function reflectionAnchorAt(celestial) {
+  const night = celestial?.night === true;
+  const active = night ? celestial?.moon : celestial?.sun;
+
+  if (!active || !active.visible) {
+    return null;
+  }
+
+  return {
+    kind: night ? "moon" : "sun",
+    night,
+    x: 0.18 + (active.progress ?? 0) * 0.64,
+    y: 0.26 - (active.elevation ?? 0) * 0.05,
+    intensity: active.intensity ?? 0.6,
+    phaseIndex: celestial.moon?.phaseIndex ?? 0,
+    illumination: celestial.moon?.illumination ?? 0,
+  };
+}
+
 export function celestialStateAt(time) {
   const sun = sunStateAt(time);
   const moon = moonStateAt(time);
-  return {
+  const state = {
     time: Number.isFinite(time) ? Math.max(0, time) : 0,
     night: isNightAt(time),
     sun,
     moon,
     sky: skyColorsAt(time),
   };
+  state.reflection = reflectionAnchorAt(state);
+  return state;
 }

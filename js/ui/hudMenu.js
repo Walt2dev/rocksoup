@@ -164,6 +164,10 @@ export class HudMenu {
         this.game?.toggleBirdPanel?.();
         this.close();
         break;
+      case "map":
+        this.game?.toggleMap?.();
+        this.close();
+        break;
       case "fief":
         this.click("btn-fief");
         this.close();
@@ -307,6 +311,8 @@ export class HudMenu {
         visible = (this.game?.alliedVillages?.().length ?? 0) > 0;
       } else if (requirement === "coffee") {
         visible = !this.hud.btnCoffee?.hidden;
+      } else if (requirement === "compass") {
+        visible = this.game?.compassOwned === true;
       }
 
       item.hidden = !visible;

@@ -112,6 +112,7 @@ export class WorldRenderer {
     ctx.fillRect(0, 0, width, height);
     this.pickables = [];
     const waterPath = new Path2D();
+    const waterSamples = [];
     let waterTileCount = 0;
 
     if (celestial?.sky) {
@@ -224,6 +225,9 @@ export class WorldRenderer {
               if (biomeId === BIOME.WATER) {
                 appendOffsetTilePath(waterPath, center, flatOffsets);
                 waterTileCount += 1;
+                if (waterSamples.length < 240) {
+                  waterSamples.push({ x: center.x, y: center.y });
+                }
               }
 
               const terrainTexture = assets.terrainTextures?.[biomeId];
@@ -285,6 +289,12 @@ export class WorldRenderer {
               if (biomeId === BIOME.WATER) {
                 appendTilePath(waterPath, topPoints);
                 waterTileCount += 1;
+                if (waterSamples.length < 240) {
+                  waterSamples.push({
+                    x: (topPoints[0].x + topPoints[2].x) / 2,
+                    y: (topPoints[0].y + topPoints[2].y) / 2,
+                  });
+                }
               }
               if (terrainTexture) {
                 baseTextures.push({
@@ -404,6 +414,7 @@ export class WorldRenderer {
       this.drawWaterReflections(ctx, {
         waterPath,
         waterTileCount,
+        waterSamples,
         camera,
         width,
         height,
@@ -997,21 +1008,48 @@ export class WorldRenderer {
     }
   }
 
-  drawWaterReflections(ctx, { waterPath, waterTileCount, camera, width, height, celestial }) {
-    const night = celestial.night === true;
-    const active = night ? celestial.moon : celestial.sun;
+  drawWaterReflections(ctx, { waterPath, waterTileCount, waterSamples = [], camera, width, height, celestial }) {
+    const reflection = celestial?.reflection;
 
-    if (!active || !active.visible) {
+    if (!reflection) {
       return;
     }
 
-    const anchorX = width * (0.5 + (active.azimuth ?? 0) * 0.34);
-    const anchorY = height * (0.56 - (active.elevation ?? 0) * 0.12);
-    const intensity = Math.max(0, Math.min(1, active.intensity ?? 0.6));
-    const glowRadius = Math.max(width, height) * 0.32;
+    const night = reflection.night === true;
+    const intensity = Math.max(0, Math.min(1, reflection.intensity ?? 0.6));
+    const anchorXTarget = width * Math.max(0.1, Math.min(0.9, reflection.x ?? 0.5));
+    let anchorX = anchorXTarget;
+    let anchorY = height * Math.max(0.12, Math.min(0.36, reflection.y ?? 0.26));
+
+    if (waterSamples.length > 0) {
+      let nearest = waterSamples[0];
+      let nearestDistance = Infinity;
+      for (const sample of waterSamples) {
+        const distance = Math.abs(sample.x - anchorXTarget);
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          nearest = sample;
+        }
+      }
+      anchorX = nearest.x;
+      anchorY = Math.max(18, nearest.y - 6);
+    }
+
+    const glowRadius = Math.max(width, height) * 0.42;
 
     ctx.save();
     ctx.clip(waterPath);
+
+    const tint = ctx.createLinearGradient(0, 0, 0, height);
+    if (night) {
+      tint.addColorStop(0, "rgba(20, 36, 74, 0.22)");
+      tint.addColorStop(1, "rgba(8, 18, 38, 0.3)");
+    } else {
+      tint.addColorStop(0, "rgba(74, 136, 168, 0.08)");
+      tint.addColorStop(1, "rgba(36, 92, 122, 0.12)");
+    }
+    ctx.fillStyle = tint;
+    ctx.fillRect(0, 0, width, height);
 
     const glow = ctx.createRadialGradient(
       anchorX,
@@ -1023,48 +1061,60 @@ export class WorldRenderer {
     );
 
     if (night) {
-      glow.addColorStop(0, `rgba(214, 228, 255, ${0.3 * intensity})`);
-      glow.addColorStop(0.45, `rgba(150, 180, 235, ${0.13 * intensity})`);
+      glow.addColorStop(0, `rgba(222, 234, 255, ${0.5 * intensity})`);
+      glow.addColorStop(0.35, `rgba(160, 190, 240, ${0.2 * intensity})`);
       glow.addColorStop(1, "rgba(120, 150, 210, 0)");
     } else {
-      glow.addColorStop(0, `rgba(255, 232, 160, ${0.34 * intensity})`);
-      glow.addColorStop(0.45, `rgba(255, 206, 120, ${0.15 * intensity})`);
-      glow.addColorStop(1, "rgba(255, 190, 90, 0)");
+      glow.addColorStop(0, `rgba(255, 240, 178, ${0.58 * intensity})`);
+      glow.addColorStop(0.35, `rgba(255, 204, 112, ${0.24 * intensity})`);
+      glow.addColorStop(1, "rgba(255, 180, 80, 0)");
     }
 
+    ctx.globalCompositeOperation = "lighter";
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, width, height);
+    ctx.globalCompositeOperation = "source-over";
 
     const column = ctx.createLinearGradient(
       anchorX,
       anchorY,
       anchorX,
-      Math.min(height, anchorY + height * 0.5),
+      Math.min(height, anchorY + height * 0.62),
     );
     column.addColorStop(
       0,
       night
-        ? `rgba(220, 236, 255, ${0.34 * intensity})`
-        : `rgba(255, 244, 206, ${0.4 * intensity})`,
+        ? `rgba(226, 238, 255, ${0.5 * intensity})`
+        : `rgba(255, 248, 214, ${0.55 * intensity})`,
     );
     column.addColorStop(
-      0.55,
+      0.4,
       night
-        ? `rgba(160, 190, 240, ${0.12 * intensity})`
-        : `rgba(255, 204, 122, ${0.14 * intensity})`,
+        ? `rgba(168, 198, 250, ${0.2 * intensity})`
+        : `rgba(255, 210, 120, ${0.2 * intensity})`,
     );
     column.addColorStop(1, "rgba(255, 255, 255, 0)");
     ctx.fillStyle = column;
-    ctx.fillRect(anchorX - width * 0.055, anchorY, width * 0.11, height * 0.55);
+    ctx.fillRect(anchorX - width * 0.05, anchorY, width * 0.1, height * 0.62);
+
+    const radius = Math.max(12, (night ? 18 : 23) * camera.zoom);
 
     if (night) {
-      const radius = Math.max(9, 17 * camera.zoom);
-      const illumination = Math.max(0, Math.min(1, celestial.moon.illumination ?? 0));
+      const illumination = Math.max(
+        0,
+        Math.min(1, reflection.illumination ?? 0),
+      );
 
-      if (illumination > 0.02) {
+      if (illumination <= 0.02) {
         ctx.beginPath();
         ctx.arc(anchorX, anchorY, radius, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(232, 240, 255, ${0.4 + illumination * 0.45})`;
+        ctx.strokeStyle = `rgba(230, 240, 255, ${0.65 * intensity})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.arc(anchorX, anchorY, radius, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(236, 243, 255, ${0.55 + illumination * 0.4})`;
         ctx.fill();
 
         if (illumination < 0.96) {
@@ -1072,15 +1122,14 @@ export class WorldRenderer {
             (1 - illumination) *
             radius *
             1.95 *
-            ((celestial.moon.phaseIndex ?? 0) <= 4 ? -1 : 1);
+            ((reflection.phaseIndex ?? 0) <= 4 ? -1 : 1);
           ctx.beginPath();
           ctx.arc(anchorX + offset, anchorY, radius * 1.02, 0, Math.PI * 2);
-          ctx.fillStyle = "rgba(9, 14, 26, 0.62)";
+          ctx.fillStyle = "rgba(9, 14, 26, 0.78)";
           ctx.fill();
         }
       }
     } else {
-      const radius = Math.max(10, 20 * camera.zoom);
       const sun = ctx.createRadialGradient(
         anchorX,
         anchorY,
@@ -1089,9 +1138,9 @@ export class WorldRenderer {
         anchorY,
         radius,
       );
-      sun.addColorStop(0, "rgba(255, 252, 226, 0.95)");
-      sun.addColorStop(0.5, "rgba(255, 224, 150, 0.6)");
-      sun.addColorStop(1, "rgba(255, 196, 104, 0)");
+      sun.addColorStop(0, "rgba(255, 252, 230, 1)");
+      sun.addColorStop(0.55, "rgba(255, 222, 144, 0.75)");
+      sun.addColorStop(1, "rgba(255, 190, 92, 0)");
       ctx.fillStyle = sun;
       ctx.beginPath();
       ctx.arc(anchorX, anchorY, radius, 0, Math.PI * 2);
@@ -1099,14 +1148,14 @@ export class WorldRenderer {
     }
 
     const sparkleCount = Math.min(
-      28,
-      Math.max(8, Math.floor(waterTileCount / 12)),
+      36,
+      Math.max(12, Math.floor(waterTileCount / 8)),
     );
     const clock = celestial.time ?? 0;
     ctx.beginPath();
 
     for (let index = 0; index < sparkleCount; index += 1) {
-      const phase = clock * 0.55 + index * 1.73;
+      const phase = clock * 0.65 + index * 1.73;
       const x =
         anchorX +
         Math.sin(phase + index * 2.17) * width * 0.22 +
@@ -1114,17 +1163,17 @@ export class WorldRenderer {
         9;
       const y =
         anchorY +
-        ((index * 53) % Math.max(20, height * 0.42)) +
+        ((index * 53) % Math.max(20, height * 0.46)) +
         Math.sin(phase * 1.3 + index) * 5;
-      const length = 4 + ((index * 7) % 10);
+      const length = 5 + ((index * 7) % 12);
       ctx.moveTo(x, y);
       ctx.lineTo(x + length, y);
     }
 
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1.2;
     ctx.strokeStyle = night
-      ? "rgba(220, 232, 255, 0.34)"
-      : "rgba(255, 236, 178, 0.42)";
+      ? "rgba(226, 238, 255, 0.46)"
+      : "rgba(255, 240, 186, 0.55)";
     ctx.stroke();
     ctx.restore();
   }
