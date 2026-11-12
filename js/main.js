@@ -35,6 +35,7 @@ import { LanClient } from "./net/lanClient.js";
 import { SocialUI } from "./net/social.js";
 import { HudMenu } from "./ui/hudMenu.js";
 import { loadAssets } from "./render/assets.js";
+import { DIFFICULTIES } from "./game/towerDefense.js";
 
 const byId = (id) => document.getElementById(id);
 
@@ -102,6 +103,12 @@ const ui = {
   btnLanLeave: byId("btn-lan-leave"),
   btnLanStart: byId("btn-lan-start"),
   characterGrid: byId("character-grid"),
+  bannerColors: byId("banner-colors"),
+  bannerName: byId("banner-name"),
+  bannerSymbol: byId("banner-symbol"),
+  bannerPreviewFlag: byId("banner-preview-flag"),
+  bannerPreviewName: byId("banner-preview-name"),
+  difficultyOptions: byId("difficulty-options"),
   btnCharacterBack: byId("btn-character-back"),
   btnCharacterConfirm: byId("btn-character-confirm"),
   devStatus: byId("dev-status"),
@@ -217,6 +224,11 @@ const ui = {
     compassDistance: byId("compass-distance"),
     compassLabel: byId("compass-label"),
     mapPanel: byId("map-panel"),
+    campaignOverlay: byId("campaign-overlay"),
+    campaignTitle: byId("campaign-title"),
+    campaignText: byId("campaign-text"),
+    btnCampaignContinue: byId("btn-campaign-continue"),
+    btnCampaignMenu: byId("btn-campaign-menu"),
     btnMapClose: byId("btn-map-close"),
     btnMapClear: byId("btn-map-clear"),
     btnMapWalk: byId("btn-map-walk"),
@@ -357,6 +369,13 @@ let lanClient = null;
 let lanPlaying = false;
 let pendingNewSeed = null;
 let selectedSkin = "explorer";
+let selectedBanner = {
+  color: "#e0a458",
+  name: "Colonia del Alba",
+  symbol: "sol",
+};
+let selectedDifficulty = "normal";
+const BANNER_COLORS = ["#e0a458", "#7ec699", "#6ca9e0", "#d97b6c", "#b58ce0", "#d8c46a", "#9fc7ff", "#c9b37a"];
 
 const social = new SocialUI({
   hud: ui.hud,
@@ -440,7 +459,7 @@ function attachHudMenu() {
   hudMenu.attach();
 }
 
-function beginGame(seed, saveState, characterSkin = null) {
+function beginGame(seed, saveState, characterSkin = null, options = {}) {
   ui.menuError.textContent = "";
   social.setEnabled(false);
   social.setClient(null);
@@ -461,6 +480,8 @@ function beginGame(seed, saveState, characterSkin = null) {
       seed,
       saveState,
       characterSkin,
+      colonyBanner: options.colonyBanner ?? null,
+      difficulty: options.difficulty ?? null,
       hud: ui.hud,
       onMenuRequested: returnToMenu,
     });
@@ -578,6 +599,67 @@ function refreshDonkeySkins() {
   renderDonkeySkinGrid(ui.devDonkeys, selected, select);
 }
 
+function updateBannerPreview() {
+  if (ui.bannerPreviewFlag) {
+    ui.bannerPreviewFlag.style.background = selectedBanner.color;
+    ui.bannerPreviewFlag.textContent = selectedBanner.symbol.slice(0, 1).toUpperCase();
+  }
+  if (ui.bannerPreviewName) {
+    ui.bannerPreviewName.textContent = selectedBanner.name || "Colonia sin nombre";
+  }
+}
+
+function renderBannerBuilder() {
+  if (ui.bannerColors) {
+    ui.bannerColors.replaceChildren(
+      ...BANNER_COLORS.map((color) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "banner-color";
+        button.style.background = color;
+        button.classList.toggle("is-selected", selectedBanner.color === color);
+        button.setAttribute("aria-label", `Color ${color}`);
+        button.addEventListener("click", () => {
+          selectedBanner.color = color;
+          renderBannerBuilder();
+        });
+        return button;
+      }),
+    );
+  }
+  if (ui.bannerName) {
+    ui.bannerName.value = selectedBanner.name;
+    ui.bannerName.oninput = () => {
+      selectedBanner.name = ui.bannerName.value.slice(0, 24);
+      updateBannerPreview();
+    };
+  }
+  if (ui.bannerSymbol) {
+    ui.bannerSymbol.value = selectedBanner.symbol;
+    ui.bannerSymbol.onchange = () => {
+      selectedBanner.symbol = ui.bannerSymbol.value;
+      updateBannerPreview();
+    };
+  }
+  if (ui.difficultyOptions) {
+    ui.difficultyOptions.replaceChildren(
+      ...Object.values(DIFFICULTIES).map((difficulty) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "difficulty-choice";
+        button.classList.toggle("is-selected", selectedDifficulty === difficulty.id);
+        button.textContent = difficulty.name;
+        button.addEventListener("click", () => {
+          selectedDifficulty = difficulty.id;
+          renderBannerBuilder();
+        });
+        return button;
+      }),
+    );
+  }
+  updateBannerPreview();
+}
+
 function openCharacterSelect(seed) {
   pendingNewSeed = seed;
   const saved = loadSkinId();
@@ -589,6 +671,7 @@ function openCharacterSelect(seed) {
   };
 
   renderSkinGrid(ui.characterGrid, selectedSkin, select);
+  renderBannerBuilder();
   showScreen("character");
 }
 
@@ -1225,7 +1308,10 @@ ui.btnCharacterConfirm.addEventListener("click", () => {
   const seed = pendingNewSeed;
   pendingNewSeed = null;
   saveSkinId(selectedSkin);
-  beginGame(seed, null, selectedSkin);
+  beginGame(seed, null, selectedSkin, {
+    colonyBanner: { ...selectedBanner },
+    difficulty: selectedDifficulty,
+  });
 });
 ui.btnPersonalization.addEventListener("click", openDevScreen);
 ui.btnDevBack.addEventListener("click", () => {

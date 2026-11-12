@@ -2960,6 +2960,10 @@ const FIEF_COLORS = {
   museo: "#9fc7ff",
   templo: "#7ec699",
   taberna: "#e0a458",
+  caballeria: "#c9a36a",
+  arqueria: "#b7c7e0",
+  germanderia: "#a8b5a0",
+  vivienda: "#c9b37a",
 };
 
 function createFiefBuildingSprite(type) {
@@ -3049,6 +3053,9 @@ function createFiefUnitSprite(type) {
     exorcist: "#b06bff",
     mercenary: "#e0a458",
     scout: "#c9b9a3",
+    rider: "#d6b47a",
+    lancer: "#c9a36a",
+    pikeman: "#a8b5a0",
   }[type] ?? "#ccc";
 
   ctx.fillStyle = "rgba(0,0,0,0.22)";
@@ -3078,13 +3085,17 @@ function createFiefUnitSprite(type) {
 
 export function createFiefSprites() {
   const buildings = {};
-  for (const type of ["armada", "museo", "templo", "taberna"]) {
+  for (const type of [
+    "armada", "museo", "templo", "taberna",
+    "caballeria", "arqueria", "germanderia", "vivienda",
+  ]) {
     buildings[type] = createFiefBuildingSprite(type);
   }
   const units = {};
   for (const type of [
     "soldier", "archer", "guardian", "scholar",
     "healer", "exorcist", "mercenary", "scout",
+    "rider", "lancer", "pikeman",
   ]) {
     units[type] = createFiefUnitSprite(type);
   }

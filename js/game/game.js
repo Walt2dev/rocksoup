@@ -63,15 +63,23 @@ import { sourceFor } from "./resourceSources.js";
 import { PLANETS, SKY_OBJECTS, searchSkyObjects } from "./skyCatalog.js";
 import { findVillageSites } from "./villages.js";
 import {
+  BANNER_RECRUITS,
+  BASE_POPULATION,
   BUILDING_SLOTS,
   BUILDING_TYPES,
-  GAME_MODES,
+  DIFFICULTIES,
+  HOUSING_POPULATION_BONUS,
+  HORDE_START_NIGHT,
+  MAX_HOUSING_PER_VILLAGE,
   UNIT_TYPES,
   buildingCost,
   buildingsForVillage,
+  difficultyById,
   fiefRank,
-  modeById,
-  nextMode,
+  housingCountForVillage,
+  nextNewMoonDay,
+  populationCapForProgresses,
+  shouldStartHorde,
   unitCapForBuilding,
   waveDamageMultiplier,
   waveEnemyCount,
@@ -193,6 +201,22 @@ const AUTOSAVE_INTERVAL = 15;
 const TOAST_DURATION = 2600;
 const ENERGY_REGEN = 7;
 const PATH_MAX_NODES = 4096;
+const COLONY_CORE_MAX_HP = 220;
+const DEFAULT_COLONY_BANNER = Object.freeze({
+  color: "#e0a458",
+  name: "Colonia del Alba",
+  symbol: "sol",
+});
+const BANNER_SYMBOLS = Object.freeze([
+  "sol",
+  "luna",
+  "lobo",
+  "arbol",
+  "martillo",
+  "estrella",
+  "ola",
+  "roca",
+]);
 const PLAYER_SPRITE_SCALE = 1.05;
 const CAMPFIRE_RADIUS = 4;
 const CAMPFIRE_REGEN_MULTIPLIER = 2.5;
@@ -299,6 +323,8 @@ export class Game {
     seed,
     saveState = null,
     characterSkin = null,
+    colonyBanner = null,
+    difficulty = null,
     hud,
     onMenuRequested,
     network = null,
@@ -650,22 +676,72 @@ export class Game {
     this.tradeOpen = false;
     this.tradeStatusText = "";
     this.skyAlign = null;
-    this.gameMode = saveState?.gameMode
-      ? modeById(saveState.gameMode).id
-      : "survival";
-    this.wavesStarted = saveState?.wavesStarted === true;
+    const legacyDifficulty =
+      saveState?.gameMode === "peaceful"
+        ? "easy"
+        : saveState?.gameMode === "survival"
+          ? "hard"
+          : "normal";
+    this.difficulty = difficultyById(
+      difficulty ?? saveState?.difficulty ?? legacyDifficulty,
+    ).id;
+    this.gameMode = this.difficulty;
+    const bannerSource = saveState?.colonyBanner ?? colonyBanner ?? {};
+    this.colonyBanner = {
+      color:
+        typeof bannerSource.color === "string" &&
+        /^#[0-9a-fA-F]{6}$/.test(bannerSource.color)
+          ? bannerSource.color
+          : DEFAULT_COLONY_BANNER.color,
+      name:
+        typeof bannerSource.name === "string" && bannerSource.name.trim()
+          ? bannerSource.name.trim().slice(0, 24)
+          : DEFAULT_COLONY_BANNER.name,
+      symbol: BANNER_SYMBOLS.includes(bannerSource.symbol)
+        ? bannerSource.symbol
+        : DEFAULT_COLONY_BANNER.symbol,
+    };
+    const coreSave = saveState?.colonyCore ?? {};
+    const coreHp = (value) =>
+      Number.isFinite(value)
+        ? Math.max(0, Math.min(COLONY_CORE_MAX_HP, Math.floor(value)))
+        : COLONY_CORE_MAX_HP;
+    this.colonyCore = {
+      university: {
+        hp: coreHp(coreSave.university?.hp),
+        maxHp: COLONY_CORE_MAX_HP,
+      },
+      observatory: {
+        hp: coreHp(coreSave.observatory?.hp),
+        maxHp: COLONY_CORE_MAX_HP,
+      },
+    };
+    this.campaignStatus =
+      saveState?.campaignStatus === "victory" ||
+      saveState?.campaignStatus === "defeat"
+        ? saveState.campaignStatus
+        : null;
+    this.campaignEndShown = false;
+    this.everAllied = saveState?.everAllied === true;
+    this.hordesStarted = saveState?.hordesStarted === true;
+    this.lastHordeDay = Number.isFinite(saveState?.lastHordeDay)
+      ? Math.max(0, Math.floor(saveState.lastHordeDay))
+      : 0;
+    this.pendingHordeDay = Number.isFinite(saveState?.pendingHordeDay)
+      ? Math.max(0, Math.floor(saveState.pendingHordeDay))
+      : 0;
+    this.wavesStarted = this.hordesStarted;
     this.wavesSurvived = Number.isFinite(saveState?.wavesSurvived)
       ? Math.max(0, Math.floor(saveState.wavesSurvived))
       : 0;
     this.waveIndex = Number.isFinite(saveState?.waveIndex)
       ? Math.max(0, Math.floor(saveState.waveIndex))
       : 0;
-    this.waveTimer = Number.isFinite(saveState?.waveTimer)
-      ? Math.max(0, saveState.waveTimer)
-      : (GAME_MODES[this.gameMode].interval ?? 90);
+    this.waveTimer = 0;
     this.waveActive = false;
     this.waveEnemyIds = new Set();
     this.waveTargetVillageId = null;
+    this.waveTargetCoreId = null;
     this.units = [];
     this.unitSeq = 0;
     this.selectedUnitId = null;
@@ -706,13 +782,23 @@ export class Game {
           ? Math.max(0, Math.min(100, saved.stability))
           : 100,
         delivered,
-        allied: saved.allied === true || delivered >= 4,
+        allied:
+          saved.lost !== true &&
+          (saved.allied === true || delivered >= 4),
+        lost: saved.lost === true,
+        everAllied:
+          saved.everAllied === true ||
+          saved.allied === true ||
+          delivered >= 4,
         crafted: typeof saved.crafted === "string" ? saved.crafted : null,
         lastProduction: Number.isFinite(saved.lastProduction)
           ? saved.lastProduction
           : this.gameTime,
         buildings,
       };
+      if (this.villageProgress[village.id].everAllied) {
+        this.everAllied = true;
+      }
     }
     this.wolfDen = findWolfDenSite(
       this.world,
@@ -858,6 +944,8 @@ export class Game {
     this.clearWaypoint = this.clearWaypoint.bind(this);
     this.walkToWaypoint = this.walkToWaypoint.bind(this);
     this.handleCrossWaypoint = this.handleCrossWaypoint.bind(this);
+    this.hideCampaignEnd = this.hideCampaignEnd.bind(this);
+    this.handleCampaignMenu = this.handleCampaignMenu.bind(this);
     this.renderMap = this.renderMap.bind(this);
     this.handleMapLandmarkClick = this.handleMapLandmarkClick.bind(this);
     this.toggleStatsCollapsed = this.toggleStatsCollapsed.bind(this);
@@ -895,6 +983,12 @@ export class Game {
           `Rastros de lobos: hay una cueva a ${distance} m. Los lobos merodean cerca.`,
         );
       }, 7000);
+    }
+
+    if (this.campaignStatus) {
+      this.showCampaignEnd(this.campaignStatus);
+    } else {
+      this.checkCampaignEnd();
     }
   }
 
@@ -3106,6 +3200,8 @@ export class Game {
     this.hud.btnMapCenter?.addEventListener("click", this.renderMap);
     this.hud.mapCanvas?.addEventListener("click", this.handleMapPointer);
     this.hud.mapLandmarks?.addEventListener("click", this.handleMapLandmarkClick);
+    this.hud.btnCampaignContinue?.addEventListener("click", this.hideCampaignEnd);
+    this.hud.btnCampaignMenu?.addEventListener("click", this.handleCampaignMenu);
     this.hud.btnGameMode?.addEventListener("click", this.toggleGameMode);
     this.hud.btnFief?.addEventListener("click", this.toggleFief);
     this.hud.btnFiefClose?.addEventListener("click", this.closeFief);
@@ -3250,6 +3346,8 @@ export class Game {
     this.hud.btnMapCenter?.removeEventListener("click", this.renderMap);
     this.hud.mapCanvas?.removeEventListener("click", this.handleMapPointer);
     this.hud.mapLandmarks?.removeEventListener("click", this.handleMapLandmarkClick);
+    this.hud.btnCampaignContinue?.removeEventListener("click", this.hideCampaignEnd);
+    this.hud.btnCampaignMenu?.removeEventListener("click", this.handleCampaignMenu);
     this.hud.btnGameMode?.removeEventListener("click", this.toggleGameMode);
     this.hud.btnFief?.removeEventListener("click", this.toggleFief);
     this.hud.btnFiefClose?.removeEventListener("click", this.closeFief);
@@ -3417,6 +3515,17 @@ export class Game {
       lensLevel: this.lensLevel,
       tradeRoutes: this.tradeRoutes.map((route) => ({ ...route })),
       gameMode: this.gameMode,
+      difficulty: this.difficulty,
+      colonyBanner: { ...this.colonyBanner },
+      colonyCore: {
+        university: { ...this.colonyCore.university },
+        observatory: { ...this.colonyCore.observatory },
+      },
+      campaignStatus: this.campaignStatus,
+      everAllied: this.everAllied,
+      hordesStarted: this.hordesStarted,
+      lastHordeDay: this.lastHordeDay,
+      pendingHordeDay: this.pendingHordeDay,
       wavesStarted: this.wavesStarted,
       wavesSurvived: this.wavesSurvived,
       waveIndex: this.waveIndex,
@@ -6370,6 +6479,7 @@ export class Game {
 
     this.updateHud();
     this.renderBirdPanel();
+    this.checkCampaignEnd();
     this.save();
     return first;
   }
@@ -6602,6 +6712,7 @@ export class Game {
     });
     this.updateHud();
     this.renderWolfPanel();
+    this.checkCampaignEnd();
     this.save();
   }
 
@@ -8263,17 +8374,28 @@ export class Game {
     this.villageSeen.add(village.id);
     progress.stability = Math.min(100, progress.stability + effectStability);
     const wasAllied = progress.allied;
+    if (progress.delivered >= 1) {
+      progress.everAllied = true;
+    }
     if (progress.delivered >= 4) {
       progress.allied = true;
       if (!wasAllied) {
+        progress.everAllied = true;
+        this.everAllied = true;
         progress.lastProduction = this.gameTime;
         this.notify(`${village.name} se ha unido a la alianza.`);
       }
+    }
+    if (progress.delivered === 1) {
+      this.notify(
+        `${village.name}: sus casas pueden convertirse en edificios de unidades desde el panel del feudo.`,
+      );
     }
     const line = civicLineForVillage(village);
     if (progress.delivered >= line.length) {
       this.completedVillages.add(village.id);
     }
+    this.checkCampaignEnd();
     this.effects.addText("Ritual entregado", village.x, village.y, {
       color: "#7ec699",
     });
@@ -8284,9 +8406,27 @@ export class Game {
   }
 
 ﻿  fiefVillages() {
-    return this.villages.filter(
-      (village) => this.villageProgress[village.id]?.allied,
+    return this.villages.filter((village) => {
+      const progress = this.villageProgress[village.id];
+      return progress && !progress.lost && progress.delivered >= 1;
+    });
+  }
+
+  populationCap() {
+    return populationCapForProgresses(
+      this.fiefVillages().map((village) => this.villageProgress[village.id]),
     );
+  }
+
+  populationUsed() {
+    return this.units.filter((unit) => unit.hp > 0).length;
+  }
+
+  colonyBannerPosition() {
+    if (this.university) {
+      return { x: this.university.x + 2.6, y: this.university.y + 2.4 };
+    }
+    return this.spawnPoint ?? this.playerTransform;
   }
 
   fiefBuildingPosition(village, slot) {
@@ -8334,6 +8474,7 @@ export class Game {
       wavesSurvived: this.wavesSurvived,
       mainAllied,
       stability,
+      victory: this.campaignStatus === "victory",
     });
   }
 
@@ -8341,9 +8482,10 @@ export class Game {
     this.units = this.units.filter((unit) => unit.villageId !== villageId);
     const village = this.villages.find((entry) => entry.id === villageId);
     const progress = this.villageProgress[villageId];
-    if (!village || !progress?.allied) {
+    if (!village || !progress || progress.lost || progress.delivered < 1) {
       return;
     }
+    const populationCap = this.populationCap();
     const slots = buildingsForVillage(progress);
     for (let slot = 0; slot < slots.length; slot += 1) {
       const building = slots[slot];
@@ -8351,18 +8493,25 @@ export class Game {
         continue;
       }
       const type = BUILDING_TYPES[building.type];
+      if (!type?.primaryUnit) {
+        continue;
+      }
       const count = Math.min(3, building.level);
       for (let index = 0; index < count; index += 1) {
-        if (this.units.length >= 40) {
+        if (this.units.length >= populationCap) {
           return;
         }
         const unitType = index === 2 ? type.secondaryUnit : type.primaryUnit;
         const stats = UNIT_TYPES[unitType];
+        if (!stats) {
+          continue;
+        }
         const position = this.fiefBuildingPosition(village, slot);
         this.unitSeq += 1;
         this.units.push({
           id: `unit:${this.unitSeq}`,
           villageId,
+          bannerUnit: false,
           type: unitType,
           name: stats.name,
           x: position.x + (index - 1) * 0.55,
@@ -8392,7 +8541,16 @@ export class Game {
     const village = this.villages.find((entry) => entry.id === villageId);
     const progress = this.villageProgress[villageId];
     const type = BUILDING_TYPES[typeId];
-    if (!village || !progress?.allied || !type) {
+    if (!village || !progress || progress.lost || progress.delivered < 1 || !type) {
+      return false;
+    }
+    if (
+      typeId === "vivienda" &&
+      housingCountForVillage(progress) >= MAX_HOUSING_PER_VILLAGE
+    ) {
+      this.notify(
+        `Máximo ${MAX_HOUSING_PER_VILLAGE} zonas habitacionales por aldea.`,
+      );
       return false;
     }
     const slots = buildingsForVillage(progress);
@@ -8410,6 +8568,88 @@ export class Game {
     this.syncVillageUnits(villageId);
     this.save();
     this.notify(`${type.name} construida en ${village.name}.`);
+    return true;
+  }
+
+  recruitBannerUnit(typeId) {
+    const recruit = BANNER_RECRUITS[typeId];
+    const stats = UNIT_TYPES[typeId];
+    if (!recruit || !stats) {
+      return false;
+    }
+    if (this.populationUsed() >= this.populationCap()) {
+      this.notify(
+        `Población al máximo (${this.populationUsed()}/${this.populationCap()}). Construye zonas habitacionales.`,
+      );
+      return false;
+    }
+    if (!this.inventory.has(recruit.cost)) {
+      this.notify("Faltan recursos para reclutar esa unidad.");
+      return false;
+    }
+    this.inventory.spend(recruit.cost);
+    const banner = this.colonyBannerPosition();
+    this.unitSeq += 1;
+    this.units.push({
+      id: `unit:${this.unitSeq}`,
+      villageId: null,
+      bannerUnit: true,
+      type: typeId,
+      name: stats.name,
+      x: banner.x + (this.unitSeq % 2 === 0 ? 1.4 : -1.4),
+      y: banner.y + 1.1,
+      hp: stats.hp,
+      maxHp: stats.hp,
+      damage: stats.damage,
+      range: stats.range,
+      speed: stats.speed,
+      role: stats.role,
+      color: stats.color,
+      cooldown: 0,
+      rally: { x: banner.x, y: banner.y },
+      manual: false,
+    });
+    this.notify(`${stats.name} reclutado en la bandera.`);
+    this.updateHud();
+    this.renderFief();
+    this.save();
+    return true;
+  }
+
+  regroupBanner() {
+    const banner = this.colonyBannerPosition();
+    for (const unit of this.units) {
+      if (unit.hp <= 0) {
+        continue;
+      }
+      unit.rally = { x: banner.x, y: banner.y };
+      unit.manual = true;
+    }
+    this.notify("Todas las unidades se reagrupan en la bandera.");
+    this.save();
+  }
+
+  repairColonyCore(coreId) {
+    const core = this.colonyCore?.[coreId];
+    if (!core || core.hp >= core.maxHp) {
+      return false;
+    }
+    const missing = core.maxHp - core.hp;
+    const costs = {
+      madera: Math.max(1, Math.ceil(missing / 60)),
+      piedra: Math.max(1, Math.ceil(missing / 60)),
+      oro: Math.max(1, Math.ceil(missing / 120)),
+    };
+    if (!this.inventory.has(costs)) {
+      this.notify("Faltan recursos para reparar el edificio núcleo.");
+      return false;
+    }
+    this.inventory.spend(costs);
+    core.hp = core.maxHp;
+    this.notify("Edificio núcleo reparado.");
+    this.updateHud();
+    this.renderFief();
+    this.save();
     return true;
   }
 
@@ -8461,24 +8701,40 @@ export class Game {
     return true;
   }
 
+  nextHordeText() {
+    if (this.campaignStatus === "victory") {
+      return "Campaña ganada · Dedoscracia proclamada.";
+    }
+    if (this.campaignStatus === "defeat") {
+      return "Campaña perdida.";
+    }
+    if (this.waveActive) {
+      const target = this.waveTargetCoreId
+        ? this.waveTargetCoreId === "university"
+          ? "la Biblioteca"
+          : "el Observatorio"
+        : this.villages.find((v) => v.id === this.waveTargetVillageId)?.name ??
+          "la colonia";
+      return `Horda ${this.waveIndex} atacando ${target}.`;
+    }
+    if (!this.hordesStarted) {
+      const remaining = Math.max(0, HORDE_START_NIGHT - this.currentGameDay());
+      return remaining > 0
+        ? `Primera horda en la noche ${HORDE_START_NIGHT} (faltan ${remaining} día${remaining === 1 ? "" : "s"}).`
+        : "La primera horda puede llegar esta noche.";
+    }
+    const nextDay = nextNewMoonDay(this.currentGameDay() + (this.isNight() ? 1 : 0));
+    return `Próxima horda: luna nueva del día ${nextDay}.`;
+  }
+
   setGameMode(modeId) {
-    const mode = GAME_MODES[modeId];
-    if (!mode) {
-      return;
-    }
-    this.gameMode = mode.id;
-    if (mode.id === "peaceful") {
-      this.clearWave();
-    } else if (this.wavesStarted) {
-      this.waveTimer = mode.interval;
-    }
-    this.save();
-    this.notify(`Modo: ${mode.name}.`);
-    this.renderFief();
+    this.notify("La dificultad se elige al iniciar la partida.");
   }
 
   toggleGameMode() {
-    this.setGameMode(nextMode(this.gameMode));
+    this.notify(
+      `Dificultad: ${difficultyById(this.difficulty).name}. Se fija al iniciar la partida.`,
+    );
   }
 
   clearWave() {
@@ -8488,6 +8744,7 @@ export class Game {
     this.waveEnemyIds.clear();
     this.waveActive = false;
     this.waveTargetVillageId = null;
+    this.waveTargetCoreId = null;
   }
 
 ﻿
@@ -8508,7 +8765,7 @@ export class Game {
         : allied[0]?.id ?? null;
     this.fiefStatusText = allied.length
       ? ""
-      : "Aún no tienes aldeas aliadas. Completa el cuarto ritual de una aldea principal.";
+      : "Aún no tienes aldeas desbloqueadas. Completa la primera misión de una aldea.";
     this.hud.fiefPanel?.classList.add("is-open");
     this.hud.fiefPanel?.setAttribute("aria-hidden", "false");
     this.renderFief();
@@ -8527,26 +8784,19 @@ export class Game {
     const allied = this.fiefVillages();
     if (this.hud.fiefModes) {
       this.hud.fiefModes.replaceChildren(
-        ...Object.values(GAME_MODES).map((mode) => {
+        ...Object.values(DIFFICULTIES).map((mode) => {
           const button = document.createElement("button");
           button.type = "button";
           button.className = "fief-mode";
-          button.classList.toggle("is-active", this.gameMode === mode.id);
-          button.dataset.fiefMode = mode.id;
+          button.disabled = true;
+          button.classList.toggle("is-active", this.difficulty === mode.id);
           button.textContent = mode.name;
           return button;
         }),
       );
     }
     if (this.hud.fiefWave) {
-      const target = this.villages.find((village) => village.id === this.waveTargetVillageId);
-      this.hud.fiefWave.textContent = !this.wavesStarted
-        ? "Las oleadas comienzan tras el 4.º ritual de una aldea principal."
-        : this.gameMode === "peaceful"
-          ? "Modo pacífico: oleadas en pausa."
-          : this.waveActive
-            ? `Oleada ${this.waveIndex} atacando ${target?.name ?? "la alianza"}.`
-            : `Próxima oleada en ${Math.max(0, Math.ceil(this.waveTimer))} s · Modo ${modeById(this.gameMode).name}.`;
+      this.hud.fiefWave.textContent = this.nextHordeText();
     }
     if (this.hud.fiefVillages) {
       this.hud.fiefVillages.replaceChildren(
@@ -8568,19 +8818,21 @@ export class Game {
       return;
     }
     if (!village) {
-      this.hud.fiefContent.replaceChildren();
+      this.hud.fiefContent.replaceChildren(...this.createFiefGlobalCards());
       return;
     }
     const progress = this.villageProgress[village.id];
     const slots = buildingsForVillage(progress);
-    const cards = [];
+    const cards = this.createFiefGlobalCards();
+
     for (let slot = 0; slot < BUILDING_SLOTS; slot += 1) {
       const building = slots[slot];
       const card = document.createElement("article");
       card.className = "fief-building";
       if (!building) {
         const title = document.createElement("strong");
-        title.textContent = `Solar ${slot + 1} · vacío`;
+        const housing = housingCountForVillage(progress);
+        title.textContent = `Solar ${slot + 1} · vacío · viviendas ${housing}/${MAX_HOUSING_PER_VILLAGE}`;
         card.append(title);
         const actions = document.createElement("div");
         actions.className = "fief-building-actions";
@@ -8592,6 +8844,9 @@ export class Game {
           button.dataset.fiefVillage = village.id;
           const costs = buildingCost(type.id, 1);
           button.textContent = `${type.name} (${Object.entries(costs).map(([key, amount]) => `${RESOURCE_INFO[key]?.label ?? key} ${amount}`).join(", ")})`;
+          button.disabled =
+            type.id === "vivienda" &&
+            housing >= MAX_HOUSING_PER_VILLAGE;
           actions.append(button);
         }
         card.append(actions);
@@ -8641,7 +8896,84 @@ export class Game {
     }
   }
 
+  createFiefGlobalCards() {
+    const cards = [];
+
+    const bannerCard = document.createElement("article");
+    bannerCard.className = "fief-building fief-banner-card";
+    const bannerTitle = document.createElement("strong");
+    bannerTitle.textContent = `Bandera: ${this.colonyBanner.name}`;
+    const bannerInfo = document.createElement("span");
+    bannerInfo.style.color = this.colonyBanner.color;
+    bannerInfo.textContent = `Símbolo: ${this.colonyBanner.symbol} · Dificultad: ${difficultyById(this.difficulty).name} · Población: ${this.populationUsed()}/${this.populationCap()}`;
+    const bannerActions = document.createElement("div");
+    bannerActions.className = "fief-building-actions";
+    for (const [typeId, recruit] of Object.entries(BANNER_RECRUITS)) {
+      const stats = UNIT_TYPES[typeId];
+      if (!stats) {
+        continue;
+      }
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.fiefRecruit = typeId;
+      const cost = Object.entries(recruit.cost)
+        .map(([key, amount]) => `${RESOURCE_INFO[key]?.label ?? key} ${amount}`)
+        .join(", ");
+      button.textContent = `${recruit.category === "attack" ? "Ataque" : "Defensa"}: ${stats.name} (${cost})`;
+      button.disabled = !this.inventory.has(recruit.cost);
+      bannerActions.append(button);
+    }
+    const regroupBanner = document.createElement("button");
+    regroupBanner.type = "button";
+    regroupBanner.dataset.fiefBannerRegroup = "1";
+    regroupBanner.textContent = "Reagrupar en la bandera";
+    bannerActions.append(regroupBanner);
+    bannerCard.append(bannerTitle, bannerInfo, bannerActions);
+    cards.push(bannerCard);
+
+    const coreCard = document.createElement("article");
+    coreCard.className = "fief-building fief-core-card";
+    const coreTitle = document.createElement("strong");
+    coreTitle.textContent = "Edificios núcleo de la colonia";
+    coreCard.append(coreTitle);
+    for (const [coreId, coreName] of [
+      ["university", "Biblioteca / Universidad"],
+      ["observatory", "Observatorio"],
+    ]) {
+      const core = this.colonyCore[coreId];
+      const row = document.createElement("div");
+      row.className = "fief-core-row";
+      const label = document.createElement("span");
+      label.textContent = `${coreName}: ${Math.round(core.hp)}/${core.maxHp}`;
+      row.append(label);
+      if (core.hp < core.maxHp) {
+        const repair = document.createElement("button");
+        repair.type = "button";
+        repair.dataset.fiefCoreRepair = coreId;
+        repair.textContent = "Reparar";
+        row.append(repair);
+      }
+      coreCard.append(row);
+    }
+    cards.push(coreCard);
+    return cards;
+  }
+
   handleFiefClick(event) {
+    const recruit = event.target.closest("[data-fief-recruit]");
+    if (recruit) {
+      this.recruitBannerUnit(recruit.dataset.fiefRecruit);
+      return;
+    }
+    const coreRepair = event.target.closest("[data-fief-core-repair]");
+    if (coreRepair) {
+      this.repairColonyCore(coreRepair.dataset.fiefCoreRepair);
+      return;
+    }
+    if (event.target.closest("[data-fief-banner-regroup]")) {
+      this.regroupBanner();
+      return;
+    }
     const mode = event.target.closest("[data-fief-mode]");
     if (mode) {
       this.setGameMode(mode.dataset.fiefMode);
@@ -8701,74 +9033,127 @@ export class Game {
     deltaSeconds = this.fiefAiTimer;
     this.fiefAiTimer = 0;
 
-    if (!this.wavesStarted) {
-      const firstMain = this.fiefVillages().some((village) =>
-        [2, 3, 5, 6].includes(village.biome),
-      );
-      if (firstMain) {
-        this.wavesStarted = true;
-        this.waveTimer = GAME_MODES[this.gameMode].interval ?? 90;
-        this.notify("¡Las oleadas enemigas han comenzado!");
-      }
+    if (this.campaignStatus) {
+      return;
     }
 
     this.updateFiefUnits(deltaSeconds);
 
-    if (!this.wavesStarted || this.gameMode === "peaceful") {
-      return;
-    }
-
     if (this.waveActive) {
+      const night = this.isNight();
+      const day = this.currentGameDay();
+      const moonPhaseId = this.moonPhase().id;
+      if (
+        this.hordesStarted &&
+        night &&
+        moonPhaseId === "new" &&
+        day !== this.lastHordeDay &&
+        this.pendingHordeDay !== day
+      ) {
+        this.pendingHordeDay = day;
+        this.lastHordeDay = day;
+      }
       this.updateWaveEnemies(deltaSeconds);
       return;
     }
 
-    this.waveTimer = Math.max(
-      0,
-      this.waveTimer - Math.max(0, deltaSeconds),
-    );
-    if (this.waveTimer <= 0) {
+    if (this.pendingHordeDay > 0) {
+      const pending = this.pendingHordeDay;
+      this.pendingHordeDay = 0;
+      this.lastHordeDay = pending;
       this.startWave();
+      return;
     }
+
+    const night = this.isNight();
+    const day = this.currentGameDay();
+    const moonPhaseId = this.moonPhase().id;
+    const trigger = shouldStartHorde({
+      night,
+      day,
+      moonPhaseId,
+      hordesStarted: this.hordesStarted,
+      lastHordeDay: this.lastHordeDay,
+    });
+
+    if (!trigger) {
+      return;
+    }
+
+    if (!this.hordesStarted) {
+      this.hordesStarted = true;
+      this.wavesStarted = true;
+      this.notify("¡La primera horda enemiga marcha sobre la colonia!");
+    }
+
+    this.lastHordeDay = day;
+    this.startWave();
   }
 
   startWave() {
-    const allied = this.fiefVillages();
-    if (allied.length === 0) {
-      this.waveTimer = GAME_MODES[this.gameMode].interval ?? 90;
-      return;
+    const defendable = this.fiefVillages();
+    let target = null;
+    let targetName = "";
+    let targetX = 0;
+    let targetY = 0;
+    let coreId = null;
+
+    if (defendable.length > 0) {
+      target = defendable.reduce((best, village) =>
+        this.villageProgress[village.id].stability <
+        this.villageProgress[best.id].stability
+          ? village
+          : best,
+      );
+      targetName = target.name;
+      targetX = target.x;
+      targetY = target.y;
+      this.waveTargetVillageId = target.id;
+      this.waveTargetCoreId = null;
+    } else {
+      coreId =
+        this.colonyCore.university.hp > 0 ? "university" : "observatory";
+      const core = this.colonyCore[coreId];
+      if (!core || core.hp <= 0) {
+        this.checkCampaignEnd();
+        return;
+      }
+      const corePosition =
+        coreId === "university" ? this.university : this.observatory;
+      if (!corePosition) {
+        return;
+      }
+      targetName = coreId === "university" ? "la Biblioteca" : "el Observatorio";
+      targetX = corePosition.x;
+      targetY = corePosition.y;
+      this.waveTargetVillageId = null;
+      this.waveTargetCoreId = coreId;
     }
-    const target = allied.reduce((best, village) =>
-      this.villageProgress[village.id].stability <
-      this.villageProgress[best.id].stability
-        ? village
-        : best,
-    );
-    this.waveTargetVillageId = target.id;
+
     this.waveIndex += 1;
     this.waveActive = true;
-    const count = waveEnemyCount(this.waveIndex);
-    const targetProgress = this.villageProgress[target.id];
+    const count = waveEnemyCount(this.waveIndex, this.difficulty);
 
     for (let index = 0; index < count; index += 1) {
       const angle = (index / count) * Math.PI * 2 + this.waveIndex * 0.37;
       const radius = 11 + (index % 3) * 1.5;
-      const x = target.x + Math.cos(angle) * radius;
-      const y = target.y + Math.sin(angle) * radius;
+      const x = targetX + Math.cos(angle) * radius;
+      const y = targetY + Math.sin(angle) * radius;
       const type = waveTypeForIndex(index, this.waveIndex);
       const species =
         type === "archer" ? AMBIENT_SPECIES.SPIDER : AMBIENT_SPECIES.NIGHTLING;
       const ambient = buildAmbientData(this.ambientRng, species, x, y);
       ambient.wave = true;
       ambient.raidType = type;
-      ambient.waveTargetVillageId = target.id;
+      ambient.waveTargetVillageId = target?.id ?? null;
+      ambient.waveTargetCoreId = coreId;
       ambient.health = Math.round(
         (type === "brute" ? 120 : type === "shaman" ? 90 : 60) *
-          waveHealthMultiplier(this.waveIndex),
+          waveHealthMultiplier(this.waveIndex, this.difficulty),
       );
       ambient.damage = Math.round(
         (type === "brute" ? 18 : type === "shaman" ? 8 : 10) *
-          waveDamageMultiplier(this.waveIndex),
+          waveDamageMultiplier(this.waveIndex, this.difficulty),
       );
       const id = createAmbientEntity(this.ecs, {
         species,
@@ -8780,7 +9165,7 @@ export class Game {
     }
 
     this.notify(
-      `Oleada ${this.waveIndex}: ${count} enemigos atacan ${target.name}.`,
+      `Horda ${this.waveIndex}: ${count} enemigos atacan ${targetName}.`,
     );
     this.save();
   }
@@ -8792,6 +9177,25 @@ export class Game {
     const targetProgress = targetVillage
       ? this.villageProgress[targetVillage.id]
       : null;
+    const targetCore =
+      this.waveTargetCoreId === "university"
+        ? this.university
+        : this.waveTargetCoreId === "observatory"
+          ? this.observatory
+          : null;
+    const stabilityScale = difficultyById(this.difficulty).stabilityScale;
+
+    if (this.waveTargetVillageId && !targetVillage) {
+      this.clearWave();
+      return;
+    }
+    if (
+      this.waveTargetCoreId &&
+      (!targetCore || this.colonyCore[this.waveTargetCoreId]?.hp <= 0)
+    ) {
+      this.clearWave();
+      return;
+    }
 
     for (const id of [...this.waveEnemyIds]) {
       const ambient = this.ecs.getComponent(id, Component.AMBIENT);
@@ -8840,44 +9244,64 @@ export class Game {
         continue;
       }
 
-      if (!targetVillage) {
+      if (!targetVillage && !targetCore) {
         continue;
       }
+      const targetX = targetVillage?.x ?? targetCore.x;
+      const targetY = targetVillage?.y ?? targetCore.y;
       const centerDistance = Math.hypot(
-        transform.x - targetVillage.x,
-        transform.y - targetVillage.y,
+        transform.x - targetX,
+        transform.y - targetY,
       );
       if (centerDistance <= 1.8) {
         if (ambient.attackCooldown <= 0) {
           ambient.attackCooldown = 1.3;
-          const slots = buildingsForVillage(targetProgress);
-          const intact = slots
-            .map((building, slot) => ({ building, slot }))
-            .filter((entry) => entry.building && entry.building.hp > 0);
-          if (intact.length > 0) {
-            const pick = intact[this.waveIndex % intact.length];
-            pick.building.hp = Math.max(0, pick.building.hp - ambient.damage);
-            targetProgress.buildings = slots;
-            if (pick.building.hp <= 0) {
-              this.syncVillageUnits(targetVillage.id);
-              this.notify(`Un edificio de ${targetVillage.name} ha sido destruido.`);
+          if (this.waveTargetCoreId) {
+            const core = this.colonyCore[this.waveTargetCoreId];
+            if (core) {
+              core.hp = Math.max(0, core.hp - ambient.damage);
+              if (core.hp <= 0) {
+                this.notify(
+                  this.waveTargetCoreId === "university"
+                    ? "¡La Biblioteca de la colonia ha sido destruida!"
+                    : "¡El Observatorio de la colonia ha sido destruido!",
+                );
+                this.checkCampaignEnd();
+              }
             }
-          } else {
-            targetProgress.stability = Math.max(
-              0,
-              targetProgress.stability - ambient.damage * 0.25,
-            );
+          } else if (targetProgress) {
+            const slots = buildingsForVillage(targetProgress);
+            const intact = slots
+              .map((building, slot) => ({ building, slot }))
+              .filter((entry) => entry.building && entry.building.hp > 0);
+            if (intact.length > 0) {
+              const pick = intact[this.waveIndex % intact.length];
+              pick.building.hp = Math.max(0, pick.building.hp - ambient.damage);
+              targetProgress.buildings = slots;
+              if (pick.building.hp <= 0) {
+                this.syncVillageUnits(targetVillage.id);
+                this.notify(`Un edificio de ${targetVillage.name} ha sido destruido.`);
+              }
+            } else {
+              targetProgress.stability = Math.max(
+                0,
+                targetProgress.stability - ambient.damage * 0.25 * stabilityScale,
+              );
+              if (targetProgress.stability <= 0) {
+                this.loseVillage(targetVillage);
+              }
+            }
           }
         }
         continue;
       }
 
-      const dx = targetVillage.x - transform.x;
-      const dy = targetVillage.y - transform.y;
+      const dx = targetX - transform.x;
+      const dy = targetY - transform.y;
       const length = Math.hypot(dx, dy) || 1;
       const step = 1.65 * deltaSeconds;
-      ambient.anchorX = targetVillage.x;
-      ambient.anchorY = targetVillage.y;
+      ambient.anchorX = targetX;
+      ambient.anchorY = targetY;
       ambient.state = "raid";
       motion.moving = true;
       motion.walkTime += deltaSeconds;
@@ -8985,7 +9409,7 @@ export class Game {
     this.waveActive = false;
     this.wavesSurvived += 1;
     this.waveEnemyIds.clear();
-    this.waveTimer = GAME_MODES[this.gameMode].interval ?? 90;
+    this.waveTargetCoreId = null;
     this.inventory.add("oro", 2 + Math.floor(this.waveIndex / 2));
     this.inventory.add("bayas", 3);
     this.syncAllVillageUnits();
@@ -8996,8 +9420,104 @@ export class Game {
         progress.stability = Math.min(100, progress.stability + 8);
       }
     }
-    this.notify(`Oleada ${this.waveIndex} superada. La alianza resiste.`);
+    this.notify(`Horda ${this.waveIndex} superada. La colonia resiste.`);
+    this.checkCampaignEnd();
     this.save();
+  }
+
+  loseVillage(village) {
+    const progress = this.villageProgress?.[village.id];
+    if (!progress || progress.lost) {
+      return;
+    }
+    progress.lost = true;
+    progress.allied = false;
+    progress.buildings = buildingsForVillage(progress).map(() => null);
+    this.units = this.units.filter((unit) => unit.villageId !== village.id);
+    this.notify(`${village.name} ha caído en manos enemigas.`);
+    this.checkCampaignEnd();
+    this.save();
+  }
+
+  checkCampaignEnd() {
+    if (this.campaignStatus) {
+      return this.campaignStatus;
+    }
+
+    const allied = this.alliedVillages();
+    const allAllied = this.villages.every(
+      (village) => this.villageProgress[village.id]?.allied === true,
+    );
+    const allMissions =
+      this.completedVillages.size >= this.villages.length &&
+      this.wolfMission.completed === true &&
+      this.birdMissionCompleted === true;
+
+    if (allAllied && allMissions) {
+      this.endCampaign("victory");
+      return "victory";
+    }
+
+    const coreLost =
+      this.colonyCore.university.hp <= 0 &&
+      this.colonyCore.observatory.hp <= 0;
+    const villagesLost = this.everAllied && allied.length === 0;
+
+    if (coreLost || villagesLost) {
+      this.endCampaign("defeat");
+      return "defeat";
+    }
+
+    return null;
+  }
+
+  endCampaign(status) {
+    if (this.campaignStatus) {
+      return;
+    }
+    this.campaignStatus = status;
+    this.waveActive = false;
+    this.waveEnemyIds.clear();
+    this.clearWave();
+    this.showCampaignEnd(status);
+    this.save();
+  }
+
+  showCampaignEnd(status) {
+    const overlay = this.hud.campaignOverlay;
+    if (!overlay) {
+      return;
+    }
+    const victory = status === "victory";
+    overlay.hidden = false;
+    overlay.classList.add("is-open");
+    overlay.dataset.status = status;
+    if (this.hud.campaignTitle) {
+      this.hud.campaignTitle.textContent = victory
+        ? "Príncipes de Arua Rua Rua"
+        : "La colonia ha caído";
+    }
+    if (this.hud.campaignText) {
+      this.hud.campaignText.textContent = victory
+        ? "Todas las aldeas y misiones están completas. Se decreta la Dedoscracia."
+        : "Las aldeas y los edificios núcleo han sido destruidos. La campaña termina aquí.";
+    }
+    if (this.hud.btnCampaignContinue) {
+      this.hud.btnCampaignContinue.hidden = !victory;
+    }
+  }
+
+  hideCampaignEnd() {
+    const overlay = this.hud.campaignOverlay;
+    if (overlay) {
+      overlay.hidden = true;
+      overlay.classList.remove("is-open");
+    }
+  }
+
+  handleCampaignMenu() {
+    this.hideCampaignEnd();
+    this.onMenuRequested?.();
   }
 
   updateVillageBalance(deltaSeconds) {
@@ -13198,6 +13718,7 @@ export class Game {
       celestial,
     });
 
+    this.drawColonyBanner();
     this.drawFarmPlots();
     this.drawQuestRings();
     this.drawWaypointMarker();
@@ -13238,6 +13759,76 @@ export class Game {
     ctx.lineTo(points[2].x, points[2].y);
     ctx.lineTo(points[3].x, points[3].y);
     ctx.closePath();
+  }
+
+  drawColonyBanner() {
+    const banner = this.colonyBannerPosition();
+    if (!banner) {
+      return;
+    }
+    const ctx = this.ctx;
+    const camera = this.camera;
+    const point = camera.project(banner.x, banner.y, 0);
+    if (
+      point.x < -80 ||
+      point.x > camera.width + 80 ||
+      point.y < -120 ||
+      point.y > camera.height + 120
+    ) {
+      return;
+    }
+
+    const zoom = camera.zoom;
+    const poleHeight = 70 * zoom;
+    const flagWidth = 34 * zoom;
+    const flagHeight = 22 * zoom;
+    const color = this.colonyBanner.color;
+    const symbols = {
+      sol: "S",
+      luna: "L",
+      lobo: "W",
+      arbol: "T",
+      martillo: "H",
+      estrella: "*",
+      ola: "~",
+      roca: "R",
+    };
+
+    ctx.save();
+    ctx.strokeStyle = "rgba(58, 44, 30, 0.95)";
+    ctx.lineWidth = Math.max(2, 3 * zoom);
+    ctx.beginPath();
+    ctx.moveTo(point.x, point.y);
+    ctx.lineTo(point.x, point.y - poleHeight);
+    ctx.stroke();
+
+    ctx.fillStyle = color;
+    ctx.strokeStyle = "rgba(20, 26, 32, 0.85)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(point.x, point.y - poleHeight);
+    ctx.lineTo(point.x + flagWidth, point.y - poleHeight + flagHeight * 0.2);
+    ctx.lineTo(point.x + flagWidth, point.y - poleHeight + flagHeight);
+    ctx.lineTo(point.x, point.y - poleHeight + flagHeight * 0.8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(18, 24, 30, 0.85)";
+    ctx.font = `700 ${Math.max(9, Math.round(11 * zoom))}px monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(
+      symbols[this.colonyBanner.symbol] ?? "C",
+      point.x + flagWidth * 0.5,
+      point.y - poleHeight + flagHeight * 0.5,
+    );
+
+    ctx.fillStyle = "rgba(240, 236, 220, 0.9)";
+    ctx.font = `600 ${Math.max(9, Math.round(10 * zoom))}px monospace`;
+    ctx.textBaseline = "bottom";
+    ctx.fillText(this.colonyBanner.name, point.x, point.y - poleHeight - 5 * zoom);
+    ctx.restore();
   }
 
   drawWaypointMarker() {
@@ -14143,18 +14734,11 @@ export class Game {
     this.hud.biome.textContent = mineral ? `${biome.name} · ${mineral.name}` : biome.name;
     this.hud.fauna.textContent = String(this.getAmbientIds().length);
     if (this.hud.gameModeLabel) {
-      this.hud.gameModeLabel.textContent = modeById(this.gameMode).name;
+      this.hud.gameModeLabel.textContent = difficultyById(this.difficulty).name;
     }
     if (this.hud.waveTimer) {
-      const target = this.villages.find((village) => village.id === this.waveTargetVillageId);
-      this.hud.waveTimer.hidden = !this.wavesStarted;
-      this.hud.waveTimer.textContent = !this.wavesStarted
-        ? ""
-        : this.gameMode === "peaceful"
-          ? "Pacífico"
-          : this.waveActive
-            ? `Oleada ${this.waveIndex} · ${target?.name ?? "defensa"}`
-            : `Oleada en ${Math.max(0, Math.ceil(this.waveTimer))} s`;
+      this.hud.waveTimer.hidden = this.campaignStatus !== null;
+      this.hud.waveTimer.textContent = this.nextHordeText();
     }
     const cycleInfo = this.cycleHudInfo();
     if (this.hud.cycle) {

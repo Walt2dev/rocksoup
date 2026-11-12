@@ -280,6 +280,35 @@
           <h2>Elige tu personaje</h2>
           <p class="lan-lead">El arquetipo cambia solo la apariencia. Las estadísticas y recetas son iguales para todos.</p>
           <div id="character-grid" class="character-grid"></div>
+          <div class="banner-builder">
+            <h3>Bandera de la colonia</h3>
+            <div id="banner-colors" class="banner-colors"></div>
+            <div class="banner-fields">
+              <label>
+                Nombre de la bandera
+                <input id="banner-name" maxlength="24" autocomplete="off" placeholder="Colonia del Alba" />
+              </label>
+              <label>
+                Símbolo
+                <select id="banner-symbol">
+                  <option value="sol">Sol</option>
+                  <option value="luna">Luna</option>
+                  <option value="lobo">Lobo</option>
+                  <option value="arbol">Árbol</option>
+                  <option value="martillo">Martillo</option>
+                  <option value="estrella">Estrella</option>
+                  <option value="ola">Ola</option>
+                  <option value="roca">Roca</option>
+                </select>
+              </label>
+            </div>
+            <div class="banner-preview">
+              <span id="banner-preview-flag" class="banner-preview-flag">S</span>
+              <span id="banner-preview-name">Colonia del Alba</span>
+            </div>
+            <h3>Dificultad</h3>
+            <div id="difficulty-options" class="difficulty-options"></div>
+          </div>
           <div class="character-actions">
             <button id="btn-character-back" class="menu-button" type="button">Volver</button>
             <button id="btn-character-confirm" class="menu-button primary" type="button">Jugar</button>
@@ -579,7 +608,7 @@
           </div>
 
           <p class="hud-help">
-            WASD mover · Q/E girar · Shift+E usar · Shift+Q soltar · Space saltar · Home centrar · M modo juego · V feudo · J misiones · K aves · G mapa · R atacar · C crafteo · L recetas · T chat · B ranking · P jugadores · F colocar · clic derecho cancelar · rueda zoom
+            WASD mover · Q/E girar · Shift+E usar · Shift+Q soltar · Space saltar · Home centrar · M dificultad · V feudo · J misiones · K aves · G mapa · R atacar · C crafteo · L recetas · T chat · B ranking · P jugadores · F colocar · clic derecho cancelar · rueda zoom
           </p>
         </div>
 
@@ -1094,6 +1123,18 @@
         </div>
 
         <div id="item-tooltip" class="item-tooltip" role="tooltip" hidden></div>
+
+        <div id="campaign-overlay" class="campaign-overlay" hidden data-status="victory">
+          <div class="campaign-card">
+            <span class="craft-eyebrow">Fin de la campaña</span>
+            <h2 id="campaign-title">Príncipes de Arua Rua Rua</h2>
+            <p id="campaign-text"></p>
+            <div class="campaign-actions">
+              <button id="btn-campaign-continue" class="menu-button" type="button">Seguir explorando</button>
+              <button id="btn-campaign-menu" class="menu-button primary" type="button">Volver al menú</button>
+            </div>
+          </div>
+        </div>
 
         <div id="toast" class="toast" role="status" aria-live="polite"></div>
       </section>

@@ -8,7 +8,6 @@ import { sanitizeSciencePoints } from "./science.js";
 import {
   BUILDING_SLOTS,
   BUILDING_TYPES,
-  GAME_MODES,
 } from "./towerDefense.js";
 import { MINERAL_TYPES } from "../world/minerals.js";
 import { CAMERA } from "../world/params.js";
@@ -152,6 +151,43 @@ function sanitizeCompanion(value) {
     return null;
   }
   return { species: value.species };
+}
+
+const BANNER_SYMBOLS = ["sol", "luna", "lobo", "arbol", "martillo", "estrella", "ola", "roca"];
+const COLONY_CORE_MAX_HP = 220;
+const DIFFICULTY_IDS = ["easy", "normal", "hard"];
+
+function sanitizeColonyBanner(value) {
+  const banner = value && typeof value === "object" ? value : {};
+  return {
+    color:
+      typeof banner.color === "string" && /^#[0-9a-fA-F]{6}$/.test(banner.color)
+        ? banner.color
+        : "#e0a458",
+    name:
+      typeof banner.name === "string" && banner.name.trim()
+        ? banner.name.trim().slice(0, 24)
+        : "Colonia del Alba",
+    symbol: BANNER_SYMBOLS.includes(banner.symbol) ? banner.symbol : "sol",
+  };
+}
+
+function sanitizeColonyCore(value) {
+  const core = value && typeof value === "object" ? value : {};
+  return {
+    university: {
+      hp: Number.isFinite(core.university?.hp)
+        ? Math.max(0, Math.min(COLONY_CORE_MAX_HP, Math.floor(core.university.hp)))
+        : COLONY_CORE_MAX_HP,
+      maxHp: COLONY_CORE_MAX_HP,
+    },
+    observatory: {
+      hp: Number.isFinite(core.observatory?.hp)
+        ? Math.max(0, Math.min(COLONY_CORE_MAX_HP, Math.floor(core.observatory.hp)))
+        : COLONY_CORE_MAX_HP,
+      maxHp: COLONY_CORE_MAX_HP,
+    },
+  };
 }
 
 function sanitizeWolfMission(value) {
@@ -612,6 +648,8 @@ function sanitizeVillageProgress(value) {
         ? Math.max(0, Math.min(12, Math.floor(raw.delivered)))
         : 0,
       allied: raw.allied === true,
+      lost: raw.lost === true,
+      everAllied: raw.everAllied === true || raw.allied === true,
       crafted: typeof raw.crafted === "string" ? raw.crafted.slice(0, 80) : null,
       lastProduction: Number.isFinite(raw.lastProduction)
         ? Math.max(0, raw.lastProduction)
@@ -786,7 +824,28 @@ export function sanitizeSave(value) {
     lensLevel: Number.isFinite(value.lensLevel)
       ? Math.max(0, Math.min(4, Math.floor(value.lensLevel)))
       : 0,
-    gameMode: GAME_MODES[value.gameMode] ? value.gameMode : "survival",
+    difficulty: DIFFICULTY_IDS.includes(value.difficulty)
+      ? value.difficulty
+      : value.gameMode === "peaceful"
+        ? "easy"
+        : value.gameMode === "survival"
+          ? "hard"
+          : "normal",
+    colonyBanner: sanitizeColonyBanner(value.colonyBanner),
+    colonyCore: sanitizeColonyCore(value.colonyCore),
+    campaignStatus:
+      value.campaignStatus === "victory" || value.campaignStatus === "defeat"
+        ? value.campaignStatus
+        : null,
+    everAllied: value.everAllied === true,
+    hordesStarted: value.hordesStarted === true || value.wavesStarted === true,
+    lastHordeDay: Number.isFinite(value.lastHordeDay)
+      ? Math.max(0, Math.floor(value.lastHordeDay))
+      : 0,
+    pendingHordeDay: Number.isFinite(value.pendingHordeDay)
+      ? Math.max(0, Math.floor(value.pendingHordeDay))
+      : 0,
+    gameMode: value.gameMode === "peaceful" ? "peaceful" : value.gameMode === "survival" ? "survival" : "normal",
     wavesStarted: value.wavesStarted === true,
     wavesSurvived: Number.isFinite(value.wavesSurvived)
       ? Math.max(0, Math.floor(value.wavesSurvived))
@@ -794,9 +853,7 @@ export function sanitizeSave(value) {
     waveIndex: Number.isFinite(value.waveIndex)
       ? Math.max(0, Math.floor(value.waveIndex))
       : 0,
-    waveTimer: Number.isFinite(value.waveTimer)
-      ? Math.max(0, value.waveTimer)
-      : 90,
+    waveTimer: 0,
     tradeRoutes: sanitizeTradeRoutes(value.tradeRoutes),
     villageProgress: sanitizeVillageProgress(value.villageProgress),
     savedAt: Number.isFinite(value.savedAt) ? value.savedAt : Date.now(),
