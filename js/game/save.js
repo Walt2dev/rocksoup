@@ -1,6 +1,7 @@
 import { createRng } from "../core/rng.js";
 import { normalizeSkinId } from "./skins.js";
 import { FISH_SPECIES } from "./fishing.js";
+import { BIRD_SPECIES } from "./birdwatching.js";
 import { sanitizeFarmPlots } from "./farming.js";
 import { sanitizeSciencePoints } from "./science.js";
 import {
@@ -113,6 +114,55 @@ export function sanitizeFishingRecords(value) {
   }
 
   return records;
+}
+
+export function sanitizeBirdRecords(value) {
+  const records = {};
+
+  if (!value || typeof value !== "object") {
+    return records;
+  }
+
+  for (const bird of BIRD_SPECIES) {
+    const record = value[bird.id];
+
+    if (!record || typeof record !== "object") {
+      continue;
+    }
+
+    records[bird.id] = {
+      count: Number.isFinite(record.count)
+        ? Math.min(MAX_HARVESTED, Math.max(0, Math.floor(record.count)))
+        : 0,
+      best: Number.isFinite(record.best)
+        ? Math.min(10000, Math.max(0, Math.floor(record.best)))
+        : 0,
+    };
+  }
+
+  return records;
+}
+
+function sanitizeCompanion(value) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  if (value.species !== "perdiz") {
+    return null;
+  }
+  return { species: "perdiz" };
+}
+
+function sanitizeWolfMission(value) {
+  const mission = value && typeof value === "object" ? value : {};
+  return {
+    discovered: mission.discovered === true,
+    kills: Number.isFinite(mission.kills)
+      ? Math.max(0, Math.min(999, Math.floor(mission.kills)))
+      : 0,
+    completed: mission.completed === true,
+    claimed: mission.claimed === true,
+  };
 }
 
 function sanitizeUniversity(value) {
@@ -418,7 +468,7 @@ function sanitizePlantedNodes(value) {
   return [...nodes.values()];
 }
 
-const FEATHER_SPECIES_KEYS = Object.freeze(["vulture", "sparrow", "crow", "owl"]);
+const FEATHER_SPECIES_KEYS = Object.freeze(["vulture", "sparrow", "crow", "owl", "perdiz"]);
 
 export function sanitizeFeathers(value) {
   const feathers = {};
@@ -711,6 +761,19 @@ export function sanitizeSave(value) {
             .map((id) => id.slice(0, 80)),
         )].slice(0, 100)
       : [],
+    birdObservations: Array.isArray(value.birdObservations)
+      ? [...new Set(
+          value.birdObservations
+            .filter((id) => typeof id === "string")
+            .map((id) => id.slice(0, 80)),
+        )].slice(0, 50)
+      : [],
+    birdRecords: sanitizeBirdRecords(value.birdRecords),
+    birdMissionCompleted: value.birdMissionCompleted === true,
+    companion: sanitizeCompanion(value.companion),
+    wolfBiome: value.wolfBiome === true,
+    wolfMission: sanitizeWolfMission(value.wolfMission),
+    wolfTotems: sanitizeStructureList(value.wolfTotems, 100),
     craftXp: Number.isFinite(value.craftXp)
       ? Math.max(0, Math.min(10000000, Math.floor(value.craftXp)))
       : 0,

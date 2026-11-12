@@ -23,6 +23,7 @@ export const RESOURCE_SOURCES = Object.freeze({
   Cu: "Vetas minerales de cobre; requiere pico.",
   oro: "Vetas raras de oro junto a ríos y costas (requiere pico); también del comercio entre aldeas y caravanas.",
   piel: "Se obtiene al cazar zorros.",
+  pielLobo: "Se obtiene al derrotar lobos del bosque de lobos.",
   telarana: "Se obtiene al derrotar arañas nocturnas.",
 });
 
@@ -35,6 +36,7 @@ export const TOOL_SOURCES = Object.freeze({
   hoe: "Se fabrica en Crafteo > Herramientas. Úsala en tierra para crear parcelas.",
   sword: "Se fabrica en Crafteo > Herramientas.",
   bow: "Se fabrica en Crafteo > Herramientas. Consume flechas.",
+  binoculars: "Se fabrica en Crafteo > Herramientas. Úsalos para observar aves.",
 });
 
 export const ITEM_SOURCES = Object.freeze({
@@ -67,6 +69,7 @@ export const ITEM_SOURCES = Object.freeze({
   moonHealingPotion: "Se prepara en el caldero en luna llena con un apunte de constelación.",
   moonPoisonPotion: "Se prepara en el caldero en luna nueva con un apunte de constelación.",
   arrow: "Se fabrican en Crafteo > Objetos con madera, piedra y plumas.",
+  wolfTotem: "Se fabrica tras completar la Cueva de lobos, en Crafteo > Construcción.",
 });
 
 export function sourceFor(kind, key) {

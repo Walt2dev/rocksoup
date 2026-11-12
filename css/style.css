@@ -114,9 +114,23 @@ kbd {
 /* ---------- Marca y logo ---------- */
 
 .game-logo {
-  width: 112px;
-  height: 94px;
+  display: block;
+  width: min(220px, 72vw);
+  height: auto;
+  border-radius: 12px;
   filter: drop-shadow(0 12px 26px rgba(224, 164, 88, 0.16));
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .brand-name {
@@ -331,9 +345,16 @@ kbd {
 }
 
 .menu-logo {
-  width: 96px;
-  height: 80px;
+  width: min(260px, 78vw);
+  height: auto;
   margin-bottom: 4px;
+}
+
+.hud-celestial {
+  display: block;
+  width: 30px;
+  height: 30px;
+  margin-left: auto;
 }
 
 .menu-eyebrow {
@@ -5673,4 +5694,123 @@ select:focus-visible {
     width: 48px;
     height: 48px;
   }
+}
+
+/* ---------- Aves y lobos ---------- */
+
+.bird-watch-panel .fishing-card {
+  border-color: rgba(143, 209, 232, 0.55);
+}
+
+.bird-watch-zone {
+  left: var(--bird-zone-left, 34%);
+  width: var(--bird-zone-width, 32%);
+  background: rgba(143, 209, 232, 0.5);
+}
+
+.bird-watch-perfect {
+  left: var(--bird-perfect-left, 44%);
+  width: var(--bird-perfect-width, 12%);
+  background: rgba(240, 192, 122, 0.95);
+}
+
+.bird-panel,
+.wolf-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(4, 8, 16, 0.76);
+}
+
+.bird-panel.is-open,
+.wolf-panel.is-open {
+  display: flex;
+}
+
+.bird-card,
+.wolf-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(620px, 96vw);
+  max-height: 88vh;
+  padding: 18px 20px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #111a24;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+}
+
+.bird-header,
+.wolf-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.bird-header h2,
+.wolf-header h2 {
+  margin: 2px 0 0;
+  color: var(--text);
+  font-size: 26px;
+}
+
+.bird-status,
+.wolf-status,
+.wolf-progress {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.bird-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.bird-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  opacity: 0.72;
+}
+
+.bird-row.is-observed {
+  opacity: 1;
+  border-color: rgba(143, 209, 232, 0.45);
+  background: rgba(143, 209, 232, 0.06);
+}
+
+.bird-row strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.bird-row small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.bird-row .bird-desc {
+  color: var(--faint);
+}
+
+.wolf-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }

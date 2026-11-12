@@ -80,6 +80,15 @@ export const CRAFT_RECIPES = Object.freeze([
     tool: "bow",
   }),
   Object.freeze({
+    id: "binoculars",
+    category: "tools",
+    name: "Prismáticos",
+    description: "Selecciónalos y haz clic en un ave cercana para iniciar la observación y completar el cuaderno.",
+    costs: Object.freeze({ Cu: 1, cuarzo: 2, fibra: 2 }),
+    type: "tool",
+    tool: "binoculars",
+  }),
+  Object.freeze({
     id: "arrows",
     category: "items",
     name: "Flechas",
@@ -247,6 +256,28 @@ export const CRAFT_RECIPES = Object.freeze([
     type: "upgrade",
     upgrade: "veinRestorer",
   }),
+  Object.freeze({
+    id: "wolfCloak",
+    category: "upgrades",
+    name: "Capa de piel de lobo",
+    description:
+      "Reduce el daño de las criaturas hostiles y aumenta la velocidad en bosques de lobo y nieve.",
+    costs: Object.freeze({ pielLobo: 3, piel: 2, fibra: 4 }),
+    type: "upgrade",
+    upgrade: "wolfCloak",
+    requiresWolfMission: true,
+  }),
+  Object.freeze({
+    id: "wolfTotem",
+    category: "build",
+    name: "Tótem de lobo",
+    description:
+      "Colocable. Ahuyenta lobos y criaturas hostiles en un radio amplio.",
+    costs: Object.freeze({ pielLobo: 2, madera: 6, telarana: 2 }),
+    type: "placeable",
+    item: "wolfTotem",
+    requiresWolfMission: true,
+  }),
 ]);
 
 const RECIPES_BY_ID = new Map(CRAFT_RECIPES.map((recipe) => [recipe.id, recipe]));
@@ -300,14 +331,18 @@ export function recipeState(recipe, inventory, context = {}) {
   const workerCount = Number.isFinite(context.workerCount) ? context.workerCount : 0;
   const limit =
     recipe.type === "worker" && workerCount >= (recipe.maxWorkers ?? 4);
+  const locked =
+    recipe.requiresWolfMission === true &&
+    context.wolfMissionComplete !== true;
 
   return {
     owned,
     affordable,
     missing,
     limit,
+    locked,
     workerCount,
-    canCraft: !owned && affordable && !limit,
+    canCraft: !locked && !owned && affordable && !limit,
     count: recipe.type === "placeable" ? inventory.itemCount(recipe.item) : 0,
   };
 }
@@ -318,6 +353,13 @@ export function craftRecipe(recipeOrId, inventory, context = {}) {
 
   if (!recipe) {
     return { ok: false, reason: "unknown" };
+  }
+
+  if (
+    recipe.requiresWolfMission === true &&
+    context.wolfMissionComplete !== true
+  ) {
+    return { ok: false, reason: "locked", recipe };
   }
 
   if (isRecipeOwned(recipe, inventory)) {

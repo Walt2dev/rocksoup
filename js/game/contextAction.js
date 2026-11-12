@@ -10,6 +10,7 @@ const PLACEABLE_ITEMS = new Set([
   "cauldron",
   "oven",
   "brewingTable",
+  "wolfTotem",
 ]);
 
 const CONSUMABLE_ITEMS = new Set([
@@ -57,7 +58,14 @@ export function resolveContextAction({
   mounted = false,
   nearDonkey = false,
   fishing = null,
+  birdWatch = null,
 } = {}) {
+  if (birdWatch) {
+    return birdWatch.phase === "aiming"
+      ? { id: "bird", label: "Enfocar", icon: "use" }
+      : { id: "bird", label: "Cerrar", icon: "use" };
+  }
+
   if (fishing) {
     return fishing.phase === "bite"
       ? { id: "fish", label: "\u00A1Pescar!", icon: "fish" }
@@ -98,6 +106,9 @@ export function resolveContextAction({
     }
     if (entry.key === "fishingRod") {
       return { id: "use", label: "Pescar", icon: "fish" };
+    }
+    if (entry.key === "binoculars") {
+      return { id: "observe", label: "Observar", icon: "use" };
     }
   }
 

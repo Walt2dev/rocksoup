@@ -3,6 +3,23 @@ import { Camera } from "../render/camera.js";
 import { Effects } from "../render/effects.js";
 import { TouchControls } from "../ui/touchControls.js";
 import { resolveContextAction } from "./contextAction.js";
+import { celestialStateAt } from "./celestial.js";
+import {
+  BIRD_MISSION,
+  BIRD_SPECIES,
+  birdById,
+  birdForAmbientSpecies,
+  birdMissionState,
+  birdWatchMarkerAt,
+  createBirdWatchAttempt,
+  resolveBirdWatch,
+  updateBirdWatchAttempt,
+} from "./birdwatching.js";
+import {
+  WOLF_MISSION,
+  findWolfDenSite,
+  wolfMissionState,
+} from "./wolfDen.js";
 import {
   loadDonkeySkinId,
   loadHotbarSlots,
@@ -11,7 +28,11 @@ import {
   saveHotbarSlots,
   saveStatsCollapsed,
 } from "./settings.js";
-import { sanitizeFeathers, sanitizeFishingRecords } from "./save.js";
+import {
+  sanitizeBirdRecords,
+  sanitizeFeathers,
+  sanitizeFishingRecords,
+} from "./save.js";
 import { BUILTIN_SKINS, normalizeSkinId } from "./skins.js";
 import { normalizeDonkeySkinId } from "./donkeySkins.js";
 import { DONKEY_TRUST_REQUIRED, feedDonkey } from "./donkey.js";
@@ -131,6 +152,7 @@ import {
 import {
   AMBIENT_SPECIES,
   buildAmbientData,
+  isHostileSpecies,
   pickAmbientSpawn,
   updateAmbientSystem,
 } from "./ambient.js";
@@ -191,6 +213,11 @@ const SPIDER_HEALTH = 45;
 const FOX_HEALTH = 35;
 const GOAT_HEALTH = 55;
 const BIRD_HEALTH = 20;
+const PERDIZ_HEALTH = 16;
+const WOLF_HEALTH = 70;
+const WOLF_DAMAGE = 12;
+const PERDIZ_CAPTURE_RANGE = 2.8;
+const BIRD_WATCH_RANGE = 10;
 const NIGHT_MOB_DAMAGE = 9;
 const NIGHT_MOB_ATTACK_INTERVAL = 1.25;
 const PLAYER_ATTACK_RANGE = 2.4;
@@ -208,10 +235,14 @@ const ATTACKABLE_AMBIENT_SPECIES = new Set([
   AMBIENT_SPECIES.SPARROW,
   AMBIENT_SPECIES.CROW,
   AMBIENT_SPECIES.OWL,
+  AMBIENT_SPECIES.PERDIZ,
+  AMBIENT_SPECIES.WOLF,
 ]);
 const HEALTH_REGEN_DELAY = 8;
 const HEALTH_REGEN_RATE = 3;
 const ARMOR_DAMAGE_REDUCTION = 0.3;
+const WOLF_CLOAK_DAMAGE_REDUCTION = 0.15;
+const WOLF_CLOAK_SPEED_BONUS = 1.1;
 const WATER_REACH = 3;
 const SWIM_POTION_SECONDS = 90;
 const SWIM_SPEED_MULTIPLIER = 0.7;
@@ -234,6 +265,7 @@ const FEATHER_LABELS = Object.freeze({
   sparrow: "Gorrión",
   crow: "Cuervo",
   owl: "Búho",
+  perdiz: "Perdiz",
 });
 const AMBIENT_SCALES = Object.freeze({
   [AMBIENT_SPECIES.FOX]: 0.95,
@@ -246,6 +278,8 @@ const AMBIENT_SCALES = Object.freeze({
   [AMBIENT_SPECIES.NIGHTLING]: 1,
   [AMBIENT_SPECIES.SPIDER]: 0.9,
   [AMBIENT_SPECIES.DONKEY]: DONKEY_SPRITE_SCALE,
+  [AMBIENT_SPECIES.PERDIZ]: 0.78,
+  [AMBIENT_SPECIES.WOLF]: 1.12,
 });
 
 export class Game {
@@ -274,9 +308,11 @@ export class Game {
         ? "expanded"
         : "legacy"
       : "expanded";
+    this.wolfBiome = saveState ? saveState.wolfBiome === true : true;
     this.world = new World(seed, {
       biomeSet: this.worldBiomes,
       flat: true,
+      wolfBiome: this.wolfBiome,
     });
     this.world.loadHarvested(saveState?.harvestedNodes);
     this.world.loadPlanted(saveState?.plantedNodes);
@@ -467,6 +503,41 @@ export class Game {
     this.fishingRng = createRng(`${this.world.seed}:fishing`);
     this.fishingRecords = sanitizeFishingRecords(saveState?.fishingRecords);
     this.feathers = sanitizeFeathers(saveState?.feathers);
+    this.birdRng = createRng(`${this.world.seed}:birds`);
+    this.birdWatch = null;
+    this.birdPanelOpen = false;
+    this.birdObservations = new Set(
+      Array.isArray(saveState?.birdObservations)
+        ? saveState.birdObservations.filter((id) =>
+            BIRD_SPECIES.some((bird) => bird.id === id),
+          )
+        : [],
+    );
+    this.birdRecords = sanitizeBirdRecords(saveState?.birdRecords);
+    this.birdMissionCompleted = saveState?.birdMissionCompleted === true;
+    this.companionSpecies =
+      saveState?.companion?.species === "perdiz" ? "perdiz" : null;
+    this.companionId = null;
+    this.wolfTotems = Array.isArray(saveState?.wolfTotems)
+      ? saveState.wolfTotems
+          .filter(
+            (totem) =>
+              totem && Number.isFinite(totem.x) && Number.isFinite(totem.y),
+          )
+          .map((totem) => ({ x: totem.x, y: totem.y }))
+          .slice(0, 100)
+      : [];
+    this.wolfMission = {
+      discovered: saveState?.wolfMission?.discovered === true,
+      kills: Number.isFinite(saveState?.wolfMission?.kills)
+        ? Math.max(0, Math.floor(saveState.wolfMission.kills))
+        : 0,
+      completed: saveState?.wolfMission?.completed === true,
+      claimed: saveState?.wolfMission?.claimed === true,
+    };
+    this.wolfDen = null;
+    this.wolfOpen = false;
+    this.wolfNotified = false;
     this.farmPlots = sanitizeFarmPlots(saveState?.farmPlots);
     this.swimRemaining = Number.isFinite(saveState?.player?.swimSeconds)
       ? Math.min(SWIM_POTION_SECONDS, Math.max(0, saveState.player.swimSeconds))
@@ -624,6 +695,15 @@ export class Game {
         buildings,
       };
     }
+    this.wolfDen = findWolfDenSite(
+      this.world,
+      this.world.seed,
+      start,
+      [this.university, this.observatory, ...this.villages],
+    );
+    if (this.wolfDen) {
+      this.wolfDen.discovered = this.wolfMission.discovered;
+    }
     this.playerId = createPlayerEntity(this.ecs, {
       x: start.x,
       y: start.y,
@@ -656,6 +736,7 @@ export class Game {
       onCraft: () => this.toggleCrafting(),
       onRecipes: () => this.toggleRecipeBook(),
       onQuest: () => this.toggleQuest(),
+      onBirds: () => this.toggleBirdPanel(),
       onPlace: () => this.handlePlaceRequest(),
       onHotbar: (index) => this.selectHotbar(index),
       onUseSelected: () => this.useSelectedItem(),
@@ -705,6 +786,11 @@ export class Game {
     this.toggleQuest = this.toggleQuest.bind(this);
     this.closeQuest = this.closeQuest.bind(this);
     this.handleQuestClick = this.handleQuestClick.bind(this);
+    this.toggleBirdPanel = this.toggleBirdPanel.bind(this);
+    this.closeBirdPanel = this.closeBirdPanel.bind(this);
+    this.openWolfDen = this.openWolfDen.bind(this);
+    this.closeWolfDen = this.closeWolfDen.bind(this);
+    this.claimWolfMission = this.claimWolfMission.bind(this);
     this.handleTooltipOver = this.handleTooltipOver.bind(this);
     this.handleTooltipOut = this.handleTooltipOut.bind(this);
     this.handleTooltipDown = this.handleTooltipDown.bind(this);
@@ -751,6 +837,7 @@ export class Game {
 
     this.setupWorkers(saveState);
     this.setupDonkey(saveState);
+    this.setupCompanion();
     this.syncAllVillageUnits();
     if (!this.network) {
       this.spawnAmbientBatch(AMBIENT_TARGET);
@@ -998,6 +1085,98 @@ export class Game {
     );
   }
 
+  setupCompanion() {
+    if (this.companionSpecies !== "perdiz") {
+      return;
+    }
+    const transform = this.playerTransform;
+    const ambient = buildAmbientData(
+      this.ambientRng,
+      AMBIENT_SPECIES.PERDIZ,
+      transform.x - 1.4,
+      transform.y + 0.8,
+    );
+    ambient.companion = true;
+    ambient.health = PERDIZ_HEALTH;
+    this.companionId = createAmbientEntity(this.ecs, {
+      species: AMBIENT_SPECIES.PERDIZ,
+      x: transform.x - 1.4,
+      y: transform.y + 0.8,
+      ambient,
+    });
+  }
+
+  serializeCompanion() {
+    if (!this.companionSpecies) {
+      return null;
+    }
+    if (
+      !this.companionId ||
+      !this.ecs.hasComponent(this.companionId, Component.AMBIENT)
+    ) {
+      return { species: this.companionSpecies };
+    }
+    return { species: this.companionSpecies };
+  }
+
+  spawnWolvesNearDen() {
+    if (!this.wolfDen || this.network) {
+      return 0;
+    }
+
+    const player = this.playerTransform;
+    const denDistance = Math.hypot(
+      this.wolfDen.x - player.x,
+      this.wolfDen.y - player.y,
+    );
+
+    if (denDistance > 44) {
+      return 0;
+    }
+
+    let wolves = 0;
+    for (const id of this.getAmbientIds()) {
+      const ambient = this.ecs.getComponent(id, Component.AMBIENT);
+      if (ambient?.species === AMBIENT_SPECIES.WOLF) {
+        wolves += 1;
+      }
+    }
+
+    const target = 3;
+    let spawned = 0;
+
+    while (wolves < target) {
+      const angle = this.ambientRng.float(0, Math.PI * 2);
+      const radius = this.ambientRng.float(4, 9);
+      const x = this.wolfDen.x + Math.cos(angle) * radius;
+      const y = this.wolfDen.y + Math.sin(angle) * radius;
+
+      if (!this.world.isActorWalkableAt(x, y)) {
+        break;
+      }
+
+      const ambient = buildAmbientData(
+        this.ambientRng,
+        AMBIENT_SPECIES.WOLF,
+        x,
+        y,
+      );
+      ambient.health = WOLF_HEALTH;
+      ambient.denX = this.wolfDen.x;
+      ambient.denY = this.wolfDen.y;
+      createAmbientEntity(this.ecs, {
+        species: AMBIENT_SPECIES.WOLF,
+        x,
+        y,
+        ambient,
+      });
+      wolves += 1;
+      spawned += 1;
+    }
+
+    return spawned;
+  }
+
   spawnAmbientBatch(count) {
     const player = this.playerTransform;
     let spawned = 0;
@@ -1042,6 +1221,8 @@ export class Game {
         ambient.health = FOX_HEALTH;
       } else if (spawn.species === AMBIENT_SPECIES.GOAT) {
         ambient.health = GOAT_HEALTH;
+      } else if (spawn.species === AMBIENT_SPECIES.PERDIZ) {
+        ambient.health = PERDIZ_HEALTH;
       } else if (
         spawn.species === AMBIENT_SPECIES.SPARROW ||
         spawn.species === AMBIENT_SPECIES.CROW ||
@@ -1075,14 +1256,15 @@ export class Game {
     this.ambientSpawnTimer = AMBIENT_SPAWN_INTERVAL;
     const player = this.playerTransform;
     const night = this.isNight();
+    this.spawnWolvesNearDen();
 
     for (const id of this.getAmbientIds()) {
-      if (id === this.donkeyId) {
+      if (id === this.donkeyId || id === this.companionId) {
         continue;
       }
       const transform = this.ecs.getComponent(id, Component.TRANSFORM);
       const ambient = this.ecs.getComponent(id, Component.AMBIENT);
-      if (ambient.wave) {
+      if (ambient.wave || ambient.companion) {
         continue;
       }
       const distance = Math.hypot(transform.x - player.x, transform.y - player.y);
@@ -1104,11 +1286,11 @@ export class Game {
     let nightMobCount = 0;
 
     for (const id of this.getAmbientIds()) {
-      if (id === this.donkeyId) {
+      if (id === this.donkeyId || id === this.companionId) {
         continue;
       }
       const ambient = this.ecs.getComponent(id, Component.AMBIENT);
-      if (ambient.wave) {
+      if (ambient.wave || ambient.companion) {
         continue;
       }
       if (
@@ -1116,6 +1298,8 @@ export class Game {
         ambient.species === AMBIENT_SPECIES.SPIDER
       ) {
         nightMobCount += 1;
+      } else if (ambient.species === AMBIENT_SPECIES.WOLF) {
+        continue;
       } else {
         passiveCount += 1;
       }
@@ -1664,6 +1848,7 @@ export class Game {
   updateNightCombat(deltaSeconds) {
     const transform = this.playerTransform;
     let touching = false;
+    let touchDamage = NIGHT_MOB_DAMAGE;
 
     for (const id of this.getAmbientIds()) {
       const ambient = this.ecs.getComponent(id, Component.AMBIENT);
@@ -1674,7 +1859,8 @@ export class Game {
 
       if (
         ambient.species !== AMBIENT_SPECIES.NIGHTLING &&
-        ambient.species !== AMBIENT_SPECIES.SPIDER
+        ambient.species !== AMBIENT_SPECIES.SPIDER &&
+        ambient.species !== AMBIENT_SPECIES.WOLF
       ) {
         continue;
       }
@@ -1691,13 +1877,17 @@ export class Game {
 
       if (distance <= 1.15 && heightDelta <= 1) {
         touching = true;
+        touchDamage =
+          ambient.species === AMBIENT_SPECIES.WOLF
+            ? WOLF_DAMAGE
+            : NIGHT_MOB_DAMAGE;
         break;
       }
     }
 
     if (touching && this.mobDamageCooldown <= 0 && !this.isPlayerSheltered()) {
       this.mobDamageCooldown = NIGHT_MOB_ATTACK_INTERVAL;
-      this.damagePlayer(NIGHT_MOB_DAMAGE);
+      this.damagePlayer(touchDamage);
     }
 
     if (
@@ -1722,7 +1912,14 @@ export class Game {
         : 0;
     const potionReduction =
       !bypassReduction && this.resistanceBuffRemaining > 0 ? 0.35 : 0;
-    const reduction = Math.min(0.7, armorReduction + potionReduction);
+    const cloakReduction =
+      !bypassReduction && this.inventory.hasUpgrade("wolfCloak")
+        ? WOLF_CLOAK_DAMAGE_REDUCTION
+        : 0;
+    const reduction = Math.min(
+      0.7,
+      armorReduction + potionReduction + cloakReduction,
+    );
     const damage = Math.max(1, Math.round(amount * (1 - reduction)));
 
     this.health = Math.max(0, this.health - damage);
@@ -2755,6 +2952,9 @@ export class Game {
     this.hud.btnQuest?.addEventListener("click", this.toggleQuest);
     this.hud.btnQuestClose?.addEventListener("click", this.closeQuest);
     this.hud.questList?.addEventListener("click", this.handleQuestClick);
+    this.hud.btnBirdClose?.addEventListener("click", this.closeBirdPanel);
+    this.hud.btnWolfClose?.addEventListener("click", this.closeWolfDen);
+    this.hud.btnWolfClaim?.addEventListener("click", this.claimWolfMission);
     for (const container of [this.hud.inventory, this.hud.recipeList]) {
       container?.addEventListener("pointerover", this.handleTooltipOver);
       container?.addEventListener("pointerout", this.handleTooltipOut);
@@ -2873,6 +3073,9 @@ export class Game {
     this.hud.btnQuest?.removeEventListener("click", this.toggleQuest);
     this.hud.btnQuestClose?.removeEventListener("click", this.closeQuest);
     this.hud.questList?.removeEventListener("click", this.handleQuestClick);
+    this.hud.btnBirdClose?.removeEventListener("click", this.closeBirdPanel);
+    this.hud.btnWolfClose?.removeEventListener("click", this.closeWolfDen);
+    this.hud.btnWolfClaim?.removeEventListener("click", this.claimWolfMission);
     for (const container of [this.hud.inventory, this.hud.recipeList]) {
       container?.removeEventListener("pointerover", this.handleTooltipOver);
       container?.removeEventListener("pointerout", this.handleTooltipOut);
@@ -2920,8 +3123,10 @@ export class Game {
     return this.saveStore?.write({
       seed: this.world.seed,
       worldBiomes: this.worldBiomes,
+      wolfBiome: this.wolfBiome,
       characterSkin: this.characterSkin,
       donkey: this.serializeDonkey(),
+      companion: this.serializeCompanion(),
       time: this.gameTime,
       camera: {
         x: this.camera.x,
@@ -2958,6 +3163,7 @@ export class Game {
       stonePaths: this.stonePaths.map((path) => ({ x: path.x, y: path.y })),
       beds: this.beds.map((bed) => ({ x: bed.x, y: bed.y })),
       cauldrons: this.cauldrons.map((cauldron) => ({ x: cauldron.x, y: cauldron.y })),
+      wolfTotems: this.wolfTotems.map((totem) => ({ x: totem.x, y: totem.y })),
       university: {
         bookOwned: this.researchBookOwned,
         researchedPotions: [...this.researchedPotions],
@@ -2974,6 +3180,10 @@ export class Game {
       })),
       fishingRecords: { ...this.fishingRecords },
       feathers: { ...this.feathers },
+      birdObservations: [...this.birdObservations],
+      birdRecords: { ...this.birdRecords },
+      birdMissionCompleted: this.birdMissionCompleted,
+      wolfMission: { ...this.wolfMission },
       observatoryDiscoveries: [...this.observatoryDiscoveries],
       observationNotes: [...this.observationNotes],
       completedVillages: [...this.completedVillages],
@@ -3318,6 +3528,9 @@ export class Game {
     }
 
     this.awardAmbientDrop(species, x, y);
+    if (species === AMBIENT_SPECIES.WOLF) {
+      this.wolfMission.kills += 1;
+    }
     this.notify(`${this.ambientLabel(species)} derrotado.`);
   }
 
@@ -3739,6 +3952,13 @@ export class Game {
       this.ecs.destroyEntity(id);
       this.waveEnemyIds.delete(id);
       if (!wave) {
+        if (ambient.species === AMBIENT_SPECIES.WOLF) {
+          this.wolfMission.kills += 1;
+          this.notify(
+            `Lobo derrotado (${this.wolfMission.kills}/${WOLF_MISSION.wolvesRequired}).`,
+          );
+          this.renderWolfPanel();
+        }
         this.awardAmbientDrop(ambient.species, transform.x, transform.y);
         this.notify(`${this.ambientLabel(ambient.species)} derrotado.`);
       }
@@ -3757,6 +3977,12 @@ export class Game {
     }
     if (species === AMBIENT_SPECIES.DONKEY) {
       return 120;
+    }
+    if (species === AMBIENT_SPECIES.PERDIZ) {
+      return PERDIZ_HEALTH;
+    }
+    if (species === AMBIENT_SPECIES.WOLF) {
+      return WOLF_HEALTH;
     }
     if (
       species === AMBIENT_SPECIES.SPARROW ||
@@ -3791,6 +4017,12 @@ export class Game {
     if (species === AMBIENT_SPECIES.VULTURE) {
       return "Zopilote";
     }
+    if (species === AMBIENT_SPECIES.PERDIZ) {
+      return "Perdiz";
+    }
+    if (species === AMBIENT_SPECIES.WOLF) {
+      return "Lobo";
+    }
     if (species === AMBIENT_SPECIES.SPIDER) {
       return "Ara\u00F1a nocturna";
     }
@@ -3807,11 +4039,15 @@ export class Game {
     } else if (species === AMBIENT_SPECIES.SPIDER) {
       key = "telarana";
       amount = 1;
+    } else if (species === AMBIENT_SPECIES.WOLF) {
+      key = "pielLobo";
+      amount = 1;
     } else if (
       species === AMBIENT_SPECIES.VULTURE ||
       species === AMBIENT_SPECIES.SPARROW ||
       species === AMBIENT_SPECIES.CROW ||
-      species === AMBIENT_SPECIES.OWL
+      species === AMBIENT_SPECIES.OWL ||
+      species === AMBIENT_SPECIES.PERDIZ
     ) {
       key = "pluma";
       amount = 1;
@@ -3854,16 +4090,7 @@ export class Game {
     for (const id of this.getAmbientIds()) {
       const ambient = this.ecs.getComponent(id, Component.AMBIENT);
 
-      if (
-        ambient.species !== AMBIENT_SPECIES.NIGHTLING &&
-        ambient.species !== AMBIENT_SPECIES.SPIDER &&
-        ambient.species !== AMBIENT_SPECIES.FOX &&
-        ambient.species !== AMBIENT_SPECIES.GOAT &&
-        ambient.species !== AMBIENT_SPECIES.VULTURE &&
-        ambient.species !== AMBIENT_SPECIES.SPARROW &&
-        ambient.species !== AMBIENT_SPECIES.CROW &&
-        ambient.species !== AMBIENT_SPECIES.OWL
-      ) {
+      if (ambient.companion || !ATTACKABLE_AMBIENT_SPECIES.has(ambient.species)) {
         continue;
       }
 
@@ -3962,6 +4189,7 @@ export class Game {
     }
 
     this.updateFishing(deltaSeconds);
+    this.updateBirdWatch(deltaSeconds);
     this.updateFarmPlots(deltaSeconds);
     this.updateFarmAnimals(deltaSeconds);
     this.updateProjectiles(deltaSeconds);
@@ -3989,11 +4217,21 @@ export class Game {
 
     const slowMultiplier = this.slowRemaining > 0 ? 0.6 : 1;
     const waterMultiplier = this.isSwimming() ? SWIM_SPEED_MULTIPLIER : 1;
+    const biomeNow = this.world.biomeAt(
+      this.playerTransform.x,
+      this.playerTransform.y,
+    );
+    const cloakMultiplier =
+      this.inventory.hasUpgrade("wolfCloak") &&
+      (biomeNow === BIOME.WOLF || biomeNow === BIOME.SNOW)
+        ? WOLF_CLOAK_SPEED_BONUS
+        : 1;
     this.playerMotion.speed =
       this.basePlayerSpeed *
       (this.speedBuffRemaining > 0 ? COFFEE_SPEED_MULTIPLIER : 1) *
       slowMultiplier *
       waterMultiplier *
+      cloakMultiplier *
       (this.donkeyMounted ? DONKEY_SPEED_MULTIPLIER : 1);
 
     for (const remote of this.remotePlayers.values()) {
@@ -4218,11 +4456,13 @@ export class Game {
       isWalkable: (x, y) => this.isActorWalkableAt(x, y),
       time: this.gameTime,
       campfires: [...this.campfires, ...this.tipis, ...this.torches],
+      totems: this.wolfTotems,
     });
     this.updateNetworkAmbient(deltaSeconds);
     this.updateAmbientPopulation(deltaSeconds);
     this.updateNightCombat(deltaSeconds);
     this.updateAmbientPoison(deltaSeconds);
+    this.updateWolfMissionDiscovery();
 
     this.energyBoosted = this.isNearCampfire(transform);
     updateEnergy(this.ecs, deltaSeconds, {
@@ -4305,6 +4545,11 @@ export class Game {
   }
 
   handleClick(screenX, screenY, { shiftKey = false } = {}) {
+    if (this.birdWatch) {
+      this.focusBirdWatch();
+      return;
+    }
+
     if (this.fishing) {
       if (this.fishing.phase === "bite") {
         this.resolveFishingTap();
@@ -4353,6 +4598,29 @@ export class Game {
 
       this.throwPoisonPotion(targetId);
       return;
+    }
+
+    if (
+      selectedEntry?.kind === "tool" &&
+      selectedEntry.key === "binoculars"
+    ) {
+      const birdId = this.pickBirdAt(screenX, screenY);
+      if (birdId) {
+        this.startBirdWatch(birdId);
+      } else {
+        this.notify("Selecciona un ave cercana para observarla.");
+      }
+      return;
+    }
+
+    if (selectedEntry?.kind === "resource") {
+      const perdizId = this.pickAmbientAt(screenX, screenY, {
+        species: AMBIENT_SPECIES.PERDIZ,
+      });
+      if (perdizId) {
+        this.capturePerdiz(perdizId);
+        return;
+      }
     }
 
     if (this.selectedUnitId) {
@@ -4428,6 +4696,11 @@ export class Game {
     const shamanVillage = this.pickShamanAt(screenX, screenY);
     if (shamanVillage) {
       this.openVillage(shamanVillage);
+      return;
+    }
+
+    if (this.pickWolfDenAt(screenX, screenY)) {
+      this.openWolfDen();
       return;
     }
 
@@ -4738,6 +5011,10 @@ export class Game {
     for (const id of this.getAmbientIds()) {
       const ambient = this.ecs.getComponent(id, Component.AMBIENT);
 
+      if (ambient.companion) {
+        continue;
+      }
+
       if (species && ambient.species !== species) {
         continue;
       }
@@ -4746,11 +5023,7 @@ export class Game {
         if (!ATTACKABLE_AMBIENT_SPECIES.has(ambient.species)) {
           continue;
         }
-      } else if (
-        hostileOnly &&
-        ambient.species !== AMBIENT_SPECIES.NIGHTLING &&
-        ambient.species !== AMBIENT_SPECIES.SPIDER
-      ) {
+      } else if (hostileOnly && !isHostileSpecies(ambient.species)) {
         continue;
       }
 
@@ -5616,6 +5889,493 @@ export class Game {
     return true;
   }
 
+  birdMissionProgress() {
+    return birdMissionState({
+      observations: [...this.birdObservations],
+      completed: this.birdMissionCompleted,
+    });
+  }
+
+  pickBirdAt(screenX, screenY) {
+    const sprites = this.assets.ambientSprites;
+    let best = null;
+
+    if (!sprites) {
+      return null;
+    }
+
+    for (const id of this.getAmbientIds()) {
+      const ambient = this.ecs.getComponent(id, Component.AMBIENT);
+      const bird = birdForAmbientSpecies(ambient?.species);
+      if (!bird) {
+        continue;
+      }
+
+      const spriteSet = this.ambientSpriteSet(ambient);
+      if (!spriteSet || spriteSet.length === 0) {
+        continue;
+      }
+
+      const transform = this.ecs.getComponent(id, Component.TRANSFORM);
+      const motion = this.ecs.getComponent(id, Component.MOTION);
+      const frame = motion.moving
+        ? 1 + (Math.floor(motion.walkTime * 7) % Math.max(1, spriteSet.length - 1))
+        : 0;
+      const sprite = spriteSet[frame] ?? spriteSet[0];
+      const base = this.camera.project(
+        transform.x,
+        transform.y,
+        (transform.z ?? 0) + this.world.heightAt(transform.x, transform.y) * 0.72,
+      );
+      const scale = (AMBIENT_SCALES[ambient.species] ?? 1) * this.camera.zoom;
+      const left = base.x - sprite.anchorX * scale;
+      const top = base.y - sprite.anchorY * scale;
+
+      if (
+        screenX >= left &&
+        screenX <= left + sprite.width * scale &&
+        screenY >= top &&
+        screenY <= top + sprite.height * scale
+      ) {
+        const depth = transform.x + transform.y;
+        if (!best || depth > best.depth) {
+          best = { id, depth };
+        }
+      }
+    }
+
+    return best?.id ?? null;
+  }
+
+  startBirdWatch(targetId) {
+    if (!this.inventory.hasTool("binoculars")) {
+      this.notify("Necesitas prismáticos para observar aves.");
+      return;
+    }
+
+    const ambient = this.ecs.getComponent(targetId, Component.AMBIENT);
+    const transform = this.ecs.getComponent(targetId, Component.TRANSFORM);
+    const bird = birdForAmbientSpecies(ambient?.species);
+
+    if (!ambient || !transform || !bird) {
+      this.notify("Ese animal no es un ave observables.");
+      return;
+    }
+
+    const distance = Math.hypot(
+      transform.x - this.playerTransform.x,
+      transform.y - this.playerTransform.y,
+    );
+
+    if (distance > BIRD_WATCH_RANGE) {
+      this.notify("El ave está demasiado lejos. Acércate con los prismáticos.");
+      return;
+    }
+
+    this.cancelFishing();
+    this.birdWatch = createBirdWatchAttempt(this.birdRng, bird, {
+      skill: this.lensLevel === "bronce" ? 0 : 1,
+    });
+    this.birdWatch.targetId = targetId;
+    this.birdWatch.speciesName = bird.name;
+    this.updateBirdWatchOverlay();
+    this.notify(`Observando: ${bird.name}. Enfoca en el momento justo.`);
+  }
+
+  updateBirdWatch(deltaSeconds) {
+    if (!this.birdWatch) {
+      this.updateBirdWatchOverlay();
+      return;
+    }
+
+    if (this.birdWatch.phase !== "aiming") {
+      return;
+    }
+
+    if (
+      this.birdWatch.targetId &&
+      !this.ecs.hasComponent(this.birdWatch.targetId, Component.AMBIENT)
+    ) {
+      this.cancelBirdWatch("El ave se marchó.");
+      return;
+    }
+
+    const status = updateBirdWatchAttempt(this.birdWatch, deltaSeconds);
+    if (status.expired) {
+      this.cancelBirdWatch("El ave se cansó de esperar y se fue.");
+      return;
+    }
+
+    this.updateBirdWatchOverlay();
+  }
+
+  updateBirdWatchOverlay() {
+    const panel = this.hud.birdWatchPanel;
+    if (!panel) {
+      return;
+    }
+
+    if (!this.birdWatch) {
+      panel.hidden = true;
+      panel.classList.remove("is-open");
+      return;
+    }
+
+    panel.hidden = false;
+    panel.classList.add("is-open");
+
+    if (this.hud.birdWatchTitle) {
+      this.hud.birdWatchTitle.textContent = `Observando: ${this.birdWatch.speciesName}`;
+    }
+    if (this.hud.birdWatchHint) {
+      this.hud.birdWatchHint.textContent =
+        "Pulsa Enfocar o toca la barra cuando el marcador esté en la zona.";
+    }
+    if (this.hud.birdWatchMarker) {
+      this.hud.birdWatchMarker.style.left = `${birdWatchMarkerAt(this.birdWatch) * 100}%`;
+    }
+    const zoneLeft = (this.birdWatch.zoneCenter - this.birdWatch.zoneHalf) * 100;
+    const zoneWidth = this.birdWatch.zoneHalf * 200;
+    const perfectLeft =
+      (this.birdWatch.zoneCenter - this.birdWatch.perfectHalf) * 100;
+    const perfectWidth = this.birdWatch.perfectHalf * 200;
+    panel.style.setProperty("--bird-zone-left", `${zoneLeft}%`);
+    panel.style.setProperty("--bird-zone-width", `${zoneWidth}%`);
+    panel.style.setProperty("--bird-perfect-left", `${perfectLeft}%`);
+    panel.style.setProperty("--bird-perfect-width", `${perfectWidth}%`);
+  }
+
+  focusBirdWatch() {
+    if (!this.birdWatch || this.birdWatch.phase !== "aiming") {
+      return;
+    }
+
+    const attempt = this.birdWatch;
+    const marker = birdWatchMarkerAt(attempt);
+    const result = resolveBirdWatch(attempt, marker);
+
+    if (!result.ok) {
+      this.cancelBirdWatch("El ave se asustó y escapó. Inténtalo otra vez.");
+      return;
+    }
+
+    const bird = birdById(attempt.speciesId);
+    if (bird) {
+      this.recordBirdObservation(bird, result.perfect);
+    }
+
+    this.cancelBirdWatch(
+      result.perfect
+        ? `¡Observación perfecta de ${bird?.name ?? "ave"}!`
+        : `Has observado un ${bird?.name ?? "ave"}.`,
+    );
+  }
+
+  recordBirdObservation(bird, perfect = false) {
+    const id = bird.id;
+    const first = !this.birdObservations.has(id);
+    this.birdObservations.add(id);
+
+    const record = this.birdRecords[id] ?? { count: 0, best: 0 };
+    record.count += 1;
+    record.best = Math.max(record.best, perfect ? 2 : 1);
+    this.birdRecords[id] = record;
+
+    this.feathers[bird.ambient] = (this.feathers[bird.ambient] ?? 0) + 1;
+    const added = this.inventory.add("pluma", 1);
+    if (added <= 0) {
+      this.groundItems.push({
+        kind: "resource",
+        key: "pluma",
+        amount: 1,
+        label: RESOURCE_INFO.pluma.label,
+        color: RESOURCE_INFO.pluma.color,
+        x: this.playerTransform.x,
+        y: this.playerTransform.y,
+      });
+    }
+
+    const mission = this.birdMissionProgress();
+    if (mission.complete && !this.birdMissionCompleted) {
+      this.birdMissionCompleted = true;
+      this.inventory.add("pluma", BIRD_MISSION.rewardFeathers);
+      this.notify(
+        `¡Misión de aves completada! +${BIRD_MISSION.rewardFeathers} plumas.`,
+      );
+      this.effects.addText("¡Cuaderno completo!", this.playerTransform.x, this.playerTransform.y, {
+        color: "#8fd1e8",
+      });
+    }
+
+    this.updateHud();
+    this.renderBirdPanel();
+    this.save();
+    return first;
+  }
+
+  cancelBirdWatch(message = null) {
+    const had = Boolean(this.birdWatch);
+    this.birdWatch = null;
+    this.updateBirdWatchOverlay();
+    if (message) {
+      this.notify(message);
+    }
+    return had;
+  }
+
+  toggleBirdPanel() {
+    if (this.birdPanelOpen) {
+      this.closeBirdPanel();
+      return;
+    }
+
+    this.closeQuest();
+    this.closeObservatory();
+    this.closeCrafting();
+    this.closeRecipeBook();
+    this.closeChest();
+    this.closeUniversity();
+    this.closeTrade();
+    this.closeVillage();
+    this.closeWolfDen();
+    this.birdPanelOpen = true;
+    this.hud.birdPanel?.classList.add("is-open");
+    this.hud.birdPanel?.setAttribute("aria-hidden", "false");
+    this.hud.btnBirds?.setAttribute("aria-expanded", "true");
+    this.renderBirdPanel();
+  }
+
+  closeBirdPanel() {
+    this.birdPanelOpen = false;
+    this.hud.birdPanel?.classList.remove("is-open");
+    this.hud.birdPanel?.setAttribute("aria-hidden", "true");
+    this.hud.btnBirds?.setAttribute("aria-expanded", "false");
+  }
+
+  renderBirdPanel() {
+    const list = this.hud.birdList;
+    if (!list) {
+      return;
+    }
+
+    const mission = this.birdMissionProgress();
+    if (this.hud.birdStatus) {
+      this.hud.birdStatus.textContent = mission.complete
+        ? "Misión completada: cuaderno de aves reunido."
+        : `${BIRD_MISSION.title} · ${mission.count}/${mission.required}`;
+    }
+
+    const fragment = document.createDocumentFragment();
+    for (const bird of BIRD_SPECIES) {
+      const observed = this.birdObservations.has(bird.id);
+      const record = this.birdRecords[bird.id];
+      const row = document.createElement("article");
+      row.className = "bird-row";
+      row.classList.toggle("is-observed", observed);
+
+      const name = document.createElement("strong");
+      name.textContent = observed ? bird.name : "???";
+      const meta = document.createElement("small");
+      meta.textContent = observed
+        ? `${bird.rarity} · ${record?.count ?? 0} avistamientos`
+        : "Sin observar";
+      const desc = document.createElement("small");
+      desc.className = "bird-desc";
+      desc.textContent = observed
+        ? bird.description
+        : "Usa los prismáticos para descubrir esta especie.";
+
+      row.append(name, meta, desc);
+      fragment.append(row);
+    }
+
+    if (fragment.childNodes.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "quest-empty";
+      empty.textContent = "Aún no hay especies registradas.";
+      fragment.append(empty);
+    }
+
+    list.replaceChildren(fragment);
+  }
+
+  wolfMissionProgress() {
+    return wolfMissionState({
+      kills: this.wolfMission.kills,
+      pelts: this.inventory.count("pielLobo"),
+      completed: this.wolfMission.completed,
+      claimed: this.wolfMission.claimed,
+    });
+  }
+
+  updateWolfMissionDiscovery() {
+    if (!this.wolfDen || this.wolfMission.discovered) {
+      return;
+    }
+
+    const distance = Math.hypot(
+      this.wolfDen.x - this.playerTransform.x,
+      this.wolfDen.y - this.playerTransform.y,
+    );
+
+    if (distance <= 15) {
+      this.wolfMission.discovered = true;
+      this.wolfDen.discovered = true;
+      this.wolfNotified = true;
+      this.notify(
+        "Has descubierto una cueva de lobos. Derrota 3 lobos y trae 2 pieles de lobo.",
+      );
+      this.updateQuestButton();
+      this.save();
+    }
+  }
+
+  openWolfDen() {
+    if (!this.wolfDen) {
+      return;
+    }
+
+    const distance = Math.hypot(
+      this.wolfDen.x - this.playerTransform.x,
+      this.wolfDen.y - this.playerTransform.y,
+    );
+
+    if (distance > 4.5) {
+      this.notify("Acércate a la cueva de lobos.");
+      return;
+    }
+
+    this.closeQuest();
+    this.closeBirdPanel();
+    this.closeObservatory();
+    this.closeCrafting();
+    this.closeRecipeBook();
+    this.closeChest();
+    this.closeUniversity();
+    this.closeTrade();
+    this.closeVillage();
+    this.wolfOpen = true;
+    this.hud.wolfPanel?.classList.add("is-open");
+    this.hud.wolfPanel?.setAttribute("aria-hidden", "false");
+    this.renderWolfPanel();
+  }
+
+  closeWolfDen() {
+    this.wolfOpen = false;
+    this.hud.wolfPanel?.classList.remove("is-open");
+    this.hud.wolfPanel?.setAttribute("aria-hidden", "true");
+  }
+
+  renderWolfPanel() {
+    if (!this.wolfOpen) {
+      return;
+    }
+
+    const state = this.wolfMissionProgress();
+    if (this.hud.wolfTitle) {
+      this.hud.wolfTitle.textContent = WOLF_MISSION.name;
+    }
+    if (this.hud.wolfStatus) {
+      this.hud.wolfStatus.textContent = state.completed
+        ? "Misión completada. La manada ya no amenaza el bosque."
+        : `${WOLF_MISSION.description} Lobos ${state.kills}/${state.wolvesRequired} · Pieles ${state.pelts}/${state.peltsRequired}`;
+    }
+    if (this.hud.wolfProgress) {
+      this.hud.wolfProgress.textContent = state.completed
+        ? `Recompensa entregada · ${state.kills} lobos derrotados`
+        : `Progreso: lobos ${state.kills}/${state.wolvesRequired}, pieles ${state.pelts}/${state.peltsRequired}`;
+    }
+    if (this.hud.btnWolfClaim) {
+      this.hud.btnWolfClaim.disabled = !state.canClaim;
+      this.hud.btnWolfClaim.textContent = state.completed
+        ? "Completada"
+        : state.canClaim
+          ? "Entregar 2 pieles"
+          : "Faltan objetivos";
+    }
+  }
+
+  claimWolfMission() {
+    if (!this.wolfDen) {
+      return;
+    }
+
+    const state = this.wolfMissionProgress();
+    if (state.completed) {
+      this.notify("La misión de la cueva ya está completada.");
+      return;
+    }
+    if (!state.canClaim) {
+      this.notify("Necesitas 3 lobos derrotados y 2 pieles de lobo.");
+      return;
+    }
+
+    if (this.inventory.remove("pielLobo", WOLF_MISSION.peltsRequired) <= 0) {
+      this.notify("No tienes suficientes pieles de lobo.");
+      return;
+    }
+
+    this.inventory.add("pielLobo", WOLF_MISSION.rewardPelts);
+    this.wolfMission.completed = true;
+    this.wolfMission.claimed = true;
+    this.wolfDen.discovered = true;
+    this.notify(
+      `¡Cueva de lobos completada! +${WOLF_MISSION.rewardPelts} pieles y recetas especiales desbloqueadas.`,
+    );
+    this.effects.addText("¡Misión completada!", this.wolfDen.x, this.wolfDen.y, {
+      color: "#8fd1e8",
+    });
+    this.updateHud();
+    this.renderWolfPanel();
+    this.save();
+  }
+
+  capturePerdiz(id) {
+    const ambient = this.ecs.getComponent(id, Component.AMBIENT);
+    const transform = this.ecs.getComponent(id, Component.TRANSFORM);
+    if (!ambient || !transform) {
+      return;
+    }
+
+    if (this.companionSpecies === "perdiz") {
+      this.notify("Ya tienes una perdiz compañera.");
+      return;
+    }
+
+    const distance = Math.hypot(
+      transform.x - this.playerTransform.x,
+      transform.y - this.playerTransform.y,
+    );
+
+    if (distance > PERDIZ_CAPTURE_RANGE) {
+      this.notify("Acércate más a la perdiz.");
+      return;
+    }
+
+    const selected = this.getSelectedEntry();
+    const foodKeys = new Set(["semillaHierba", "semillaTrigo", "trigo", "bayas"]);
+    if (selected?.kind !== "resource" || !foodKeys.has(selected.key)) {
+      this.notify("Selecciona semillas, trigo o bayas para atraer a la perdiz.");
+      return;
+    }
+
+    if (this.inventory.remove(selected.key, 1) <= 0) {
+      this.notify("No tienes ese alimento.");
+      return;
+    }
+
+    this.ecs.destroyEntity(id);
+    this.companionSpecies = "perdiz";
+    this.setupCompanion();
+    this.recordBirdObservation(birdById("perdiz"), true);
+    this.effects.addText("¡Perdiz capturada!", transform.x, transform.y, {
+      color: "#7ec699",
+    });
+    this.notify("Perdiz capturada. Ahora te acompaña como mascota.");
+    this.updateHud();
+    this.save();
+  }
+
   drinkSwimPotion() {
     if (this.swimRemaining >= SWIM_POTION_SECONDS) {
       this.notify("La poción de nado ya está activa.");
@@ -5960,14 +6720,29 @@ export class Game {
   }
 
   handleRightClick() {
+    if (this.birdWatch) {
+      this.cancelBirdWatch("Observación cancelada.");
+      return;
+    }
+
     if (this.placingItem) {
       this.cancelPlacement();
-      this.notify("Colocaci��n cancelada.");
+      this.notify("Colocación cancelada.");
       return;
     }
 
     if (this.questOpen) {
       this.closeQuest();
+      return;
+    }
+
+    if (this.birdPanelOpen) {
+      this.closeBirdPanel();
+      return;
+    }
+
+    if (this.wolfOpen) {
+      this.closeWolfDen();
       return;
     }
 
@@ -6576,6 +7351,29 @@ export class Game {
     this.skyAlign = null;
   }
 
+  pickWolfDenAt(screenX, screenY) {
+    const sprite = this.assets.wolfDenSprites?.[0];
+    if (!sprite || !this.wolfDen) {
+      return null;
+    }
+
+    const base = this.camera.project(
+      this.wolfDen.x,
+      this.wolfDen.y,
+      this.world.heightAt(this.wolfDen.x, this.wolfDen.y) * 0.72,
+    );
+    const scale = this.camera.zoom;
+    const left = base.x - sprite.anchorX * scale;
+    const top = base.y - sprite.anchorY * scale;
+
+    return (
+      screenX >= left &&
+      screenX <= left + sprite.width * scale &&
+      screenY >= top &&
+      screenY <= top + sprite.height * scale
+    );
+  }
+
   pickShamanAt(screenX, screenY) {
     const sprite = this.assets.villageSprites?.shaman;
     if (!sprite) {
@@ -6735,6 +7533,8 @@ export class Game {
     this.closeObservatory();
     this.closeTrade();
     this.closeVillage();
+    this.closeBirdPanel();
+    this.closeWolfDen();
     this.questOpen = true;
     this.hud.questPanel?.classList.add("is-open");
     this.hud.questPanel?.setAttribute("aria-hidden", "false");
@@ -6757,13 +7557,17 @@ export class Game {
     const seen = this.villages.filter((village) =>
       this.villageSeen.has(village.id),
     );
-    this.hud.btnQuest.hidden = seen.length === 0;
+    const wolfVisible = Boolean(this.wolfDen && this.wolfMission.discovered);
+    this.hud.btnQuest.hidden = seen.length === 0 && !wolfVisible;
     this.hud.btnQuest.classList.toggle("is-active", this.questOpen);
 
     if (this.hud.questBadge) {
-      const pending = seen.filter(
+      let pending = seen.filter(
         (village) => !this.villageProgress[village.id]?.allied,
       ).length;
+      if (wolfVisible && !this.wolfMission.completed) {
+        pending += 1;
+      }
       this.hud.questBadge.hidden = pending === 0;
       this.hud.questBadge.textContent = String(pending);
     }
@@ -6791,7 +7595,7 @@ export class Game {
       this.villageSeen.has(village.id),
     );
 
-    if (seen.length === 0) {
+    if (seen.length === 0 && !this.wolfMission.discovered) {
       const empty = document.createElement("p");
       empty.className = "quest-empty";
       empty.textContent =
@@ -6801,6 +7605,54 @@ export class Game {
     }
 
     const fragment = document.createDocumentFragment();
+
+    if (this.wolfDen && this.wolfMission.discovered) {
+      const state = this.wolfMissionProgress();
+      const row = document.createElement("article");
+      row.className = "quest-row";
+      row.classList.toggle("is-allied", state.completed);
+
+      const ring = document.createElement("div");
+      ring.className = "quest-ring";
+      ring.style.setProperty(
+        "--ring-progress",
+        String(
+          Math.min(
+            100,
+            (state.kills / state.wolvesRequired) * 50 +
+              (Math.min(state.pelts, state.peltsRequired) / state.peltsRequired) * 50,
+          ),
+        ),
+      );
+      const ringLabel = document.createElement("span");
+      ringLabel.className = "quest-ring-label";
+      ringLabel.textContent = state.completed ? "✓" : `${state.kills}/${state.wolvesRequired}`;
+      ring.append(ringLabel);
+
+      const info = document.createElement("div");
+      info.className = "quest-info";
+      const name = document.createElement("strong");
+      name.textContent = WOLF_MISSION.name;
+      const shaman = document.createElement("small");
+      shaman.textContent = "Bosque de lobos · manada hostil";
+      const mission = document.createElement("small");
+      mission.className = "quest-mission";
+      mission.textContent = state.completed
+        ? "Misión completada: recetas especiales desbloqueadas."
+        : `Lobos ${state.kills}/${state.wolvesRequired} · Pieles ${state.pelts}/${state.peltsRequired}`;
+      info.append(name, shaman, mission);
+
+      const actions = document.createElement("div");
+      actions.className = "quest-actions";
+      const hint = document.createElement("small");
+      hint.textContent = state.completed
+        ? "Recompensa entregada."
+        : "Ve a la cueva para entregar las pieles.";
+      actions.append(hint);
+
+      row.append(ring, info, actions);
+      fragment.append(row);
+    }
 
     for (const village of seen) {
       const progress = this.villageProgress[village.id];
@@ -9218,6 +10070,9 @@ export class Game {
     if (state.owned) {
       return "Fabricada";
     }
+    if (state.locked) {
+      return "Misión de lobos";
+    }
     if (state.limit) {
       return "Máximo";
     }
@@ -9234,6 +10089,9 @@ export class Game {
     if (state.owned) {
       return "Ya la tienes";
     }
+    if (state.locked) {
+      return "Completa la Cueva de lobos";
+    }
     if (recipe.type === "placeable") {
       return `En mochila: ${state.count}`;
     }
@@ -9246,6 +10104,9 @@ export class Game {
   recipeActionText(recipe, state) {
     if (state.owned) {
       return "Fabricada";
+    }
+    if (state.locked) {
+      return "Bloqueada";
     }
     if (state.limit) {
       return "Máximo";
@@ -9288,7 +10149,10 @@ export class Game {
   }
 
   craftContext() {
-    return { workerCount: this.getWorkerIds().length };
+    return {
+      workerCount: this.getWorkerIds().length,
+      wolfMissionComplete: this.wolfMission.completed === true,
+    };
   }
 
   renderStationRecipes() {
@@ -9668,6 +10532,8 @@ export class Game {
         this.notify(`Ya tienes el máximo de duendes (${MAX_WORKERS}).`);
       } else if (result.reason === "resources") {
         this.notify("Faltan recursos para fabricarlo.");
+      } else if (result.reason === "locked") {
+        this.notify("Completa la misión de la Cueva de lobos para desbloquearlo.");
       }
       return;
     }
@@ -9877,10 +10743,15 @@ export class Game {
       this.observatory &&
       Math.floor(this.observatory.x) === tileX &&
       Math.floor(this.observatory.y) === tileY;
+    const wolfDenBlocked =
+      this.wolfDen &&
+      Math.floor(this.wolfDen.x) === tileX &&
+      Math.floor(this.wolfDen.y) === tileY;
 
     return (
       universityBlocked ||
       observatoryBlocked ||
+      wolfDenBlocked ||
       [
         ...this.campfires,
         ...this.ovens,
@@ -9892,6 +10763,7 @@ export class Game {
         ...this.walls,
         ...this.beds,
         ...this.cauldrons,
+        ...this.wolfTotems,
       ].some(
         (item) => Math.floor(item.x) === tileX && Math.floor(item.y) === tileY,
       )
@@ -10047,6 +10919,8 @@ export class Game {
       this.beds.push({ x: centerX, y: centerY });
     } else if (itemId === "cauldron") {
       this.cauldrons.push({ x: centerX, y: centerY });
+    } else if (itemId === "wolfTotem") {
+      this.wolfTotems.push({ x: centerX, y: centerY });
     }
 
     this.network?.sendStructure(
@@ -11011,6 +11885,8 @@ export class Game {
         sprite,
         flip: motion.facing,
         scale: PLAYER_SPRITE_SCALE,
+        walkPhase: motion.walkTime,
+        moving: motion.moving === true,
       },
     ];
 
@@ -11031,6 +11907,8 @@ export class Game {
           sprite: donkeySprite,
           flip: motion.facing,
           scale: DONKEY_SPRITE_SCALE,
+          walkPhase: motion.walkTime,
+          moving: motion.moving === true,
         });
       }
     }
@@ -11078,6 +11956,8 @@ export class Game {
         flip: remote.facing,
         scale: PLAYER_SPRITE_SCALE,
         ringColor: remote.color,
+        walkPhase: remote.walkTime,
+        moving: remote.moving === true,
       });
     }
 
@@ -11120,6 +12000,8 @@ export class Game {
         flip: workerMotion.facing,
         scale: WORKER_SPRITE_SCALE,
         selected: id === this.selectedWorkerId,
+        walkPhase: workerMotion.walkTime,
+        moving: workerMotion.moving === true,
       });
     }
 
@@ -11141,7 +12023,9 @@ export class Game {
       if (
         ambient.species === AMBIENT_SPECIES.FOX ||
         ambient.species === AMBIENT_SPECIES.GOAT ||
-        ambient.species === AMBIENT_SPECIES.DONKEY
+        ambient.species === AMBIENT_SPECIES.DONKEY ||
+        ambient.species === AMBIENT_SPECIES.PERDIZ ||
+        ambient.species === AMBIENT_SPECIES.WOLF
       ) {
         ambientFrame = ambientMotion.moving
           ? 1 + (Math.floor(ambientMotion.walkTime * 8) % 2)
@@ -11176,6 +12060,10 @@ export class Game {
         sprite: ambientSprite,
         flip: ambientMotion.facing,
         scale: AMBIENT_SCALES[ambient.species] ?? 1,
+        walkPhase: ambientMotion.walkTime,
+        moving:
+          ambientMotion.moving === true &&
+          (ambientTransform.z ?? 0) <= 0.05,
         flying:
           ambient.species === AMBIENT_SPECIES.VULTURE ||
           ambient.species === AMBIENT_SPECIES.SPARROW ||
@@ -11256,6 +12144,34 @@ export class Game {
           y: tipi.y,
           z: 0,
           sprite: tipiSprite,
+          flip: 1,
+          scale: 1,
+        });
+      }
+    }
+
+    const wolfDenSprite = this.assets.wolfDenSprites?.[0];
+    if (wolfDenSprite && this.wolfDen) {
+      actors.push({
+        kind: "structure",
+        x: this.wolfDen.x,
+        y: this.wolfDen.y,
+        z: 0,
+        sprite: wolfDenSprite,
+        flip: 1,
+        scale: 1,
+      });
+    }
+
+    const wolfTotemSprite = this.assets.wolfTotemSprites?.[0];
+    if (wolfTotemSprite) {
+      for (const totem of this.wolfTotems) {
+        actors.push({
+          kind: "structure",
+          x: totem.x,
+          y: totem.y,
+          z: 0,
+          sprite: wolfTotemSprite,
           flip: 1,
           scale: 1,
         });
@@ -11448,6 +12364,7 @@ export class Game {
       height: this.camera.height,
       actors,
       stonePaths: this.stonePaths,
+      celestial: celestialStateAt(this.gameTime),
     });
 
     this.drawFarmPlots();
@@ -11574,6 +12491,56 @@ export class Game {
 
       ctx.restore();
     }
+
+    if (this.wolfDen && this.wolfMission.discovered) {
+      const point = camera.project(this.wolfDen.x, this.wolfDen.y, 0);
+      if (
+        point.x >= -80 &&
+        point.x <= camera.width + 80 &&
+        point.y >= -120 &&
+        point.y <= camera.height + 120
+      ) {
+        const state = this.wolfMissionProgress();
+        const radius = Math.max(20, 26 * camera.zoom);
+        const radiusY = radius * 0.52;
+        const color = state.completed ? "#7ec699" : "#d97b6c";
+        const bright = state.completed ? "#b8ecc7" : "#f0b5ae";
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.ellipse(point.x, point.y, radius, radiusY, 0, 0, Math.PI * 2);
+        ctx.setLineDash(state.completed ? [] : [6, 5]);
+        ctx.lineWidth = Math.max(1.5, 2 * camera.zoom);
+        ctx.strokeStyle = color;
+        ctx.globalAlpha = 0.8;
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        const markerY = point.y - radiusY - Math.max(16, 22 * camera.zoom);
+        ctx.beginPath();
+        ctx.moveTo(point.x, markerY - 9);
+        ctx.lineTo(point.x + 8, markerY);
+        ctx.lineTo(point.x, markerY + 9);
+        ctx.lineTo(point.x - 8, markerY);
+        ctx.closePath();
+        ctx.fillStyle = "#1b2530";
+        ctx.fill();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = bright;
+        ctx.stroke();
+
+        ctx.fillStyle = bright;
+        ctx.font = `700 ${Math.max(9, Math.round(11 * camera.zoom))}px monospace`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(
+          state.completed ? "✓" : `${state.kills}/${state.wolvesRequired}`,
+          point.x,
+          markerY + 1,
+        );
+        ctx.restore();
+      }
+    }
   }
 
   drawCursorPreview() {
@@ -11687,6 +12654,7 @@ export class Game {
       stoneWall: this.assets.wallSprites?.[0],
       bed: this.assets.bedSprites?.[0],
       cauldron: this.assets.cauldronSprites?.[0],
+      wolfTotem: this.assets.wolfTotemSprites?.[0],
     };
 
     return sprites[itemId] ?? null;
@@ -12146,6 +13114,7 @@ export class Game {
       this.hud.moon.textContent = `${cycleInfo.moon.icon} ${cycleInfo.moon.name}`;
       this.hud.moon.title = `Calendario lunar · ${cycleInfo.moon.name}`;
     }
+    this.drawCelestialHud();
     if (this.hud.cycleIndicator) {
       this.hud.cycleIndicator.dataset.phase = this.isNight() ? "night" : "day";
     }
@@ -12187,6 +13156,76 @@ export class Game {
     }
     this.hud.btnCrossWorkers?.classList.toggle("is-active", idleWorkers > 0);
     this.hudMenu?.refreshContextActions();
+  }
+
+  drawCelestialHud() {
+    const canvas = this.hud.celestial;
+    if (!canvas) {
+      return;
+    }
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const size = 30;
+    if (canvas.width !== Math.floor(size * dpr)) {
+      canvas.width = Math.floor(size * dpr);
+      canvas.height = Math.floor(size * dpr);
+    }
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      return;
+    }
+
+    const celestial = celestialStateAt(this.gameTime);
+    const cx = size / 2;
+    const cy = size / 2;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, size, size);
+
+    if (celestial.night) {
+      const moon = celestial.moon;
+      const illumination = moon.illumination;
+      const radius = 9;
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius + 3, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(150, 180, 235, 0.16)";
+      ctx.fill();
+
+      if (illumination > 0.02) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.fillStyle = "#dbe4ff";
+        ctx.fill();
+
+        if (illumination < 0.96) {
+          const offset =
+            (1 - illumination) *
+            radius *
+            1.95 *
+            ((moon.phaseIndex ?? 0) <= 4 ? -1 : 1);
+          ctx.beginPath();
+          ctx.arc(cx + offset, cy, radius * 1.02, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(12, 18, 32, 0.9)";
+          ctx.fill();
+        }
+      } else {
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.strokeStyle = "rgba(190, 206, 236, 0.45)";
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+      }
+    } else {
+      const sun = ctx.createRadialGradient(cx, cy, 1, cx, cy, 12);
+      sun.addColorStop(0, "#fff6cf");
+      sun.addColorStop(0.55, "#ffd071");
+      sun.addColorStop(1, "rgba(255, 176, 74, 0)");
+      ctx.fillStyle = sun;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 12, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   updateCoffeeHud() {
@@ -12312,6 +13351,7 @@ export class Game {
       mounted: this.donkeyMounted,
       nearDonkey: Boolean(this.getNearbyDonkeyId()),
       fishing: this.fishing,
+      birdWatch: this.birdWatch,
     });
   }
 
@@ -12337,6 +13377,14 @@ export class Game {
       this.handlePlaceSelected();
     } else if (action.id === "use" || action.id === "fish") {
       this.useSelectedItem();
+    } else if (action.id === "bird") {
+      if (this.birdWatch?.phase === "aiming") {
+        this.focusBirdWatch();
+      } else {
+        this.cancelBirdWatch();
+      }
+    } else if (action.id === "observe") {
+      this.notify("Haz clic en un ave cercana con los prismáticos seleccionados.");
     } else if (action.id === "dismount") {
       this.dismountDonkey();
     } else if (action.id === "mount") {

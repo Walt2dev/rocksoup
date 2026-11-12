@@ -40,10 +40,10 @@ test("las skins de burro incluidas se normalizan", () => {
 });
 
 test("el registro de packs cubre terreno, edificios, objetos y personajes", () => {
-  assert.equal(TERRAIN_DEFS.length, 8);
+  assert.equal(TERRAIN_DEFS.length, 9);
   assert.deepEqual(
     TERRAIN_DEFS.map((def) => def.biome),
-    [0, 1, 2, 3, 4, 5, 6, 7],
+    [0, 1, 2, 3, 4, 5, 6, 7, 8],
   );
   assert.equal(new Set(SPRITE_DEFS.map((def) => def.id)).size, SPRITE_DEFS.length);
   assert.equal(new Set(SPRITE_DEFS.map((def) => def.file)).size, SPRITE_DEFS.length);

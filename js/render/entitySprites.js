@@ -1191,6 +1191,359 @@ export function createGoatSprites() {
   return [0, 1, 2].map((frame) => createGoatSprite(frame));
 }
 
+const WOLF_WIDTH = 58;
+const WOLF_HEIGHT = 42;
+
+function createWolfSprite(frame) {
+  const canvas = document.createElement("canvas");
+  canvas.width = WOLF_WIDTH * RESOLUTION;
+  canvas.height = WOLF_HEIGHT * RESOLUTION;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(RESOLUTION, RESOLUTION);
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+
+  const cx = WOLF_WIDTH / 2;
+  const baseY = WOLF_HEIGHT - 6;
+  const swing = frame === 1 ? 2.6 : frame === 2 ? -2.6 : 0;
+  const bob = frame === 0 ? 0 : -0.7;
+  const outline = "#20242a";
+  const fur = "#6d747d";
+  const furLight = "#9aa1a8";
+  const furDark = "#4b5159";
+  const eye = "#d8c46a";
+
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = 0.9;
+
+  ctx.beginPath();
+  ctx.moveTo(cx - 9, baseY - 19 + bob);
+  ctx.quadraticCurveTo(cx - 25, baseY - 25 + bob, cx - 24, baseY - 12 + bob);
+  ctx.quadraticCurveTo(cx - 22, baseY - 5 + bob, cx - 10, baseY - 13 + bob);
+  ctx.closePath();
+  ctx.fillStyle = furDark;
+  ctx.fill();
+  ctx.stroke();
+
+  for (const [offset, legSwing] of [
+    [-10, swing],
+    [-2, -swing],
+    [8, swing],
+    [15, -swing],
+  ]) {
+    roundedRectPath(ctx, cx + offset, baseY - 12, 3.4, 12, 1.5);
+    ctx.fillStyle = furDark;
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  ctx.beginPath();
+  ctx.ellipse(cx + 1, baseY - 17 + bob, 16, 9, 0, 0, Math.PI * 2);
+  ctx.fillStyle = fur;
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.ellipse(cx + 3, baseY - 14 + bob, 10, 4.6, 0.08, 0, Math.PI * 2);
+  ctx.fillStyle = furLight;
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(cx + 15, baseY - 24 + bob, 7, 0, Math.PI * 2);
+  ctx.fillStyle = fur;
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(cx + 10, baseY - 29 + bob);
+  ctx.lineTo(cx + 11, baseY - 37 + bob);
+  ctx.lineTo(cx + 16, baseY - 31 + bob);
+  ctx.closePath();
+  ctx.fillStyle = furDark;
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(cx + 18, baseY - 30 + bob);
+  ctx.lineTo(cx + 21, baseY - 37 + bob);
+  ctx.lineTo(cx + 23, baseY - 29 + bob);
+  ctx.closePath();
+  ctx.fillStyle = furDark;
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(cx + 21, baseY - 23 + bob);
+  ctx.lineTo(cx + 29, baseY - 20 + bob);
+  ctx.lineTo(cx + 22, baseY - 17 + bob);
+  ctx.closePath();
+  ctx.fillStyle = furLight;
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = eye;
+  ctx.beginPath();
+  ctx.arc(cx + 18, baseY - 25 + bob, 1, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = outline;
+  ctx.beginPath();
+  ctx.arc(cx + 22.5, baseY - 21 + bob, 0.8, 0, Math.PI * 2);
+  ctx.fill();
+
+  return {
+    canvas,
+    width: WOLF_WIDTH,
+    height: WOLF_HEIGHT,
+    anchorX: cx,
+    anchorY: baseY,
+  };
+}
+
+export function createWolfSprites() {
+  return [0, 1, 2].map((frame) => createWolfSprite(frame));
+}
+
+const PERDIZ_WIDTH = 34;
+const PERDIZ_HEIGHT = 28;
+
+function createPerdizSprite(frame) {
+  const canvas = document.createElement("canvas");
+  canvas.width = PERDIZ_WIDTH * RESOLUTION;
+  canvas.height = PERDIZ_HEIGHT * RESOLUTION;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(RESOLUTION, RESOLUTION);
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+
+  const cx = PERDIZ_WIDTH / 2;
+  const baseY = PERDIZ_HEIGHT - 5;
+  const step = frame === 0 ? 0 : frame === 1 ? 1.2 : -1.2;
+  const outline = "#33281e";
+  const body = "#8a7447";
+  const bodyLight = "#b09963";
+  const wing = "#6d5a36";
+  const beak = "#d8b35e";
+
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = 0.8;
+
+  ctx.beginPath();
+  ctx.moveTo(cx - 2 + step, baseY - 8);
+  ctx.lineTo(cx - 4 + step, baseY);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx + 4 - step, baseY - 8);
+  ctx.lineTo(cx + 6 - step, baseY);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.ellipse(cx, baseY - 12, 10, 7, -0.05, 0, Math.PI * 2);
+  ctx.fillStyle = body;
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.ellipse(cx - 1, baseY - 11, 7, 4.2, 0.05, 0, Math.PI * 2);
+  ctx.fillStyle = bodyLight;
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.ellipse(cx - 2, baseY - 13, 6, 3.6, frame === 1 ? -0.25 : 0.2, 0, Math.PI * 2);
+  ctx.fillStyle = wing;
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(cx + 8, baseY - 18, 4.2, 0, Math.PI * 2);
+  ctx.fillStyle = body;
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(cx + 11, baseY - 18);
+  ctx.lineTo(cx + 16, baseY - 17);
+  ctx.lineTo(cx + 11, baseY - 15.5);
+  ctx.closePath();
+  ctx.fillStyle = beak;
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(cx + 7, baseY - 21);
+  ctx.lineTo(cx + 8, baseY - 25);
+  ctx.lineTo(cx + 10, baseY - 21);
+  ctx.closePath();
+  ctx.fillStyle = "#5c4a2d";
+  ctx.fill();
+
+  ctx.fillStyle = outline;
+  ctx.beginPath();
+  ctx.arc(cx + 9.5, baseY - 19, 0.7, 0, Math.PI * 2);
+  ctx.fill();
+
+  return {
+    canvas,
+    width: PERDIZ_WIDTH,
+    height: PERDIZ_HEIGHT,
+    anchorX: cx,
+    anchorY: baseY,
+  };
+}
+
+export function createPerdizSprites() {
+  return [0, 1, 2].map((frame) => createPerdizSprite(frame));
+}
+
+const WOLF_DEN_WIDTH = 108;
+const WOLF_DEN_HEIGHT = 88;
+
+export function createWolfDenSprites() {
+  const canvas = document.createElement("canvas");
+  canvas.width = WOLF_DEN_WIDTH * RESOLUTION;
+  canvas.height = WOLF_DEN_HEIGHT * RESOLUTION;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(RESOLUTION, RESOLUTION);
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+
+  const cx = WOLF_DEN_WIDTH / 2;
+  const baseY = WOLF_DEN_HEIGHT - 6;
+
+  ctx.fillStyle = "#59636a";
+  ctx.strokeStyle = "#232a2f";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(cx - 42, baseY);
+  ctx.quadraticCurveTo(cx - 36, baseY - 44, cx - 18, baseY - 50);
+  ctx.quadraticCurveTo(cx, baseY - 58, cx + 18, baseY - 50);
+  ctx.quadraticCurveTo(cx + 36, baseY - 44, cx + 42, baseY);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "#c7d3dc";
+  ctx.beginPath();
+  ctx.moveTo(cx - 34, baseY - 34);
+  ctx.quadraticCurveTo(cx - 20, baseY - 52, cx - 6, baseY - 48);
+  ctx.quadraticCurveTo(cx + 14, baseY - 56, cx + 30, baseY - 36);
+  ctx.quadraticCurveTo(cx + 10, baseY - 44, cx - 10, baseY - 40);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "#0c1014";
+  ctx.beginPath();
+  ctx.moveTo(cx - 22, baseY);
+  ctx.quadraticCurveTo(cx - 18, baseY - 30, cx, baseY - 34);
+  ctx.quadraticCurveTo(cx + 18, baseY - 30, cx + 22, baseY);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "#3d464d";
+  for (const [x, y, r] of [
+    [cx - 30, baseY - 8, 4],
+    [cx + 30, baseY - 9, 5],
+    [cx - 14, baseY - 42, 3.4],
+    [cx + 20, baseY - 44, 3],
+  ]) {
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  return [{
+    canvas,
+    width: WOLF_DEN_WIDTH,
+    height: WOLF_DEN_HEIGHT,
+    anchorX: cx,
+    anchorY: baseY,
+  }];
+}
+
+const WOLF_TOTEM_WIDTH = 40;
+const WOLF_TOTEM_HEIGHT = 76;
+
+export function createWolfTotemSprites() {
+  const canvas = document.createElement("canvas");
+  canvas.width = WOLF_TOTEM_WIDTH * RESOLUTION;
+  canvas.height = WOLF_TOTEM_HEIGHT * RESOLUTION;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(RESOLUTION, RESOLUTION);
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+
+  const cx = WOLF_TOTEM_WIDTH / 2;
+  const baseY = WOLF_TOTEM_HEIGHT - 5;
+
+  ctx.strokeStyle = "#2c2118";
+  ctx.lineWidth = 1;
+  roundedRectPath(ctx, cx - 4, baseY - 46, 8, 46, 3);
+  ctx.fillStyle = "#6d4a2e";
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(cx - 15, baseY - 46);
+  ctx.lineTo(cx, baseY - 62);
+  ctx.lineTo(cx + 15, baseY - 46);
+  ctx.closePath();
+  ctx.fillStyle = "#c97d45";
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(cx, baseY - 50, 9, 0, Math.PI * 2);
+  ctx.fillStyle = "#e6dfcf";
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(cx - 7, baseY - 56);
+  ctx.lineTo(cx - 4, baseY - 64);
+  ctx.lineTo(cx - 1, baseY - 56);
+  ctx.closePath();
+  ctx.fillStyle = "#e6dfcf";
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(cx + 7, baseY - 56);
+  ctx.lineTo(cx + 4, baseY - 64);
+  ctx.lineTo(cx + 1, baseY - 56);
+  ctx.closePath();
+  ctx.fillStyle = "#e6dfcf";
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "#2b2118";
+  for (const x of [cx - 3.4, cx + 3.4]) {
+    ctx.beginPath();
+    ctx.arc(x, baseY - 51, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.strokeStyle = "#8a5a32";
+  ctx.lineWidth = 1.4;
+  for (const [y, offset] of [
+    [baseY - 30, -1],
+    [baseY - 22, 1],
+    [baseY - 14, -1],
+  ]) {
+    ctx.beginPath();
+    ctx.moveTo(cx - 10, y);
+    ctx.lineTo(cx + 10, y + offset * 2);
+    ctx.stroke();
+  }
+
+  return [{
+    canvas,
+    width: WOLF_TOTEM_WIDTH,
+    height: WOLF_TOTEM_HEIGHT,
+    anchorX: cx,
+    anchorY: baseY,
+  }];
+}
+
 export function createSparrowSprites() {
   return [0, 1].map((frame) => createBirdSprite(frame, BIRD_PALETTES.sparrow));
 }
@@ -1215,6 +1568,8 @@ export function createAmbientSprites() {
     nightling: createNightlingSprites(),
     spider: createSpiderSprites(),
     donkey: createDonkeySprites(builtinDonkeySkin("gris")),
+    perdiz: createPerdizSprites(),
+    wolf: createWolfSprites(),
   };
 }
 

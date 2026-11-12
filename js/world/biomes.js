@@ -9,6 +9,7 @@ export const BIOME = Object.freeze({
   SNOW: 5,
   DESERT: 6,
   JUNGLE: 7,
+  WOLF: 8,
 });
 
 export const BIOMES = Object.freeze([
@@ -76,6 +77,14 @@ export const BIOMES = Object.freeze([
     shades: ["#1d4a2a", "#255b33", "#2e6c3c"],
     mineralChance: 0.004,
   }),
+  Object.freeze({
+    id: BIOME.WOLF,
+    key: "wolf",
+    name: "Bosque de lobos",
+    walkable: true,
+    shades: ["#233d34", "#2c4a3d", "#365846"],
+    mineralChance: 0.008,
+  }),
 ]);
 
 export function classifyBiome(elevation, moisture, config = WORLD) {
@@ -97,6 +106,13 @@ export function classifyBiomeExpanded(
   if (elevation < config.beachLevel) return BIOME.BEACH;
   if (elevation > config.snowLevel) return BIOME.SNOW;
   if (elevation > config.rockLevel) return BIOME.ROCK;
+  if (
+    config.wolfBiome === true &&
+    temperature <= (config.wolfTemperature ?? config.coldTemperature) &&
+    moisture >= (config.wolfMoisture ?? config.forestMoisture)
+  ) {
+    return BIOME.WOLF;
+  }
   if (temperature <= config.coldTemperature) return BIOME.SNOW;
   if (temperature >= config.hotTemperature && moisture < config.desertMoisture) {
     return BIOME.DESERT;

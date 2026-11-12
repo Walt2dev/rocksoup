@@ -10,6 +10,8 @@ export const WORLD = Object.freeze({
   desertMoisture: 0.44,
   coldTemperature: 0.3,
   hotTemperature: 0.62,
+  wolfTemperature: 0.3,
+  wolfMoisture: 0.55,
   elevationScale: 0.014,
   moistureScale: 0.022,
   temperatureScale: 0.009,

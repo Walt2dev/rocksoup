@@ -9,6 +9,7 @@ import {
   updateAmbientSystem,
 } from "../js/game/ambient.js";
 import { createRng } from "../js/core/rng.js";
+import { BIOME } from "../js/world/biomes.js";
 import {
   DAY_LENGTH_SECONDS,
   DAY_NIGHT_CYCLE,
@@ -22,6 +23,7 @@ const PASSIVE_SPECIES = Object.freeze([
   AMBIENT_SPECIES.SPARROW,
   AMBIENT_SPECIES.CROW,
   AMBIENT_SPECIES.OWL,
+  AMBIENT_SPECIES.PERDIZ,
 ]);
 
 const PASSIVE_TARGET = 6;
@@ -51,9 +53,8 @@ export function createAmbientSync({ world, seed }) {
   }
 
   function spawn(client, species, night) {
-    const preferredSpecies = night
-      ? species
-      : PASSIVE_SPECIES[spawnSlot % PASSIVE_SPECIES.length];
+    const preferredSpecies =
+      species ?? (night ? null : PASSIVE_SPECIES[spawnSlot % PASSIVE_SPECIES.length]);
     spawnSlot += 1;
 
     let spawnPoint = pickAmbientSpawn(rng, world, client.x, client.y, {
@@ -62,6 +63,10 @@ export function createAmbientSync({ world, seed }) {
       maxRadius: 30,
       attempts: preferredSpecies === AMBIENT_SPECIES.FROG ? 80 : 40,
     });
+
+    if (!spawnPoint && species) {
+      return false;
+    }
 
     if (!spawnPoint && !night) {
       spawnPoint = pickAmbientSpawn(rng, world, client.x, client.y, {
@@ -166,6 +171,24 @@ export function createAmbientSync({ world, seed }) {
             break;
           }
           passiveCount += 1;
+        }
+
+        if (world.biomeAt(player.x, player.y) === BIOME.WOLF) {
+          let wolfCount = 0;
+          for (const entry of entities.values()) {
+            if (
+              entry.ownerId === player.id &&
+              entry.species === AMBIENT_SPECIES.WOLF
+            ) {
+              wolfCount += 1;
+            }
+          }
+          while (wolfCount < 2) {
+            if (!spawn(player, AMBIENT_SPECIES.WOLF, false)) {
+              break;
+            }
+            wolfCount += 1;
+          }
         }
 
         if (nowNight) {

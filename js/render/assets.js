@@ -31,6 +31,8 @@ import {
   createTipiSprites,
   createVillageSprites,
   createWorkerSprites,
+  createWolfDenSprites,
+  createWolfTotemSprites,
 } from "./entitySprites.js";
 import { createMineralSprite } from "./mineralSprites.js";
 import { createTreeSprite, TREE_STYLES } from "./treeSprites.js";
@@ -217,6 +219,8 @@ export async function loadAssets(onProgress = () => {}) {
   const observatorySprites = createObservatorySprites();
   const villageSprites = createVillageSprites();
   const fiefSprites = createFiefSprites();
+  const wolfDenSprites = createWolfDenSprites();
+  const wolfTotemSprites = createWolfTotemSprites();
   await nextFrame();
 
   report(0.98, "Sirviendo el caldo...");
@@ -259,6 +263,8 @@ export async function loadAssets(onProgress = () => {}) {
     observatorySprites,
     villageSprites,
     fiefSprites,
+    wolfDenSprites,
+    wolfTotemSprites,
     bootSeed: BOOT_SEED,
   };
 }

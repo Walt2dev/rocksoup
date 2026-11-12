@@ -22,6 +22,7 @@ export class GameInput {
     onCraft,
     onRecipes,
     onQuest,
+    onBirds,
     onPlace,
     onHotbar,
     onUseSelected,
@@ -48,6 +49,7 @@ export class GameInput {
     this.onCraft = onCraft;
     this.onRecipes = onRecipes;
     this.onQuest = onQuest;
+    this.onBirds = onBirds;
     this.onPlace = onPlace;
     this.onHotbar = onHotbar;
     this.onUseSelected = onUseSelected;
@@ -203,6 +205,14 @@ export class GameInput {
     if (event.code === "KeyJ") {
       event.preventDefault();
       this.onQuest?.();
+      return;
+    }
+
+    if (event.code === "KeyK") {
+      event.preventDefault();
+      if (!event.repeat) {
+        this.onBirds?.();
+      }
       return;
     }
 

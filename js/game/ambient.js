@@ -13,6 +13,8 @@ export const AMBIENT_SPECIES = Object.freeze({
   NIGHTLING: "nightling",
   SPIDER: "spider",
   DONKEY: "donkey",
+  PERDIZ: "perdiz",
+  WOLF: "wolf",
 });
 
 export const AMBIENT_SPECIES_LIST = Object.freeze(Object.values(AMBIENT_SPECIES));
@@ -20,7 +22,11 @@ const FOX_FLEE_RADIUS = 5.5;
 const FROG_FLEE_RADIUS = 3.2;
 const NIGHTLING_AGGRO_RADIUS = 14;
 const NIGHTLING_STOP_RADIUS = 1.05;
+const WOLF_AGGRO_RADIUS = 13;
+const WOLF_STOP_RADIUS = 1;
+const WOLF_TOTEM_RADIUS = 7;
 const CAMPFIRE_SAFE_RADIUS = 3.6;
+const PERDIZ_FLEE_RADIUS = 2.4;
 
 export const AMBIENT_MAX_HEALTH = Object.freeze({
   fox: 35,
@@ -33,7 +39,17 @@ export const AMBIENT_MAX_HEALTH = Object.freeze({
   nightling: 60,
   spider: 45,
   donkey: 120,
+  perdiz: 16,
+  wolf: 70,
 });
+
+export function isHostileSpecies(species) {
+  return (
+    species === AMBIENT_SPECIES.NIGHTLING ||
+    species === AMBIENT_SPECIES.SPIDER ||
+    species === AMBIENT_SPECIES.WOLF
+  );
+}
 
 export function isNearWater(world, x, y, radius = 2) {
   for (let dy = -radius; dy <= radius; dy += 1) {
@@ -61,19 +77,21 @@ export function pickAmbientSpawn(rng, world, centerX, centerY, {
     const roll = rng.next();
     const species =
       preferredSpecies ??
-      (roll < 0.3
+      (roll < 0.26
         ? AMBIENT_SPECIES.FOX
-        : roll < 0.48
+        : roll < 0.42
           ? AMBIENT_SPECIES.FROG
-          : roll < 0.6
+          : roll < 0.54
             ? AMBIENT_SPECIES.VULTURE
-            : roll < 0.74
+            : roll < 0.66
               ? AMBIENT_SPECIES.GOAT
-              : roll < 0.84
-                ? AMBIENT_SPECIES.SPARROW
-                : roll < 0.93
-                  ? AMBIENT_SPECIES.CROW
-                  : AMBIENT_SPECIES.OWL);
+              : roll < 0.74
+                ? AMBIENT_SPECIES.PERDIZ
+                : roll < 0.84
+                  ? AMBIENT_SPECIES.SPARROW
+                  : roll < 0.93
+                    ? AMBIENT_SPECIES.CROW
+                    : AMBIENT_SPECIES.OWL);
 
     if (biome === BIOME.WATER) {
       continue;
@@ -104,6 +122,24 @@ export function pickAmbientSpawn(rng, world, centerX, centerY, {
       }
     } else if (species === AMBIENT_SPECIES.DONKEY) {
       if (biome !== BIOME.GRASS && biome !== BIOME.FOREST) {
+        continue;
+      }
+      if (!world.isWalkableAt(x, y)) {
+        continue;
+      }
+    } else if (species === AMBIENT_SPECIES.PERDIZ) {
+      if (
+        biome !== BIOME.GRASS &&
+        biome !== BIOME.FOREST &&
+        biome !== BIOME.WOLF
+      ) {
+        continue;
+      }
+      if (!world.isWalkableAt(x, y)) {
+        continue;
+      }
+    } else if (species === AMBIENT_SPECIES.WOLF) {
+      if (biome !== BIOME.WOLF && biome !== BIOME.SNOW) {
         continue;
       }
       if (!world.isWalkableAt(x, y)) {
@@ -181,6 +217,14 @@ export function buildAmbientData(rng, species, x, y) {
     radius = rng.float(1.2, 2.6);
     speed = rng.float(1.6, 2.1);
     timer = rng.float(0.5, 1.4);
+  } else if (species === AMBIENT_SPECIES.PERDIZ) {
+    radius = rng.float(0.8, 1.8);
+    speed = rng.float(1, 1.5);
+    timer = rng.float(0.9, 1.9);
+  } else if (species === AMBIENT_SPECIES.WOLF) {
+    radius = rng.float(2.2, 4.4);
+    speed = rng.float(2.3, 2.9);
+    timer = rng.float(0.4, 1.1);
   }
 
   return {
@@ -491,6 +535,195 @@ function updateDonkey(
   }
 }
 
+function updatePerdiz(
+  ambient,
+  transform,
+  motion,
+  deltaSeconds,
+  playerX,
+  playerY,
+  isWalkable,
+  time,
+) {
+  transform.z = 0;
+  const dx = transform.x - playerX;
+  const dy = transform.y - playerY;
+  const distance = Math.hypot(dx, dy);
+  let directionX = 0;
+  let directionY = 0;
+  let speed = 0;
+
+  if (distance < PERDIZ_FLEE_RADIUS && distance > 1e-6) {
+    ambient.state = "flee";
+    directionX = dx / distance;
+    directionY = dy / distance;
+    speed = ambient.speed * 1.45;
+  } else {
+    ambient.state = "wander";
+    const orbit = ambient.phase + Math.sin(time * 0.5 + ambient.phase) * 1.2;
+    const targetX = ambient.anchorX + Math.cos(orbit) * ambient.radius;
+    const targetY = ambient.anchorY + Math.sin(orbit) * ambient.radius;
+    const targetDx = targetX - transform.x;
+    const targetDy = targetY - transform.y;
+    const targetDistance = Math.hypot(targetDx, targetDy);
+
+    if (targetDistance > 0.08) {
+      directionX = targetDx / targetDistance;
+      directionY = targetDy / targetDistance;
+      speed = ambient.speed * 0.4;
+    }
+  }
+
+  if (speed <= 0) {
+    motion.moving = false;
+    return;
+  }
+
+  if (Math.abs(directionX - directionY) > 0.01) {
+    motion.facing = directionX - directionY > 0 ? 1 : -1;
+  }
+
+  const step = speed * deltaSeconds;
+  const moved = moveDirect(
+    transform,
+    directionX * step,
+    directionY * step,
+    isWalkable,
+  );
+  motion.moving = moved.movedX !== 0 || moved.movedY !== 0;
+  if (motion.moving) {
+    motion.walkTime += deltaSeconds;
+  }
+}
+
+function updateCompanion(
+  ambient,
+  transform,
+  motion,
+  deltaSeconds,
+  playerX,
+  playerY,
+  isWalkable,
+) {
+  transform.z = 0;
+  const dx = playerX - transform.x;
+  const dy = playerY - transform.y;
+  const distance = Math.hypot(dx, dy);
+
+  if (distance <= 2.6) {
+    ambient.state = "idle";
+    motion.moving = false;
+    return;
+  }
+
+  const directionX = dx / distance;
+  const directionY = dy / distance;
+  if (Math.abs(directionX - directionY) > 0.01) {
+    motion.facing = directionX - directionY > 0 ? 1 : -1;
+  }
+
+  ambient.state = "follow";
+  const speed = ambient.speed * 1.15;
+  const step = speed * deltaSeconds;
+  const moved = moveDirect(
+    transform,
+    directionX * step,
+    directionY * step,
+    isWalkable,
+  );
+  motion.moving = moved.movedX !== 0 || moved.movedY !== 0;
+  if (motion.moving) {
+    motion.walkTime += deltaSeconds;
+  }
+}
+
+function updateWolf(
+  ambient,
+  transform,
+  motion,
+  deltaSeconds,
+  playerX,
+  playerY,
+  isWalkable,
+  time,
+  totems,
+) {
+  transform.z = 0;
+  const dx = playerX - transform.x;
+  const dy = playerY - transform.y;
+  const distance = Math.hypot(dx, dy);
+  let nearestTotem = null;
+  let nearestTotemDistance = Infinity;
+
+  for (const totem of totems) {
+    const totemDistance = Math.hypot(totem.x - transform.x, totem.y - transform.y);
+    if (totemDistance < nearestTotemDistance) {
+      nearestTotemDistance = totemDistance;
+      nearestTotem = totem;
+    }
+  }
+
+  let targetX = null;
+  let targetY = null;
+  let speed = ambient.speed;
+
+  if (nearestTotem && nearestTotemDistance < WOLF_TOTEM_RADIUS) {
+    ambient.state = "repelled";
+    const awayX = transform.x - nearestTotem.x;
+    const awayY = transform.y - nearestTotem.y;
+    const awayLength = Math.hypot(awayX, awayY) || 1;
+    targetX = transform.x + (awayX / awayLength) * 2.4;
+    targetY = transform.y + (awayY / awayLength) * 2.4;
+  } else if (distance < WOLF_AGGRO_RADIUS && distance > WOLF_STOP_RADIUS) {
+    ambient.state = "chase";
+    targetX = playerX;
+    targetY = playerY;
+  } else if (distance <= WOLF_STOP_RADIUS) {
+    ambient.state = "attack";
+    motion.moving = false;
+    return;
+  } else {
+    ambient.state = "wander";
+    const orbit = ambient.phase + Math.sin(time * 0.55 + ambient.phase) * 1.3;
+    targetX = ambient.anchorX + Math.cos(orbit) * ambient.radius;
+    targetY = ambient.anchorY + Math.sin(orbit) * ambient.radius;
+    speed = ambient.speed * 0.45;
+  }
+
+  if (targetX === null || targetY === null) {
+    motion.moving = false;
+    return;
+  }
+
+  const targetDx = targetX - transform.x;
+  const targetDy = targetY - transform.y;
+  const targetDistance = Math.hypot(targetDx, targetDy);
+
+  if (targetDistance <= 0.06) {
+    motion.moving = false;
+    return;
+  }
+
+  const directionX = targetDx / targetDistance;
+  const directionY = targetDy / targetDistance;
+
+  if (Math.abs(directionX - directionY) > 0.01) {
+    motion.facing = directionX - directionY > 0 ? 1 : -1;
+  }
+
+  const step = speed * deltaSeconds;
+  const moved = moveDirect(
+    transform,
+    directionX * step,
+    directionY * step,
+    isWalkable,
+  );
+  motion.moving = moved.movedX !== 0 || moved.movedY !== 0;
+  if (motion.moving) {
+    motion.walkTime += deltaSeconds;
+  }
+}
+
 export function updateAmbientSystem(ecs, deltaSeconds, {
   playerX,
   playerY,
@@ -498,6 +731,7 @@ export function updateAmbientSystem(ecs, deltaSeconds, {
   isWalkable,
   time = 0,
   campfires = [],
+  totems = [],
 }) {
   for (const id of ecs.query(Component.AMBIENT, Component.TRANSFORM, Component.MOTION)) {
     const ambient = ecs.getComponent(id, Component.AMBIENT);
@@ -510,6 +744,19 @@ export function updateAmbientSystem(ecs, deltaSeconds, {
 
     let targetX = playerX;
     let targetY = playerY;
+
+    if (ambient.companion) {
+      updateCompanion(
+        ambient,
+        transform,
+        motion,
+        deltaSeconds,
+        playerX,
+        playerY,
+        isWalkable,
+      );
+      continue;
+    }
 
     if (Array.isArray(players) && players.length > 0) {
       let nearest = null;
@@ -558,6 +805,29 @@ export function updateAmbientSystem(ecs, deltaSeconds, {
         deltaSeconds,
         isWalkable,
         time,
+      );
+    } else if (ambient.species === AMBIENT_SPECIES.PERDIZ) {
+      updatePerdiz(
+        ambient,
+        transform,
+        motion,
+        deltaSeconds,
+        targetX,
+        targetY,
+        isWalkable,
+        time,
+      );
+    } else if (ambient.species === AMBIENT_SPECIES.WOLF) {
+      updateWolf(
+        ambient,
+        transform,
+        motion,
+        deltaSeconds,
+        targetX,
+        targetY,
+        isWalkable,
+        time,
+        totems,
       );
     } else if (
       ambient.species === AMBIENT_SPECIES.NIGHTLING ||

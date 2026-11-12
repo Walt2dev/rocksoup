@@ -1,4 +1,4 @@
-﻿import { BIOMES } from "../world/biomes.js";
+﻿import { BIOMES, BIOME } from "../world/biomes.js";
 import { mineralById } from "../world/minerals.js";
 
 const BACKGROUND = "#081016";
@@ -106,10 +106,23 @@ export class WorldRenderer {
     height,
     actors = [],
     stonePaths = [],
+    celestial = null,
   }) {
     ctx.fillStyle = BACKGROUND;
     ctx.fillRect(0, 0, width, height);
     this.pickables = [];
+    const waterPath = new Path2D();
+    let waterTileCount = 0;
+
+    if (celestial?.sky) {
+      const sky = ctx.createLinearGradient(0, 0, 0, height);
+      sky.addColorStop(0, celestial.sky.top);
+      sky.addColorStop(1, celestial.sky.bottom);
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, width, height);
+      ctx.globalAlpha = 1;
+    }
 
     const flat = world.flat === true;
     const size = world.chunkSize;
@@ -208,6 +221,11 @@ export class WorldRenderer {
 
               appendOffsetTilePath(basePath, center, flatOffsets);
 
+              if (biomeId === BIOME.WATER) {
+                appendOffsetTilePath(waterPath, center, flatOffsets);
+                waterTileCount += 1;
+              }
+
               const terrainTexture = assets.terrainTextures?.[biomeId];
 
               if (terrainTexture) {
@@ -264,6 +282,10 @@ export class WorldRenderer {
             const terrainTexture = assets.terrainTextures?.[biomeId];
 
             if (tileHeight === 0) {
+              if (biomeId === BIOME.WATER) {
+                appendTilePath(waterPath, topPoints);
+                waterTileCount += 1;
+              }
               if (terrainTexture) {
                 baseTextures.push({
                   texture: terrainTexture,
@@ -376,6 +398,17 @@ export class WorldRenderer {
       for (const path of sortedPaths.map((entry) => entry[1])) {
         ctx.stroke(path);
       }
+    }
+
+    if (waterTileCount > 0 && celestial) {
+      this.drawWaterReflections(ctx, {
+        waterPath,
+        waterTileCount,
+        camera,
+        width,
+        height,
+        celestial,
+      });
     }
 
     for (const path of stonePaths) {
@@ -964,6 +997,138 @@ export class WorldRenderer {
     }
   }
 
+  drawWaterReflections(ctx, { waterPath, waterTileCount, camera, width, height, celestial }) {
+    const night = celestial.night === true;
+    const active = night ? celestial.moon : celestial.sun;
+
+    if (!active || !active.visible) {
+      return;
+    }
+
+    const anchorX = width * (0.5 + (active.azimuth ?? 0) * 0.34);
+    const anchorY = height * (0.56 - (active.elevation ?? 0) * 0.12);
+    const intensity = Math.max(0, Math.min(1, active.intensity ?? 0.6));
+    const glowRadius = Math.max(width, height) * 0.32;
+
+    ctx.save();
+    ctx.clip(waterPath);
+
+    const glow = ctx.createRadialGradient(
+      anchorX,
+      anchorY,
+      2,
+      anchorX,
+      anchorY,
+      glowRadius,
+    );
+
+    if (night) {
+      glow.addColorStop(0, `rgba(214, 228, 255, ${0.3 * intensity})`);
+      glow.addColorStop(0.45, `rgba(150, 180, 235, ${0.13 * intensity})`);
+      glow.addColorStop(1, "rgba(120, 150, 210, 0)");
+    } else {
+      glow.addColorStop(0, `rgba(255, 232, 160, ${0.34 * intensity})`);
+      glow.addColorStop(0.45, `rgba(255, 206, 120, ${0.15 * intensity})`);
+      glow.addColorStop(1, "rgba(255, 190, 90, 0)");
+    }
+
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, width, height);
+
+    const column = ctx.createLinearGradient(
+      anchorX,
+      anchorY,
+      anchorX,
+      Math.min(height, anchorY + height * 0.5),
+    );
+    column.addColorStop(
+      0,
+      night
+        ? `rgba(220, 236, 255, ${0.34 * intensity})`
+        : `rgba(255, 244, 206, ${0.4 * intensity})`,
+    );
+    column.addColorStop(
+      0.55,
+      night
+        ? `rgba(160, 190, 240, ${0.12 * intensity})`
+        : `rgba(255, 204, 122, ${0.14 * intensity})`,
+    );
+    column.addColorStop(1, "rgba(255, 255, 255, 0)");
+    ctx.fillStyle = column;
+    ctx.fillRect(anchorX - width * 0.055, anchorY, width * 0.11, height * 0.55);
+
+    if (night) {
+      const radius = Math.max(9, 17 * camera.zoom);
+      const illumination = Math.max(0, Math.min(1, celestial.moon.illumination ?? 0));
+
+      if (illumination > 0.02) {
+        ctx.beginPath();
+        ctx.arc(anchorX, anchorY, radius, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(232, 240, 255, ${0.4 + illumination * 0.45})`;
+        ctx.fill();
+
+        if (illumination < 0.96) {
+          const offset =
+            (1 - illumination) *
+            radius *
+            1.95 *
+            ((celestial.moon.phaseIndex ?? 0) <= 4 ? -1 : 1);
+          ctx.beginPath();
+          ctx.arc(anchorX + offset, anchorY, radius * 1.02, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(9, 14, 26, 0.62)";
+          ctx.fill();
+        }
+      }
+    } else {
+      const radius = Math.max(10, 20 * camera.zoom);
+      const sun = ctx.createRadialGradient(
+        anchorX,
+        anchorY,
+        1,
+        anchorX,
+        anchorY,
+        radius,
+      );
+      sun.addColorStop(0, "rgba(255, 252, 226, 0.95)");
+      sun.addColorStop(0.5, "rgba(255, 224, 150, 0.6)");
+      sun.addColorStop(1, "rgba(255, 196, 104, 0)");
+      ctx.fillStyle = sun;
+      ctx.beginPath();
+      ctx.arc(anchorX, anchorY, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    const sparkleCount = Math.min(
+      28,
+      Math.max(8, Math.floor(waterTileCount / 12)),
+    );
+    const clock = celestial.time ?? 0;
+    ctx.beginPath();
+
+    for (let index = 0; index < sparkleCount; index += 1) {
+      const phase = clock * 0.55 + index * 1.73;
+      const x =
+        anchorX +
+        Math.sin(phase + index * 2.17) * width * 0.22 +
+        ((index * 73) % 19) -
+        9;
+      const y =
+        anchorY +
+        ((index * 53) % Math.max(20, height * 0.42)) +
+        Math.sin(phase * 1.3 + index) * 5;
+      const length = 4 + ((index * 7) % 10);
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + length, y);
+    }
+
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = night
+      ? "rgba(220, 232, 255, 0.34)"
+      : "rgba(255, 236, 178, 0.42)";
+    ctx.stroke();
+    ctx.restore();
+  }
+
   drawActor(ctx, prop, zoom) {
     const actor = prop.actor;
     const sprite = actor.sprite;
@@ -975,6 +1140,9 @@ export class WorldRenderer {
     const scale = (actor.scale ?? 1) * zoom;
     const flip = actor.flip ?? 1;
     const groundY = prop.groundScreenY ?? prop.screenY;
+    const walkBob = actor.moving
+      ? Math.sin((actor.walkPhase ?? 0) * Math.PI * 2) * 1.3 * zoom
+      : 0;
 
     if (actor.selected || actor.ringColor) {
       ctx.beginPath();
@@ -1008,7 +1176,7 @@ export class WorldRenderer {
     ctx.fill();
 
     ctx.save();
-    ctx.translate(prop.screenX, prop.screenY);
+    ctx.translate(prop.screenX, prop.screenY - walkBob);
     ctx.scale(flip, 1);
     ctx.drawImage(
       sprite.canvas,

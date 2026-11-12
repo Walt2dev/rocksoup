@@ -106,6 +106,24 @@ test("la clasificación expandida añade desierto, selva y nieve climática", ()
   );
 });
 
+test("el bosque de lobos requiere frío, humedad y el flag activo", () => {
+  const wolfConfig = { ...WORLD, wolfBiome: true };
+
+  assert.equal(
+    classifyBiomeExpanded(0.5, 0.8, 0.1, wolfConfig),
+    BIOME.WOLF,
+  );
+  assert.equal(
+    classifyBiomeExpanded(0.5, 0.5, 0.1, wolfConfig),
+    BIOME.SNOW,
+  );
+  assert.equal(
+    classifyBiomeExpanded(0.5, 0.8, 0.1, WORLD),
+    BIOME.SNOW,
+  );
+  assert.ok(isWalkableBiome(BIOME.WOLF));
+});
+
 test("la temperatura expandida es determinista y estable", () => {
   const first = new World("clima", { biomeSet: "expanded" });
   const second = new World("clima", { biomeSet: "expanded" });
@@ -457,6 +475,7 @@ test("el guardado valida, escribe, lee y limpia", () => {
     moonHealingPotion: 0,
     moonPoisonPotion: 0,
     arrow: 0,
+    wolfTotem: 0,
   });
   assert.deepEqual(save.inventory.upgrades, []);
   assert.deepEqual(save.harvestedNodes, []);

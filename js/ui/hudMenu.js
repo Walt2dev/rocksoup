@@ -160,6 +160,10 @@ export class HudMenu {
         this.click("btn-quest");
         this.close();
         break;
+      case "birds":
+        this.game?.toggleBirdPanel?.();
+        this.close();
+        break;
       case "fief":
         this.click("btn-fief");
         this.close();

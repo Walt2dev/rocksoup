@@ -23,6 +23,7 @@ export const RESOURCE_INFO = Object.freeze({
   Cu: Object.freeze({ label: "Cobre", color: "#7fb9ab", symbol: "Cu" }),
   oro: Object.freeze({ label: "Oro", color: "#e0b84f", symbol: "O" }),
   piel: Object.freeze({ label: "Piel de zorro", color: "#c97d45", symbol: "Pz" }),
+  pielLobo: Object.freeze({ label: "Piel de lobo", color: "#8b97a8", symbol: "PL" }),
   telarana: Object.freeze({ label: "Tela de ara\u00F1a", color: "#cfd6e6", symbol: "Ta" }),
 });
 
@@ -36,6 +37,11 @@ export const TOOL_INFO = Object.freeze({
   hoe: Object.freeze({ label: "Azada", short: "Azada", symbol: "Z" }),
   sword: Object.freeze({ label: "Espada de piedra", short: "Espada", symbol: "E" }),
   bow: Object.freeze({ label: "Arco de madera", short: "Arco", symbol: "Ar" }),
+  binoculars: Object.freeze({
+    label: "Prismáticos",
+    short: "Prismáticos",
+    symbol: "Pr",
+  }),
 });
 export const TOOL_KEYS = Object.freeze(Object.keys(TOOL_INFO));
 
@@ -69,6 +75,7 @@ export const ITEM_INFO = Object.freeze({
   moonHealingPotion: Object.freeze({ label: "Brebaje lunar de curación", symbol: "LC" }),
   moonPoisonPotion: Object.freeze({ label: "Brebaje lunar de sombra", symbol: "LS" }),
   arrow: Object.freeze({ label: "Flecha", symbol: "Fl" }),
+  wolfTotem: Object.freeze({ label: "Tótem de lobo", symbol: "Tl" }),
 });
 export const ITEM_KEYS = Object.freeze(Object.keys(ITEM_INFO));
 
@@ -76,6 +83,7 @@ export const UPGRADE_INFO = Object.freeze({
   basket: Object.freeze({ label: "Cesta de madera" }),
   leatherPack: Object.freeze({ label: "Mochila de piel" }),
   leatherArmor: Object.freeze({ label: "Armadura de piel" }),
+  wolfCloak: Object.freeze({ label: "Capa de piel de lobo" }),
   veinRestorer: Object.freeze({ label: "Restaurador de vetas" }),
 });
 export const UPGRADE_KEYS = Object.freeze(Object.keys(UPGRADE_INFO));

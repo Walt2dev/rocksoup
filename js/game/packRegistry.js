@@ -17,6 +17,7 @@ export const TERRAIN_DEFS = Object.freeze([
   Object.freeze({ id: "snow", biome: 5, file: "terrain/snow.png", label: "Nieve", width: 128, height: 64 }),
   Object.freeze({ id: "desert", biome: 6, file: "terrain/desert.png", label: "Desierto", width: 128, height: 64 }),
   Object.freeze({ id: "jungle", biome: 7, file: "terrain/jungle.png", label: "Selva", width: 128, height: 64 }),
+  Object.freeze({ id: "wolf", biome: 8, file: "terrain/wolf.png", label: "Bosque de lobos", width: 128, height: 64 }),
 ]);
 
 const BUILDING_DEFS = [

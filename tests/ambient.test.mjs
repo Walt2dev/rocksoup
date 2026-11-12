@@ -5,9 +5,11 @@ import { createRng } from "../js/core/rng.js";
 import { Component } from "../js/ecs/components.js";
 import { EntityWorld } from "../js/ecs/ecs.js";
 import {
+  AMBIENT_MAX_HEALTH,
   AMBIENT_SPECIES,
   AMBIENT_SPECIES_LIST,
   buildAmbientData,
+  isHostileSpecies,
   pickAmbientSpawn,
   updateAmbientSystem,
 } from "../js/game/ambient.js";
@@ -140,4 +142,47 @@ test("el zopilote sobrevuela en cÃ­rculos con altura", () => {
     ) > 1,
   );
   assert.equal(motion.moving, true);
+});
+
+test("la perdiz es fácil de asustar y el lobo persigue", () => {
+  assert.ok(AMBIENT_SPECIES_LIST.includes(AMBIENT_SPECIES.PERDIZ));
+  assert.ok(AMBIENT_SPECIES_LIST.includes(AMBIENT_SPECIES.WOLF));
+  assert.equal(isHostileSpecies(AMBIENT_SPECIES.WOLF), true);
+  assert.equal(isHostileSpecies(AMBIENT_SPECIES.PERDIZ), false);
+  assert.ok(AMBIENT_MAX_HEALTH.perdiz < AMBIENT_MAX_HEALTH.wolf);
+
+  const ecs = new EntityWorld();
+  const perdiz = buildAmbientData(createRng("perdiz"), AMBIENT_SPECIES.PERDIZ, 4, 0);
+  const perdizId = createAmbientEntity(ecs, {
+    species: AMBIENT_SPECIES.PERDIZ,
+    x: 4,
+    y: 0,
+    ambient: perdiz,
+  });
+  updateAmbientSystem(ecs, 0.5, {
+    playerX: 3.5,
+    playerY: 0,
+    isWalkable: () => true,
+    time: 0,
+  });
+  const perdizComponent = ecs.getComponent(perdizId, Component.AMBIENT);
+  assert.equal(perdizComponent.state, "flee");
+
+  const wolf = buildAmbientData(createRng("wolf"), AMBIENT_SPECIES.WOLF, 8, 0);
+  const wolfId = createAmbientEntity(ecs, {
+    species: AMBIENT_SPECIES.WOLF,
+    x: 8,
+    y: 0,
+    ambient: wolf,
+  });
+  updateAmbientSystem(ecs, 0.5, {
+    playerX: 0,
+    playerY: 0,
+    isWalkable: () => true,
+    time: 0,
+  });
+  const wolfTransform = ecs.getComponent(wolfId, Component.TRANSFORM);
+  const wolfComponent = ecs.getComponent(wolfId, Component.AMBIENT);
+  assert.equal(wolfComponent.state, "chase");
+  assert.ok(wolfTransform.x < 8);
 });

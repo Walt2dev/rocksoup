@@ -260,6 +260,7 @@ test("sanitizeSave migra v1 y valida el guardado v2", () => {
     moonHealingPotion: 0,
     moonPoisonPotion: 0,
     arrow: 0,
+    wolfTotem: 0,
   });
   assert.deepEqual(migrated.inventory.upgrades, []);
   assert.deepEqual(migrated.harvestedNodes, []);
@@ -431,6 +432,7 @@ test("sanitizeSave migra v1 y valida el guardado v2", () => {
     moonHealingPotion: 0,
     moonPoisonPotion: 0,
     arrow: 0,
+    wolfTotem: 0,
   });
   assert.deepEqual(save.inventory.upgrades, ["basket"]);
   assert.deepEqual(save.harvestedNodes, [

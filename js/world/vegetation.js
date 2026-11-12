@@ -27,6 +27,8 @@ export function rollTree(rng, biomeId, moisture, density) {
     chance = (0.002 + canopy * 0.05) * (0.7 + moisture * 0.5);
   } else if (biomeId === BIOME.SNOW) {
     chance = 0.002 + canopy * 0.04;
+  } else if (biomeId === BIOME.WOLF) {
+    chance = (0.02 + canopy * 0.24) * (0.7 + moisture * 0.5);
   } else if (biomeId === BIOME.JUNGLE) {
     chance = (0.05 + canopy * 0.42) * (0.7 + moisture * 0.5);
   } else if (biomeId === BIOME.DESERT) {
@@ -39,7 +41,7 @@ export function rollTree(rng, biomeId, moisture, density) {
 
   let species = 0;
 
-  if (biomeId === BIOME.SNOW || biomeId === BIOME.ROCK) {
+  if (biomeId === BIOME.SNOW || biomeId === BIOME.ROCK || biomeId === BIOME.WOLF) {
     species = 1;
   } else if (biomeId === BIOME.JUNGLE) {
     species = 2;
@@ -67,6 +69,8 @@ export function rollGrass(rng, biomeId, density) {
   } else if (biomeId === BIOME.JUNGLE) {
     chance = 0.03 * (0.7 + density * 0.6);
     style = "lush";
+  } else if (biomeId === BIOME.WOLF) {
+    chance = 0.012 * (0.7 + density * 0.5);
   } else if (biomeId === BIOME.DESERT) {
     chance = 0.003;
     style = "dry";

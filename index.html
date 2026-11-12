@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#0b0f14" />
     <title>Sopa de Piedras — DracxGames</title>
-    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="icon" type="image/png" href="logo_sopa_de_rocas.png" />
     <link rel="stylesheet" href="css/style.css" />
   </head>
   <body>
@@ -131,8 +131,14 @@
       <section class="screen screen-loading is-active" id="screen-loading" aria-label="Cargando juego">
         <header class="loading-brand">DracxGames</header>
         <div class="loading-card">
-          <svg class="game-logo" aria-hidden="true"><use href="#bowl-logo"></use></svg>
-          <h1>Sopa de Piedras</h1>
+          <img
+            class="game-logo"
+            src="logo_sopa_de_rocas.png"
+            alt="RockSoup — Sopa de Piedras"
+            width="435"
+            height="309"
+          />
+          <h1 class="visually-hidden">Sopa de Piedras</h1>
           <p class="tagline">Un mundo procedural cocinado a fuego lento</p>
           <div
             class="progress-track"
@@ -164,9 +170,15 @@
 
         <main class="menu-main">
           <div class="menu-card">
-            <svg class="game-logo menu-logo" aria-hidden="true"><use href="#bowl-logo"></use></svg>
+            <img
+              class="game-logo menu-logo"
+              src="logo_sopa_de_rocas.png"
+              alt="RockSoup — Sopa de Piedras"
+              width="435"
+              height="309"
+            />
             <p class="menu-eyebrow">DracxGames presenta</p>
-            <h1>Sopa de Piedras</h1>
+            <h1 class="visually-hidden">Sopa de Piedras</h1>
             <p class="tagline">Explora un mundo infinito, generado grano a grano.</p>
 
             <nav class="menu-actions" aria-label="Opciones de partida">
@@ -441,6 +453,7 @@
                   <strong id="hud-cycle">Día 1</strong>
                   <span id="hud-cycle-phase" class="cycle-phase">Día 00:00</span>
                   <span id="hud-moon" class="cycle-phase" title="Fase lunar">Luna nueva</span>
+                  <canvas id="hud-celestial" class="hud-celestial" width="30" height="30" aria-hidden="true"></canvas>
                 </div>
               </div>
         </div>
@@ -728,6 +741,41 @@
           </div>
         </aside>
 
+        <aside id="bird-panel" class="bird-panel" aria-hidden="true" aria-label="Cuaderno de aves">
+          <div class="bird-card">
+            <header class="bird-header">
+              <div>
+                <span class="craft-eyebrow">Observación con prismáticos</span>
+                <h2>Cuaderno de aves</h2>
+              </div>
+              <button id="btn-bird-close" class="craft-close" type="button" aria-label="Cerrar cuaderno de aves">
+                &times;
+              </button>
+            </header>
+            <p id="bird-status" class="bird-status">Observa 3 especies distintas con los prismáticos.</p>
+            <div id="bird-list" class="bird-list"></div>
+          </div>
+        </aside>
+
+        <aside id="wolf-panel" class="wolf-panel" aria-hidden="true" aria-label="Cueva de lobos">
+          <div class="wolf-card">
+            <header class="wolf-header">
+              <div>
+                <span class="craft-eyebrow">Misión del bosque de lobos</span>
+                <h2 id="wolf-title">Cueva de lobos</h2>
+              </div>
+              <button id="btn-wolf-close" class="craft-close" type="button" aria-label="Cerrar cueva de lobos">
+                &times;
+              </button>
+            </header>
+            <p id="wolf-status" class="wolf-status"></p>
+            <p id="wolf-progress" class="wolf-progress"></p>
+            <div class="wolf-actions">
+              <button id="btn-wolf-claim" class="menu-button primary" type="button">Entregar 2 pieles</button>
+            </div>
+          </div>
+        </aside>
+
         <aside id="trade-panel" class="trade-panel" aria-hidden="true" aria-label="Mercado y caravanas">
           <div class="trade-card">
             <header class="trade-header">
@@ -852,6 +900,10 @@
                   <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-target"></use></svg>
                   <span>Misiones</span><kbd>J</kbd>
                 </button>
+                <button class="hud-menu-item" type="button" data-hud-action="birds">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-book"></use></svg>
+                  <span>Cuaderno de aves</span><kbd>K</kbd>
+                </button>
                 <button class="hud-menu-item" type="button" data-hud-action="fief">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-trophy"></use></svg>
                   <span>Feudo</span><kbd>V</kbd>
@@ -975,6 +1027,18 @@
               <span id="fishing-marker" class="fishing-marker" aria-hidden="true"></span>
             </div>
             <span id="fishing-hint" class="fishing-hint">Toca la pantalla o pulsa E en el momento justo</span>
+          </div>
+        </div>
+
+        <div id="bird-watch-panel" class="fishing-panel bird-watch-panel" role="status" aria-live="polite" hidden>
+          <div class="fishing-card">
+            <strong id="bird-watch-title" class="fishing-title">Observando...</strong>
+            <div class="fishing-bar bird-watch-bar">
+              <span class="fishing-zone bird-watch-zone" aria-hidden="true"></span>
+              <span class="fishing-perfect bird-watch-perfect" aria-hidden="true"></span>
+              <span id="bird-watch-marker" class="fishing-marker" aria-hidden="true"></span>
+            </div>
+            <span id="bird-watch-hint" class="fishing-hint">Pulsa Enfocar cuando el marcador esté en la zona.</span>
           </div>
         </div>
 
