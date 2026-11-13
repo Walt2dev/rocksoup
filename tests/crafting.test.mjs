@@ -49,14 +49,14 @@ test("fabricar un hacha consume recursos y evita duplicados", () => {
   const first = craftRecipe("axe", inventory);
   assert.equal(first.ok, true);
   assert.equal(inventory.hasTool("axe"), true);
-  assert.equal(inventory.count("madera"), 30);
-  assert.equal(inventory.count("piedra"), 29);
+  assert.equal(inventory.count("madera"), 38);
+  assert.equal(inventory.count("piedra"), 37);
   assert.equal(isRecipeOwned(axe, inventory), true);
 
   const second = craftRecipe("axe", inventory);
   assert.equal(second.ok, false);
   assert.equal(second.reason, "owned");
-  assert.equal(inventory.count("madera"), 30);
+  assert.equal(inventory.count("madera"), 38);
 });
 
 test("la caña de pescar consume madera y fibra", () => {
@@ -67,7 +67,7 @@ test("la caña de pescar consume madera y fibra", () => {
   assert.equal(recipeState(rod, inventory).canCraft, true);
   assert.equal(craftRecipe("fishingRod", inventory).ok, true);
   assert.equal(inventory.hasTool("fishingRod"), true);
-  assert.equal(inventory.count("madera"), 29);
+  assert.equal(inventory.count("madera"), 37);
   assert.equal(inventory.count("fibra"), 2);
   assert.equal(craftRecipe("fishingRod", inventory).reason, "owned");
 });
@@ -116,7 +116,7 @@ test("el camino de piedras se fabrica con una piedra", () => {
 
   assert.equal(craftRecipe("stonePath", inventory).ok, true);
   assert.equal(inventory.itemCount("stonePath"), 1);
-  assert.equal(inventory.count("piedra"), 31);
+  assert.equal(inventory.count("piedra"), 39);
   assert.equal(recipeState(path, inventory).count, 1);
 });
 
@@ -132,7 +132,7 @@ test("el silbato invoca duendes y respeta el límite de cuatro", () => {
 
   const crafted = craftRecipe(whistle, inventory, { workerCount: 1 });
   assert.equal(crafted.ok, true);
-  assert.equal(inventory.count("madera"), 30);
+  assert.equal(inventory.count("madera"), 38);
   assert.equal(inventory.count("Cu"), 8);
 
   const beforeWood = inventory.count("madera");
@@ -217,3 +217,18 @@ test("la gamificación del crafteo reparte XP y sube de nivel", () => {
   );
   assert.equal(craftLevelForXp(Number.NaN), 1);
 });
+
+test("el polvo de hueso requiere el mortero de piedra", () => {
+  const inventory = richInventory({ huesoPollo: 4 });
+  const recipe = recipeById("boneDust");
+
+  assert.equal(recipe.requiresTool, "mortero");
+  assert.equal(recipeState(recipe, inventory).toolMissing, true);
+  assert.equal(craftRecipe("boneDust", inventory).reason, "tool");
+
+  inventory.addTool("mortero");
+  assert.equal(craftRecipe("boneDust", inventory).ok, true);
+  assert.equal(inventory.itemCount("polvoHueso"), 1);
+  assert.equal(inventory.count("huesoPollo"), 2);
+});
+

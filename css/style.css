@@ -569,8 +569,7 @@ kbd {
   width: 100%;
   height: 100%;
   cursor: grab;
-  touch-action: none;
-  z-index: 0;
+  touch-action: pan-y;
 }
 
 #view.is-dragging {
@@ -5567,6 +5566,9 @@ select:focus-visible {
   max-height: 48vh;
   padding: 2px;
   overflow-y: auto;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .inventory-panel.is-remove-target .inventory-grid {
@@ -6050,7 +6052,7 @@ select:focus-visible {
   }
 }
 
-/* ---------- Campaña, bandera y núcleo ---------- */
+/* ---------- Campaï¿½a, bandera y nï¿½cleo ---------- */
 
 .campaign-overlay {
   position: absolute;

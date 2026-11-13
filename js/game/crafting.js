@@ -89,6 +89,26 @@ export const CRAFT_RECIPES = Object.freeze([
     tool: "binoculars",
   }),
   Object.freeze({
+    id: "mortero",
+    category: "tools",
+    name: "Mortero de piedra",
+    description: "Permite moler huesos de pollo y convertirlos en polvo de hueso.",
+    costs: Object.freeze({ piedra: 6, madera: 2 }),
+    type: "tool",
+    tool: "mortero",
+  }),
+  Object.freeze({
+    id: "boneDust",
+    category: "items",
+    name: "Polvo de hueso",
+    description: "Muele 2 huesos de pollo. Úsalo en un arbusto recogido para devolverle las bayas.",
+    costs: Object.freeze({ huesoPollo: 2 }),
+    type: "bundle",
+    item: "polvoHueso",
+    amount: 1,
+    requiresTool: "mortero",
+  }),
+  Object.freeze({
     id: "arrows",
     category: "items",
     name: "Flechas",
@@ -334,6 +354,8 @@ export function recipeState(recipe, inventory, context = {}) {
   const locked =
     recipe.requiresWolfMission === true &&
     context.wolfMissionComplete !== true;
+  const toolMissing =
+    Boolean(recipe.requiresTool) && !inventory.hasTool(recipe.requiresTool);
 
   return {
     owned,
@@ -341,8 +363,9 @@ export function recipeState(recipe, inventory, context = {}) {
     missing,
     limit,
     locked,
+    toolMissing,
     workerCount,
-    canCraft: !locked && !owned && affordable && !limit,
+    canCraft: !locked && !toolMissing && !owned && affordable && !limit,
     count: recipe.type === "placeable" ? inventory.itemCount(recipe.item) : 0,
   };
 }
@@ -360,6 +383,10 @@ export function craftRecipe(recipeOrId, inventory, context = {}) {
     context.wolfMissionComplete !== true
   ) {
     return { ok: false, reason: "locked", recipe };
+  }
+
+  if (recipe.requiresTool && !inventory.hasTool(recipe.requiresTool)) {
+    return { ok: false, reason: "tool", recipe };
   }
 
   if (isRecipeOwned(recipe, inventory)) {

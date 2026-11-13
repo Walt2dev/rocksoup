@@ -261,6 +261,8 @@ test("sanitizeSave migra v1 y valida el guardado v2", () => {
     moonPoisonPotion: 0,
     arrow: 0,
     wolfTotem: 0,
+    carnePollo: 0,
+    polvoHueso: 0,
   });
   assert.deepEqual(migrated.inventory.upgrades, []);
   assert.deepEqual(migrated.harvestedNodes, []);
@@ -433,6 +435,8 @@ test("sanitizeSave migra v1 y valida el guardado v2", () => {
     moonPoisonPotion: 0,
     arrow: 0,
     wolfTotem: 0,
+    carnePollo: 0,
+    polvoHueso: 0,
   });
   assert.deepEqual(save.inventory.upgrades, ["basket"]);
   assert.deepEqual(save.harvestedNodes, [
@@ -533,4 +537,19 @@ test("la profundidad no baja del límite -70", () => {
   assert.equal(world.heightAt(x, y), -70);
   world.changeHeightAt(x, y, -1);
   assert.equal(world.heightAt(x, y), -70);
+});
+
+
+test("el polvo de hueso puede hacer crecer de nuevo un arbusto", () => {
+  const world = new World("regrow-bush");
+  const found = findNode(world, "bush");
+  assert.ok(found);
+
+  const harvested = world.harvestNode("bush", found.x, found.y);
+  assert.ok(harvested);
+  assert.equal(world.isHarvested("bush", found.x, found.y), true);
+
+  assert.equal(world.regrowBush(found.x, found.y), true);
+  assert.equal(world.isHarvested("bush", found.x, found.y), false);
+  assert.ok(world.getNodeAt("bush", found.x, found.y));
 });

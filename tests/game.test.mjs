@@ -22,38 +22,37 @@ import {
   totalYield,
 } from "../js/game/resources.js";
 
-test("cada recurso ocupa un espacio y se apila hasta 32 unidades", () => {
-  const inventory = new Inventory({ capacity: 3 });
+test("cada recurso ocupa varios espacios de 32 y se rellena el parcial", () => {
+  const inventory = new Inventory({ capacity: 2 });
 
   assert.equal(inventory.total(), 0);
   assert.equal(inventory.slotsUsed(), 0);
-  assert.equal(inventory.freeSpace(), 3);
-  assert.equal(inventory.add("madera", 40), MAX_STACK);
-  assert.equal(inventory.add("piedra", 5), 5);
-  assert.equal(inventory.add("agua", 2), 2);
-  assert.equal(inventory.slotsUsed(), 3);
+  assert.equal(inventory.freeSpace(), 2);
+  assert.equal(inventory.add("madera", 40), 40);
+  assert.equal(inventory.slotsUsed(), 2);
   assert.equal(inventory.freeSpace(), 0);
-  assert.equal(inventory.add("bayas", 1), 0);
+  assert.equal(inventory.add("madera", 24), 24);
+  assert.equal(inventory.count("madera"), 64);
+  assert.equal(inventory.slotsUsed(), 2);
   assert.equal(inventory.add("madera", 1), 0);
-  assert.equal(inventory.total(), MAX_STACK + 7);
-
-  assert.equal(inventory.canAdd("bayas", 1), 0);
-  assert.equal(inventory.canAddAll({ bayas: 1 }), false);
-  assert.equal(inventory.canAddAll({ madera: 1 }), false);
-  assert.equal(inventory.canAddAll({ piedra: 1 }), true);
+  assert.equal(inventory.add("piedra", 5), 0);
+  assert.equal(inventory.canAdd("piedra", 1), 0);
+  assert.equal(inventory.canAdd("madera", 1), 0);
 });
 
-test("los objetos también se apilan hasta 32 y respetan los espacios", () => {
+test("los objetos también ocupan varios stacks y respetan los espacios", () => {
   const inventory = new Inventory({ capacity: 2 });
 
-  assert.equal(inventory.addItem("bowl", 40), MAX_STACK);
-  assert.equal(inventory.itemCount("bowl"), MAX_STACK);
-  assert.equal(inventory.addItem("bowl", 1), 0);
-  assert.equal(inventory.addItem("coffee", 1), 1);
-  assert.equal(inventory.addItem("campfire", 1), 0);
+  assert.equal(inventory.addItem("bowl", 40), 40);
+  assert.equal(inventory.itemCount("bowl"), 40);
   assert.equal(inventory.slotsUsed(), 2);
-  assert.equal(inventory.removeItem("bowl", MAX_STACK), MAX_STACK);
-  assert.equal(inventory.addItem("campfire", 1), 1);
+  assert.equal(inventory.addItem("bowl", 1), 1);
+  assert.equal(inventory.itemCount("bowl"), 41);
+  assert.equal(inventory.addItem("coffee", 1), 0);
+  assert.equal(inventory.removeItem("bowl", 9), 9);
+  assert.equal(inventory.itemCount("bowl"), 32);
+  assert.equal(inventory.slotsUsed(), 1);
+  assert.equal(inventory.addItem("coffee", 1), 1);
   assert.equal(inventory.slotsUsed(), 2);
 });
 
@@ -144,15 +143,18 @@ test("los nodos y sus rendimientos dependen de la herramienta", () => {
     madera: 3,
     semillaArbol: 1,
   });
-  assert.deepEqual(harvestYields(NODE_KIND.MINERAL, { type: 1 }, hand), { piedra: 1 });
-  assert.deepEqual(harvestYields(NODE_KIND.MINERAL, { type: 1 }, pickaxe), {
-    piedra: 1,
-    Fe: 1,
-  });
-  assert.deepEqual(harvestYields(NODE_KIND.MINERAL, { type: 10 }, pickaxe), {
-    piedra: 1,
-    oro: 1,
-  });
+  assert.deepEqual(
+    harvestYields(NODE_KIND.MINERAL, { type: 1, amount: 32 }, hand),
+    { piedra: 32 },
+  );
+  assert.deepEqual(
+    harvestYields(NODE_KIND.MINERAL, { type: 1, amount: 32 }, pickaxe),
+    { piedra: 32, Fe: 1 },
+  );
+  assert.deepEqual(
+    harvestYields(NODE_KIND.MINERAL, { type: 10, amount: 64 }, pickaxe),
+    { oro: 64 },
+  );
   assert.equal(totalYield({ madera: 2, piedra: 1 }), 3);
 });
 
@@ -313,4 +315,13 @@ test("A* permite caer pero limita la subida", () => {
     maxDropHeight: 2,
   });
   assert.equal(blockedDrop, null);
+});
+
+test("canAddAll reparte cantidades grandes en varios stacks", () => {
+  const inventory = new Inventory({ capacity: 2 });
+  assert.equal(inventory.canAddAll({ madera: 64 }), true);
+  assert.equal(inventory.canAddAll({ madera: 65 }), false);
+  assert.equal(inventory.add("madera", 64), 64);
+  assert.equal(inventory.slotsUsed(), 2);
+  assert.equal(inventory.canAddAll({ piedra: 1 }), false);
 });

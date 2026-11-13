@@ -93,6 +93,20 @@ export const GOLD_VEIN_CHANCE = 0.004;
 
 export const MINERAL_VARIANTS = 2;
 
+function rollStoneAmount(rng) {
+  const roll = rng.next();
+  if (roll < 0.25) return 32;
+  if (roll < 0.6) return 48;
+  return 64;
+}
+
+function rollGoldAmount(rng) {
+  const roll = rng.next();
+  if (roll < 0.45) return 32;
+  if (roll < 0.8) return 48;
+  return 64;
+}
+
 export function mineralById(id) {
   return MINERAL_TYPES[id - 1] ?? null;
 }
@@ -139,6 +153,7 @@ export function rollMineral(rng, biomeId, veinValue) {
     scale: rng.float(0.8, 1.15),
     offsetX: rng.float(-0.22, 0.22),
     offsetY: rng.float(-0.22, 0.22),
+    amount: rollStoneAmount(rng),
   };
 }
 
@@ -164,5 +179,6 @@ export function rollGoldVein(rng, terrain, veinValue, config = WORLD) {
     scale: rng.float(0.8, 1.15),
     offsetX: rng.float(-0.22, 0.22),
     offsetY: rng.float(-0.22, 0.22),
+    amount: rollGoldAmount(rng),
   };
 }

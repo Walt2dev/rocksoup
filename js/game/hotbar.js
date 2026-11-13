@@ -24,10 +24,19 @@ export function normalizeHotbarSlots(value, count = HOTBAR_SLOT_COUNT) {
 export function defaultHotbarSlots(entries, count = HOTBAR_SLOT_COUNT) {
   const slots = new Array(count).fill(null);
   const source = Array.isArray(entries) ? entries : [];
+  const seen = new Set();
+  let slotIndex = 0;
 
-  for (let index = 0; index < count && index < source.length; index += 1) {
-    const entry = source[index];
-    slots[index] = { kind: entry.kind, key: entry.key };
+  for (const entry of source) {
+    if (slotIndex >= count) {
+      break;
+    }
+    if (!entry || seen.has(`${entry.kind}:${entry.key}`)) {
+      continue;
+    }
+    seen.add(`${entry.kind}:${entry.key}`);
+    slots[slotIndex] = { kind: entry.kind, key: entry.key };
+    slotIndex += 1;
   }
 
   return slots;

@@ -38,6 +38,7 @@ export const TOOL_SOURCES = Object.freeze({
   sword: "Se fabrica en Crafteo > Herramientas.",
   bow: "Se fabrica en Crafteo > Herramientas. Consume flechas.",
   binoculars: "Se fabrica en Crafteo > Herramientas. Úsalos para observar aves.",
+  mortero: "Se fabrica en Crafteo > Herramientas. Sirve para moler huesos.",
 });
 
 export const ITEM_SOURCES = Object.freeze({
@@ -71,6 +72,8 @@ export const ITEM_SOURCES = Object.freeze({
   moonPoisonPotion: "Se prepara en el caldero en luna nueva con un apunte de constelación.",
   arrow: "Se fabrican en Crafteo > Objetos con madera, piedra y plumas.",
   wolfTotem: "Se fabrica tras completar la Cueva de lobos, en Crafteo > Construcción.",
+  carnePollo: "La sueltan los pollos al derrotarlos. Se puede usar como comida.",
+  polvoHueso: "Se muele hueso de pollo con el mortero de piedra. Hace crecer bayas en arbustos recogidos.",
 });
 
 export function sourceFor(kind, key) {

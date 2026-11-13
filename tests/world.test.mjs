@@ -314,6 +314,7 @@ test("las vetas de oro son raras y solo aparecen junto al agua", () => {
     chance: () => true,
     int: () => 0,
     float: () => 0.5,
+    next: () => 0.5,
   };
   const gold = MINERAL_TYPES.find((type) => type.key === "oro");
 
@@ -476,6 +477,8 @@ test("el guardado valida, escribe, lee y limpia", () => {
     moonPoisonPotion: 0,
     arrow: 0,
     wolfTotem: 0,
+    carnePollo: 0,
+    polvoHueso: 0,
   });
   assert.deepEqual(save.inventory.upgrades, []);
   assert.deepEqual(save.harvestedNodes, []);
@@ -568,3 +571,4 @@ test("el modo plano ignora alturas y ediciones verticales", () => {
   assert.equal(world.heightAt(x, y), 0);
   assert.deepEqual(world.exportHeightEdits(), []);
 });
+

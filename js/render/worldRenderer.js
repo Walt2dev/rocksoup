@@ -927,6 +927,16 @@ export class WorldRenderer {
     ctx.fill();
 
     ctx.drawImage(sprite.canvas, x, y, width, height);
+
+    this.pickables.push({
+      kind: "pickedBush",
+      x: prop.nodeX,
+      y: prop.nodeY,
+      screenX: prop.screenX,
+      screenY: prop.screenY,
+      sprite,
+      scale,
+    });
   }
 
   drawStump(ctx, prop, zoom) {

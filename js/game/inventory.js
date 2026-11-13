@@ -35,6 +35,7 @@ export const TOOL_INFO = Object.freeze({
   spear: Object.freeze({ label: "Lanza de piedra", short: "Lanza", symbol: "L" }),
   knife: Object.freeze({ label: "Cuchillo de piedra", short: "Cuchillo", symbol: "C" }),
   fishingRod: Object.freeze({ label: "Caña de pescar", short: "Caña", symbol: "Ca" }),
+  mortero: Object.freeze({ label: "Mortero de piedra", short: "Mortero", symbol: "Mo" }),
   hoe: Object.freeze({ label: "Azada", short: "Azada", symbol: "Z" }),
   sword: Object.freeze({ label: "Espada de piedra", short: "Espada", symbol: "E" }),
   bow: Object.freeze({ label: "Arco de madera", short: "Arco", symbol: "Ar" }),
@@ -77,6 +78,8 @@ export const ITEM_INFO = Object.freeze({
   moonPoisonPotion: Object.freeze({ label: "Brebaje lunar de sombra", symbol: "LS" }),
   arrow: Object.freeze({ label: "Flecha", symbol: "Fl" }),
   wolfTotem: Object.freeze({ label: "Tótem de lobo", symbol: "Tl" }),
+  carnePollo: Object.freeze({ label: "Carne de pollo", symbol: "CP" }),
+  polvoHueso: Object.freeze({ label: "Polvo de hueso", symbol: "PH" }),
 });
 export const ITEM_KEYS = Object.freeze(Object.keys(ITEM_INFO));
 
@@ -101,6 +104,20 @@ function clampInt(value, min, max, fallback) {
   return Math.min(max, Math.max(min, Math.floor(value)));
 }
 
+function stackSlotsFor(amount) {
+  return amount > 0 ? Math.ceil(amount / MAX_STACK) : 0;
+}
+
+function maxAddable(current, requested, freeSlots) {
+  if (requested <= 0) {
+    return 0;
+  }
+  const partial = current % MAX_STACK;
+  const partialSpace = partial === 0 ? 0 : MAX_STACK - partial;
+  const usable = partialSpace + Math.max(0, freeSlots) * MAX_STACK;
+  return Math.min(requested, usable);
+}
+
 export class Inventory {
   constructor({
     resources = {},
@@ -112,12 +129,12 @@ export class Inventory {
     this.resources = {};
 
     for (const key of RESOURCE_KEYS) {
-      this.resources[key] = clampInt(resources[key], 0, MAX_STACK, 0);
+      this.resources[key] = clampInt(resources[key], 0, MAX_STACK * MAX_CAPACITY, 0);
     }
 
     this.items = {};
     for (const key of ITEM_KEYS) {
-      this.items[key] = clampInt(items[key], 0, MAX_STACK, 0);
+      this.items[key] = clampInt(items[key], 0, MAX_STACK * MAX_CAPACITY, 0);
     }
 
     this.capacity = clampInt(capacity, 1, MAX_CAPACITY, DEFAULT_CAPACITY);
@@ -144,14 +161,10 @@ export class Inventory {
     let used = this.tools.size;
 
     for (const key of RESOURCE_KEYS) {
-      if (this.resources[key] > 0) {
-        used += 1;
-      }
+      used += stackSlotsFor(this.resources[key]);
     }
     for (const key of ITEM_KEYS) {
-      if (this.items[key] > 0) {
-        used += 1;
-      }
+      used += stackSlotsFor(this.items[key]);
     }
 
     return used;
@@ -167,13 +180,8 @@ export class Inventory {
     }
 
     const current = this.resources[key];
-    const requested = clampInt(amount, 0, MAX_STACK, 0);
-
-    if (current === 0 && this.slotsUsed() >= this.capacity) {
-      return 0;
-    }
-
-    return Math.min(requested, MAX_STACK - current);
+    const requested = clampInt(amount, 0, MAX_STACK * MAX_CAPACITY, 0);
+    return maxAddable(current, requested, this.freeSpace());
   }
 
   add(key, amount) {
@@ -181,30 +189,28 @@ export class Inventory {
       throw new Error(`Recurso desconocido: ${key}`);
     }
 
-    const requested = clampInt(amount, 0, MAX_STACK, 0);
+    const requested = clampInt(amount, 0, MAX_STACK * MAX_CAPACITY, 0);
     const added = this.canAdd(key, requested);
     this.resources[key] += added;
     return added;
   }
 
   canAddAll(resources) {
-    const nextUsed = this.slotsUsed();
-    const newTypes = new Set();
+    let freeSlots = this.freeSpace();
 
     for (const [key, amount] of Object.entries(resources)) {
       if (!(key in RESOURCE_INFO)) {
         return false;
       }
       const current = this.resources[key];
-      if (current === 0 && !newTypes.has(key)) {
-        newTypes.add(key);
-        if (nextUsed + newTypes.size > this.capacity) {
-          return false;
-        }
-      }
-      if (current + amount > MAX_STACK) {
+      const requested = clampInt(amount, 0, MAX_STACK * MAX_CAPACITY, 0);
+      const added = maxAddable(current, requested, freeSlots);
+      if (added < requested) {
         return false;
       }
+      const usedBefore = stackSlotsFor(current);
+      const usedAfter = stackSlotsFor(current + added);
+      freeSlots -= usedAfter - usedBefore;
     }
 
     return true;
@@ -215,7 +221,7 @@ export class Inventory {
       return 0;
     }
 
-    const requested = clampInt(amount, 0, MAX_STACK, 0);
+    const requested = clampInt(amount, 0, MAX_STACK * MAX_CAPACITY, 0);
     const removed = Math.min(requested, this.resources[key]);
     this.resources[key] -= removed;
     return removed;
@@ -268,12 +274,8 @@ export class Inventory {
     }
 
     const current = this.items[key];
-    if (current === 0 && this.slotsUsed() >= this.capacity) {
-      return 0;
-    }
-
-    const requested = clampInt(amount, 0, MAX_STACK, 0);
-    const added = Math.min(requested, MAX_STACK - current);
+    const requested = clampInt(amount, 0, MAX_STACK * MAX_CAPACITY, 0);
+    const added = maxAddable(current, requested, this.freeSpace());
     this.items[key] += added;
     return added;
   }
@@ -282,7 +284,7 @@ export class Inventory {
     if (!(key in ITEM_INFO)) {
       return 0;
     }
-    const removed = Math.min(clampInt(amount, 0, MAX_STACK, 0), this.items[key]);
+    const removed = Math.min(clampInt(amount, 0, MAX_STACK * MAX_CAPACITY, 0), this.items[key]);
     this.items[key] -= removed;
     return removed;
   }
@@ -323,3 +325,5 @@ export class Inventory {
     });
   }
 }
+
+

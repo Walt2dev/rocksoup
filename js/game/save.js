@@ -38,7 +38,7 @@ function sanitizeResources(value) {
   for (const key of RESOURCE_KEYS) {
     const amount = value && typeof value === "object" ? value[key] : 0;
     resources[key] = Number.isFinite(amount)
-      ? Math.min(MAX_STACK, Math.max(0, Math.floor(amount)))
+      ? Math.min(MAX_STACK * MAX_CAPACITY, Math.max(0, Math.floor(amount)))
       : 0;
   }
 
@@ -67,7 +67,7 @@ function sanitizeItems(value) {
   for (const key of ITEM_KEYS) {
     const amount = value && typeof value === "object" ? value[key] : 0;
     items[key] = Number.isFinite(amount)
-      ? Math.min(MAX_STACK, Math.max(0, Math.floor(amount)))
+      ? Math.min(MAX_STACK * MAX_CAPACITY, Math.max(0, Math.floor(amount)))
       : 0;
   }
 

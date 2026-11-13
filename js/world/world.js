@@ -597,6 +597,31 @@ export class World {
     };
   }
 
+  regrowBush(x, y) {
+    const tileX = Math.floor(x);
+    const tileY = Math.floor(y);
+    const size = this.chunkSize;
+    const cx = Math.floor(tileX / size);
+    const cy = Math.floor(tileY / size);
+    const localX = ((tileX % size) + size) % size;
+    const localY = ((tileY % size) + size) % size;
+    const chunk = this.getChunk(cx, cy);
+    const index = chunk.index(localX, localY);
+    const pickedIndex = chunk.pickedBushes.findIndex(
+      (entry) => entry.localX === localX && entry.localY === localY,
+    );
+
+    if (pickedIndex === -1) {
+      return false;
+    }
+
+    const [bush] = chunk.pickedBushes.splice(pickedIndex, 1);
+    chunk.bush[index] = 1;
+    chunk.bushes.push({ ...bush, localX, localY });
+    this.harvestedNodes.delete(`bush:${tileX}:${tileY}`);
+    return true;
+  }
+
   restoreMineral(x, y) {
     const tileX = Math.floor(x);
     const tileY = Math.floor(y);

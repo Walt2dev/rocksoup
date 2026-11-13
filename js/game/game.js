@@ -101,6 +101,7 @@ import {
   investigationReward,
   sanitizeSciencePoints,
 } from "./science.js";
+import { foodTotal, spendFood } from "./food.js";
 import {
   DAY_LENGTH_SECONDS,
   DAY_NIGHT_CYCLE,
@@ -173,6 +174,7 @@ import {
   Inventory,
   ITEM_INFO,
   ITEM_KEYS,
+  MAX_STACK,
   RESOURCE_INFO,
   RESOURCE_KEYS,
   TOOL_INFO,
@@ -4444,6 +4446,25 @@ export class Game {
         y,
       });
     }
+
+    if (species === AMBIENT_SPECIES.CHICKEN) {
+      const meatAdded = this.inventory.addItem("carnePollo", 1);
+      if (meatAdded > 0) {
+        this.effects.addText("+1 Carne de pollo", x, y, {
+          color: "#c9a36a",
+        });
+      } else {
+        this.groundItems.push({
+          kind: "item",
+          key: "carnePollo",
+          amount: 1,
+          label: ITEM_INFO.carnePollo.label,
+          color: "#c9a36a",
+          x,
+          y,
+        });
+      }
+    }
   }
 
   findAttackTargetInRange(range = PLAYER_ATTACK_RANGE) {
@@ -5098,6 +5119,10 @@ export class Game {
     const pickable = this.renderer.pickNode(screenX, screenY);
 
     if (pickable) {
+      if (pickable.kind === "pickedBush") {
+        this.tryBoneDust(pickable.x, pickable.y, selectedEntry);
+        return;
+      }
       const workerIds = this.getSelectedWorkerIds();
       if (workerIds.length > 0) {
         this.commandWorkersGather(
@@ -6771,6 +6796,43 @@ export class Game {
       color: "#7ec699",
     });
     this.notify("Perdiz capturada. Ahora te acompaña como mascota.");
+    this.updateHud();
+    this.save();
+  }
+
+  tryBoneDust(tileX, tileY, selectedEntry) {
+    if (
+      selectedEntry?.kind !== "item" ||
+      selectedEntry.key !== "polvoHueso"
+    ) {
+      this.notify("Selecciona polvo de hueso para hacer crecer bayas.");
+      return;
+    }
+
+    const distance = Math.hypot(
+      tileX + 0.5 - this.playerTransform.x,
+      tileY + 0.5 - this.playerTransform.y,
+    );
+    if (distance > GATHER_RANGE + 0.6) {
+      this.notify("Acércate al arbusto para usar el polvo de hueso.");
+      return;
+    }
+
+    if (this.inventory.itemCount("polvoHueso") <= 0) {
+      this.notify("No tienes polvo de hueso.");
+      return;
+    }
+
+    if (!this.world.regrowBush(tileX, tileY)) {
+      this.notify("Ese arbusto ya tiene bayas.");
+      return;
+    }
+
+    this.inventory.removeItem("polvoHueso", 1);
+    this.effects.addText("¡Bayas de nuevo!", tileX + 0.5, tileY + 0.5, {
+      color: "#9b5f92",
+    });
+    this.notify("El polvo de hueso ha hecho crecer las bayas.");
     this.updateHud();
     this.save();
   }
@@ -11173,6 +11235,28 @@ export class Game {
       }),
     );
 
+    const workerCount = this.getWorkerIds().length;
+    const availableFood = foodTotal(this.inventory);
+    fragment.append(
+      this.createUniversityCard({
+        name: "Crear duende",
+        description:
+          "Recluta un duende trabajador con 10 unidades de comida: bayas, trigo, maíz, pescado, pan, pollo y más.",
+        tag: `Duendes: ${workerCount}/${MAX_WORKERS} · Comida: ${availableFood}/10`,
+        costs: {},
+        actions: [
+          {
+            label:
+              workerCount >= MAX_WORKERS
+                ? "Máximo de duendes"
+                : "Crear duende (10 comida)",
+            action: "create-worker",
+            disabled: workerCount >= MAX_WORKERS || availableFood < 10,
+          },
+        ],
+      }),
+    );
+
     if (!this.researchBookOwned) {
       fragment.append(
         this.createUniversityCard({
@@ -11400,7 +11484,31 @@ export class Game {
       this.startPlacement("cauldron");
     } else if (action === "research") {
       this.researchPotion(button.dataset.universityValue);
+    } else if (action === "create-worker") {
+      this.createLibraryWorker();
     }
+  }
+
+  createLibraryWorker() {
+    if (this.getWorkerIds().length >= MAX_WORKERS) {
+      this.notify(`Ya tienes el máximo de duendes (${MAX_WORKERS}).`);
+      return;
+    }
+    const result = spendFood(this.inventory, 10);
+    if (!result.ok) {
+      this.notify(
+        `Faltan ${result.missing ?? 10} unidades de comida para crear un duende.`,
+      );
+      return;
+    }
+    const workerId = this.spawnWorker({ silent: false });
+    if (workerId) {
+      this.notify("La biblioteca ha formado un nuevo duende.");
+      this.renderUniversity();
+    } else {
+      this.notify("No hay espacio para un nuevo duende.");
+    }
+    this.save();
   }
 
   buyUniversityBook() {
@@ -11670,6 +11778,9 @@ export class Game {
     if (state.locked) {
       return "Misión de lobos";
     }
+    if (state.toolMissing) {
+      return `Requiere ${TOOL_INFO[recipe.requiresTool]?.short ?? "herramienta"}`;
+    }
     if (state.limit) {
       return "Máximo";
     }
@@ -11689,6 +11800,9 @@ export class Game {
     if (state.locked) {
       return "Completa la Cueva de lobos";
     }
+    if (state.toolMissing) {
+      return `Necesitas ${TOOL_INFO[recipe.requiresTool]?.label ?? "una herramienta"}`;
+    }
     if (recipe.type === "placeable") {
       return `En mochila: ${state.count}`;
     }
@@ -11704,6 +11818,9 @@ export class Game {
     }
     if (state.locked) {
       return "Bloqueada";
+    }
+    if (state.toolMissing) {
+      return "Falta herramienta";
     }
     if (state.limit) {
       return "Máximo";
@@ -12131,6 +12248,10 @@ export class Game {
         this.notify("Faltan recursos para fabricarlo.");
       } else if (result.reason === "locked") {
         this.notify("Completa la misión de la Cueva de lobos para desbloquearlo.");
+      } else if (result.reason === "tool") {
+        this.notify(
+          `Necesitas ${TOOL_INFO[result.recipe?.requiresTool]?.label ?? "una herramienta"} para fabricarlo.`,
+        );
       }
       return;
     }
@@ -15162,14 +15283,31 @@ export class Game {
 
   inventoryEntries() {
     const entries = [];
+    const pushStacks = (kind, key, total, info) => {
+      let remaining = total;
+      let stackIndex = 0;
+      while (remaining > 0) {
+        const count = Math.min(MAX_STACK, remaining);
+        entries.push({
+          kind,
+          key,
+          count,
+          total,
+          stackIndex,
+          label: info.label,
+          color: info.color,
+          symbol: info.symbol,
+          source: info.source,
+        });
+        remaining -= count;
+        stackIndex += 1;
+      }
+    };
 
     for (const key of RESOURCE_KEYS) {
       const count = this.inventory.count(key);
       if (count > 0) {
-        entries.push({
-          kind: "resource",
-          key,
-          count,
+        pushStacks("resource", key, count, {
           label: RESOURCE_INFO[key].label,
           color: RESOURCE_INFO[key].color,
           symbol: RESOURCE_INFO[key].symbol,
@@ -15181,10 +15319,7 @@ export class Game {
     for (const key of ITEM_KEYS) {
       const count = this.inventory.itemCount(key);
       if (count > 0) {
-        entries.push({
-          kind: "item",
-          key,
-          count,
+        pushStacks("item", key, count, {
           label: ITEM_INFO[key].label,
           color: "#c9a36a",
           symbol: ITEM_INFO[key].symbol,
@@ -15199,6 +15334,8 @@ export class Game {
           kind: "tool",
           key,
           count: 1,
+          total: 1,
+          stackIndex: 0,
           label: TOOL_INFO[key].short,
           color: "#7ec699",
           symbol: TOOL_INFO[key].symbol,
@@ -15498,7 +15635,19 @@ export class Game {
       return;
     }
 
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+
     if (!drag.active) {
+      if (event.pointerType === "touch") {
+        if (Math.abs(dy) >= Math.abs(dx)) {
+          this.cancelHotbarDrag();
+          return;
+        }
+        if (Math.abs(dx) < 10) {
+          return;
+        }
+      }
       drag.active = true;
       this.suppressInventoryClick = true;
       const entry = this.inventoryEntries().find(
@@ -15847,7 +15996,7 @@ export class Game {
       return;
     }
 
-    const amount = wholeStack ? entry.count : 1;
+    const amount = wholeStack ? (entry.total ?? entry.count) : 1;
     const removed =
       entry.kind === "resource"
         ? this.inventory.remove(entry.key, amount)
@@ -16059,7 +16208,8 @@ export class Game {
       const chip = document.createElement("span");
       const icon = document.createElement("span");
       const value = document.createElement("b");
-      const tooltip = `${entry.label} \u00D7${entry.count}\n${entry.source}`;
+      const total = entry.total ?? entry.count;
+      const tooltip = `${entry.label} \u00D7${total}\n${entry.source}`;
 
       chip.className = "resource-chip hotbar-slot";
       if (entry.kind === "tool") {
@@ -16083,7 +16233,7 @@ export class Game {
 
       icon.className = "hotbar-icon";
       icon.textContent = entry.symbol ?? "?";
-      value.textContent = String(entry.count);
+      value.textContent = String(total);
       chip.append(icon, value);
       fragment.append(chip);
     }

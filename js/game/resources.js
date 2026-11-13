@@ -71,8 +71,17 @@ export function harvestYields(kind, node, tools = new Set()) {
   }
 
   if (kind === NODE_KIND.MINERAL) {
-    const yields = { piedra: 1 };
+    const amount = Math.max(
+      1,
+      Math.floor(Number.isFinite(node?.amount) ? node.amount : 32),
+    );
     const mineral = mineralById(node?.type);
+
+    if (mineral?.key === "oro" && tools.has("pickaxe")) {
+      return { oro: amount };
+    }
+
+    const yields = { piedra: amount };
 
     if (mineral && tools.has("pickaxe")) {
       yields[mineral.key] = 1;
