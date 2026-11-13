@@ -28,6 +28,7 @@ import {
   listInstalledPacks,
   loadActivePack,
   loadDefaultPack,
+  loadStaticDefaultPack,
   setActivePackId,
   uploadDefaultPackFiles,
 } from "./game/texturePacks.js";
@@ -1307,6 +1308,8 @@ async function boot() {
 
   try {
     assets = await loadAssets(setLoading);
+    setLoading(0.99, "Cargando pack original...");
+    await loadStaticDefaultPack(assets);
     await loadDefaultPack(assets);
     await loadActivePack(assets);
     await new Promise((resolve) => window.setTimeout(resolve, 140));

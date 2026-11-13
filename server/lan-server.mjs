@@ -67,6 +67,7 @@ const MIME = {
   ".ico": "image/x-icon",
   ".map": "application/json",
   ".woff2": "font/woff2",
+  ".zip": "application/zip",
 };
 
 function sanitizeName(value) {
@@ -1502,6 +1503,7 @@ const server = createServer(async (req, res) => {
       pathname === "/favicon.svg" ||
       pathname === "/logo_sopa_de_rocas.png" ||
       pathname.startsWith("/css/") ||
+      pathname.startsWith("/packs/") ||
       pathname.startsWith("/characters/") ||
       pathname.startsWith("/js/");
 

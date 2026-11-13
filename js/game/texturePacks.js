@@ -489,6 +489,26 @@ export async function clearDefaultPack() {
   await withStore("readwrite", (store) => store.delete(DEFAULT_PACK_ID));
 }
 
+export async function loadStaticDefaultPack(assets) {
+  try {
+    const url = new URL("../../packs/pack_original.zip?v=1", import.meta.url);
+    const response = await fetch(url.href);
+    if (!response.ok) {
+      throw new Error(`No se pudo cargar ${url.pathname}`);
+    }
+    const blob = await response.blob();
+    const pack = await parsePack(blob);
+    applyPackToAssets(assets, pack);
+    return pack;
+  } catch (error) {
+    console.warn(
+      "[Packs] No se pudo cargar el pack original:",
+      error.message,
+    );
+    return null;
+  }
+}
+
 export async function loadDefaultPack(assets) {
   try {
     const record = await withStore("readonly", (store) =>
