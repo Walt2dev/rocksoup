@@ -1,3 +1,4 @@
+import "./loadEnv.mjs";
 import { createServer } from "node:http";
 import { readFile, writeFile, rename, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -44,6 +45,23 @@ import {
 } from "./admin.mjs";
 import { createWorldStore, normalizeWorldId } from "./worldStore.mjs";
 import { createAmbientSync } from "./ambientSync.mjs";
+import { createDatabase } from "./db.mjs";
+import { createAuthStore, sessionTokenFromRequest } from "./authStore.mjs";
+import { createAccountStore } from "./accountStore.mjs";
+import { createStoreStore } from "./storeStore.mjs";
+import { createPayPal } from "./paypal.mjs";
+import { createApiHandler } from "./api.mjs";
+import {
+  appendLoreEvent,
+  createLore,
+  sanitizeLore,
+} from "./lore.mjs";
+import {
+  applyGrantsToInventory,
+  describeGrants,
+  grantsAreEmpty,
+  mergeGrants,
+} from "./grants.mjs";
 
 const ROOT = resolve(process.cwd());
 const SAVE_DIR = process.env.SAVE_DIR
@@ -254,11 +272,13 @@ function sanitizeDonkey(value) {
 }
 
 function createInitialState() {
+  const seed = randomBytes(4).toString("hex");
   return {
     version: 1,
-    seed: randomBytes(4).toString("hex"),
+    seed,
     worldBiomes: "expanded",
     time: 0,
+    lore: createLore("Mundo LAN", { seed }),
     structures: {
       campfires: [],
       ovens: [],
@@ -286,6 +306,9 @@ function normalizeState(parsed) {
   state.worldBiomes =
     parsed.worldBiomes === "expanded" ? "expanded" : "legacy";
   state.time = Number.isFinite(parsed.time) ? Math.max(0, parsed.time) : 0;
+  state.lore = parsed.lore
+    ? sanitizeLore(parsed.lore, "Mundo LAN")
+    : createLore("Mundo LAN", { seed: state.seed });
   state.structures = {
     campfires: sanitizeStructureList(parsed.structures?.campfires),
     ovens: sanitizeStructureList(parsed.structures?.ovens),
@@ -366,6 +389,31 @@ const pvp = createPvpState(Date.now(), pvpConfig);
 const chatHistory = new ChatHistory(CHAT_CONFIG.historyLimit);
 const leaderboardStore = createLeaderboardStore();
 await leaderboardStore.init();
+
+const database = createDatabase();
+await database.init();
+const authStore = createAuthStore({ db: database });
+const accountStore = createAccountStore({ db: database });
+const paypal = createPayPal();
+const storeStore = createStoreStore({
+  db: database,
+  accountStore,
+  paypal,
+});
+await storeStore.init();
+const apiHandler = createApiHandler({
+  db: database,
+  authStore,
+  accountStore,
+  storeStore,
+  paypal,
+  readRequestBody,
+});
+
+function appendWorldLore(event) {
+  state.lore = appendLoreEvent(state.lore, event);
+  scheduleSave();
+}
 
 function publicPlayer(client) {
   return {
@@ -525,6 +573,12 @@ async function handlePvpTransition(now) {
       pushSystemChat(
         `Evento PvP finalizado. Ganador: ${transition.winner.name} (${transition.winner.score} pts).`,
       );
+      appendWorldLore({
+        type: "pvp.winner",
+        text: `${transition.winner.name} ganó el deathmatch con ${transition.winner.score} puntos.`,
+        actor: transition.winner.name,
+        meta: { score: transition.winner.score },
+      });
     } else {
       pushSystemChat("Evento PvP finalizado sin puntuaciones.");
     }
@@ -537,6 +591,7 @@ function worldSnapshot() {
   return {
     worldBiomes: state.worldBiomes,
     time: state.time,
+    lore: state.lore,
     harvested: world.exportHarvested(),
     planted: world.exportPlanted(),
     farmPlots: state.farmPlots,
@@ -568,6 +623,7 @@ async function sendStart(client) {
     type: "start",
     seed: state.seed,
     world: worldSnapshot(),
+    lore: state.lore,
     profile: profileFor(client),
     selfId: client.id,
     hostId,
@@ -593,7 +649,9 @@ function buildSavePayload() {
   const profiles = {};
 
   for (const client of clients.values()) {
-    profiles[client.token] = {
+    const profileKey = client.profileKey ?? `t:${client.token}`;
+    profiles[profileKey] = {
+      accountId: client.accountId ?? null,
       name: client.name,
       color: client.color,
       skinId: client.skinId,
@@ -621,6 +679,7 @@ function buildSavePayload() {
     seed: state.seed,
     worldBiomes: state.worldBiomes,
     time: state.time,
+    lore: state.lore,
     harvested: world.exportHarvested(),
     planted: world.exportPlanted(),
     farmPlots: state.farmPlots,
@@ -637,6 +696,7 @@ function serializeState(source) {
     seed: source.seed,
     worldBiomes: source.worldBiomes,
     time: source.time,
+    lore: source.lore,
     harvested: source.harvested,
     planted: source.planted,
     farmPlots: source.farmPlots,
@@ -730,7 +790,7 @@ function findAvailableSpawn(preferred = null, excludeId = null) {
   return { x: baseX, y: baseY };
 }
 
-function handleJoin(ws, message) {
+async function handleJoin(ws, message) {
   if (clients.has(ws)) {
     return;
   }
@@ -741,17 +801,38 @@ function handleJoin(ws, message) {
   }
 
   const token = sanitizeToken(message.token);
-  const name = sanitizeName(message.name);
+  const suppliedSession =
+    typeof message.sessionToken === "string" ? message.sessionToken.trim() : "";
+  const sessionToken =
+    suppliedSession || sessionTokenFromRequest(ws.request) || "";
+  const accountUser = sessionToken
+    ? await authStore.resolveSession(sessionToken)
+    : null;
+  const profileKey = accountUser ? `u:${accountUser.id}` : `t:${token}`;
 
-  for (const existing of clients.values()) {
-    if (existing.token === token) {
-      send(ws, { type: "error", message: "Ese jugador ya está conectado." });
-      ws.close();
-      return;
+  if (accountUser) {
+    for (const existing of clients.values()) {
+      if (existing.accountId === accountUser.id) {
+        send(ws, {
+          type: "error",
+          message: "Tu cuenta ya está conectada a este mundo.",
+        });
+        ws.close();
+        return;
+      }
+    }
+  } else {
+    for (const existing of clients.values()) {
+      if (existing.token === token) {
+        send(ws, { type: "error", message: "Ese jugador ya está conectado." });
+        ws.close();
+        return;
+      }
     }
   }
 
-  const saved = state.profiles[token];
+  const name = sanitizeName(message.name);
+  const saved = state.profiles[profileKey];
   const spawn = findAvailableSpawn(
     saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)
       ? { x: saved.x, y: saved.y }
@@ -764,7 +845,9 @@ function handleJoin(ws, message) {
     ws,
     id: nextPlayerId++,
     token,
-    name: saved?.name || name,
+    accountId: accountUser?.id ?? null,
+    profileKey,
+    name: saved?.name || accountUser?.displayName || name,
     color,
     skinId: sanitizeSkinId(message.skinId ?? saved?.skinId),
     x: spawn.x,
@@ -788,12 +871,37 @@ function handleJoin(ws, message) {
     chatLimiter: new ChatLimiter(),
   };
 
+  if (accountUser) {
+    await storeStore.replayPendingPurchases(accountUser.id).catch(() => {});
+    const claim = await storeStore
+      .claimDueSubscriptionGrants(accountUser.id)
+      .catch(() => ({ grants: {}, periods: 0 }));
+    const pending = await accountStore
+      .takePendingGrants(accountUser.id)
+      .catch(() => ({}));
+    const grants = mergeGrants(claim.grants, pending);
+
+    if (!grantsAreEmpty(grants)) {
+      await storeStore
+        .applySpecialGrants(accountUser.id, grants)
+        .catch(() => {});
+      client.inventory = applyGrantsToInventory(client.inventory, grants);
+      send(ws, {
+        type: "grants",
+        grants,
+        labels: describeGrants(grants),
+        periods: claim.periods ?? 0,
+      });
+    }
+  }
+
   clients.set(ws, client);
   if (pvp.phase === "active") {
     ensureParticipant(pvp, client);
   }
-  state.profiles[token] = {
-    ...state.profiles[token],
+  state.profiles[profileKey] = {
+    ...state.profiles[profileKey],
+    accountId: client.accountId,
     name: client.name,
     color: client.color,
     x: client.x,
@@ -811,6 +919,13 @@ function handleJoin(ws, message) {
   if (hostId === null) {
     hostId = client.id;
   }
+
+  appendWorldLore({
+    type: "player.joined",
+    text: `${client.name} se unió al mundo.`,
+    actor: client.name,
+    meta: accountUser ? { account: accountUser.id } : null,
+  });
 
   console.log(`[LAN] ${client.name} conectado (${clients.size}/${MAX_PLAYERS})`);
   joinGameForClient(client);
@@ -1192,7 +1307,7 @@ function handleAmbientHit(client, message) {
   }
 }
 
-function handleMessage(ws, raw) {
+async function handleMessage(ws, raw) {
   let message;
   try {
     message = JSON.parse(raw.toString());
@@ -1212,7 +1327,7 @@ function handleMessage(ws, raw) {
   }
 
   if (message.type === "join") {
-    handleJoin(ws, message);
+    await handleJoin(ws, message);
     return;
   }
 
@@ -1227,6 +1342,11 @@ function handleMessage(ws, raw) {
     started = true;
     hostId = client.id;
     pvp.nextAt = Date.now() + pvp.config.intervalMs;
+    appendWorldLore({
+      type: "world.started",
+      text: `${client.name} inició la partida cooperativa.`,
+      actor: client.name,
+    });
     broadcast({ type: "lobby", hostId, started, players: [] });
     for (const other of clients.values()) {
       sendStart(other).catch((error) => {
@@ -1310,8 +1430,10 @@ function handleClose(ws) {
     hostId = clients.values().next().value?.id ?? null;
   }
 
-  state.profiles[client.token] = {
-    ...state.profiles[client.token],
+  const profileKey = client.profileKey ?? `t:${client.token}`;
+  state.profiles[profileKey] = {
+    ...state.profiles[profileKey],
+    accountId: client.accountId ?? null,
     name: client.name,
     color: client.color,
     skinId: client.skinId,
@@ -1326,6 +1448,12 @@ function handleClose(ws) {
     swimSeconds: client.swimSeconds,
     lastSeen: Date.now(),
   };
+
+  appendWorldLore({
+    type: "player.left",
+    text: `${client.name} abandonó el mundo.`,
+    actor: client.name,
+  });
 
   broadcastLobby();
   scheduleSave();
@@ -1497,9 +1625,14 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    if (await apiHandler(req, res, url, pathname)) {
+      return;
+    }
+
     const allowed =
       pathname === "/index.html" ||
       pathname === "/admin.html" ||
+      pathname === "/store.html" ||
       pathname === "/favicon.svg" ||
       pathname === "/logo_sopa_de_rocas.png" ||
       pathname.startsWith("/css/") ||
@@ -1535,14 +1668,15 @@ const server = createServer(async (req, res) => {
 
 const wss = new WebSocketServer({ server, path: "/ws" });
 
-wss.on("connection", (ws) => {
+wss.on("connection", (ws, req) => {
   ws.isAlive = true;
+  ws.request = req;
   ws.on("pong", () => {
     ws.isAlive = true;
   });
-  ws.on("message", (raw) => {
+  ws.on("message", async (raw) => {
     try {
-      handleMessage(ws, raw);
+      await handleMessage(ws, raw);
     } catch (error) {
       console.warn("[LAN] Mensaje inválido:", error.message);
     }

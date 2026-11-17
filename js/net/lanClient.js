@@ -1,4 +1,5 @@
 import { LAN_TOKEN_KEY } from "../game/settings.js";
+import { getSessionToken } from "./api.js";
 import { resolveWsUrl } from "./wsUrl.js";
 
 function createToken() {
@@ -71,6 +72,7 @@ export class LanClient {
       this.send({
         type: "join",
         token: this.token,
+        sessionToken: getSessionToken(),
         name,
         skinId: this.skinId,
       });
@@ -116,6 +118,11 @@ export class LanClient {
       this.selfId = message.selfId;
       this.hostId = message.hostId;
       this.callbacks.onWelcome?.(message);
+      return;
+    }
+
+    if (message.type === "grants") {
+      this.callbacks.onGrants?.(message);
       return;
     }
 

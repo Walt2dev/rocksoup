@@ -1,0 +1,1278 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⚔️ Aldea Imperial — Conquista, Edificios y Armaduras</title>
+<style>
+:root{
+  --bg:#0c0f1c; --panel:#151a2e; --panel2:#1e2540; --borde:#2c3555;
+  --oro:#ffc93c; --madera:#d08b4e; --dia:#5ad1ff; --energia:#7cfc9b;
+  --txt:#e8ecf7; --txt2:#8e9bc0; --rojo:#ff6b6b; --verde:#4ade80;
+  --viol:#8b5cf6;
+}
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',system-ui,sans-serif}
+body{
+  background:radial-gradient(circle at 20% -10%,#1e2952,#0c0f1c 60%) fixed;
+  color:var(--txt);min-height:100vh;padding:12px 12px 70px;overflow-x:hidden;
+}
+h1,h2,h3,h4{font-weight:700;line-height:1.2}
+small{font-size:.72rem}
+
+/* ---------- HEADER ---------- */
+header{
+  display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;
+  background:linear-gradient(135deg,#182040,#111628);
+  border:1px solid var(--borde);border-radius:16px;padding:10px 14px;
+  box-shadow:0 10px 30px rgba(0,0,0,.5);position:relative;overflow:hidden;
+}
+header::after{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(115deg,transparent 45%,rgba(139,92,246,.10) 50%,transparent 55%);
+  background-size:250% 100%;animation:brillo 6s linear infinite;
+}
+@keyframes brillo{to{background-position:-250% 0}}
+.marca{font-size:1.1rem;font-weight:800;letter-spacing:.4px;white-space:nowrap}
+.recursos{display:flex;gap:7px;flex-wrap:wrap}
+.rec{
+  display:flex;align-items:center;gap:5px;background:var(--panel2);
+  border:1px solid var(--borde);border-radius:10px;padding:5px 10px;
+  font-weight:700;font-size:.85rem;font-variant-numeric:tabular-nums;
+  transition:.25s;
+}
+.rec.pulso{animation:pulsoRec .45s ease}
+@keyframes pulsoRec{0%{transform:scale(1)}40%{transform:scale(1.18);box-shadow:0 0 18px currentColor}100%{transform:scale(1)}}
+#feed{
+  font-size:.72rem;color:var(--txt2);padding:6px 14px;margin-top:8px;
+  background:rgba(30,37,64,.55);border:1px solid var(--borde);border-radius:10px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:.4s;
+}
+#feed.nuevo{color:var(--verde);border-color:#2f5c45}
+
+/* ---------- TABS ---------- */
+nav.tabs{display:flex;gap:7px;margin:14px 0;flex-wrap:wrap}
+nav.tabs button{
+  flex:1;min-width:96px;padding:10px 6px;border-radius:12px;cursor:pointer;
+  background:var(--panel);color:var(--txt2);border:1px solid var(--borde);
+  font-weight:700;font-size:.82rem;transition:.2s;
+}
+nav.tabs button:hover{background:var(--panel2);color:var(--txt)}
+nav.tabs button.activo{
+  background:linear-gradient(135deg,#5b4bf5,#9333ea);color:#fff;border-color:transparent;
+  box-shadow:0 6px 20px rgba(120,80,255,.4);
+}
+.vista{display:none;animation:ap .28s ease}
+.vista.activa{display:block}
+@keyframes ap{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* ---------- CARDS GENÉRICAS ---------- */
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
+.card{
+  background:linear-gradient(160deg,var(--panel),#101426);
+  border:1px solid var(--borde);border-radius:15px;padding:14px;
+  display:flex;flex-direction:column;gap:8px;position:relative;overflow:hidden;
+  transition:transform .2s,border-color .2s;
+}
+.card:hover{transform:translateY(-3px);border-color:#455490}
+.card h3{font-size:.95rem}
+.card p{font-size:.78rem;color:var(--txt2);line-height:1.45;flex:1}
+.nota{font-size:.72rem;color:var(--txt2);font-style:italic}
+
+/* ---------- BOTONES ---------- */
+button.accion{
+  padding:10px;border:none;border-radius:10px;cursor:pointer;font-weight:800;
+  font-size:.82rem;background:linear-gradient(135deg,#4f46e5,#9333ea);color:#fff;
+  transition:.15s;position:relative;overflow:hidden;
+}
+button.accion:hover:not(:disabled){filter:brightness(1.18);transform:translateY(-1px)}
+button.accion:active:not(:disabled){transform:scale(.97)}
+button.accion:disabled,button.accion.gris{
+  opacity:.38;cursor:not-allowed;filter:grayscale(.7);transform:none;
+}
+button.accion.oro{background:linear-gradient(135deg,#e0a416,#f7d548);color:#191100}
+button.accion.rojo{background:linear-gradient(135deg,#dc3c34,#ff7b6b)}
+button.accion.verde{background:linear-gradient(135deg,#16a34a,#4ade80);color:#04170b}
+button.accion.compra{background:linear-gradient(135deg,#0ea5e9,#6366f1)}
+button.accion.compra:not(:disabled){animation:respira 2.4s ease-in-out infinite}
+@keyframes respira{0%,100%{box-shadow:0 0 0 rgba(99,102,241,0)}50%{box-shadow:0 0 16px rgba(99,102,241,.6)}}
+
+/* ---------- PERSONAJE ---------- */
+.pers-layout{display:grid;gap:12px;grid-template-columns:1fr;align-items:start}
+@media(min-width:720px){.pers-layout{grid-template-columns:270px 1fr}}
+.pers-izq{display:flex;flex-direction:column;align-items:center;gap:6px;
+  background:radial-gradient(circle at 50% 15%,#232c52,#101426 70%)}
+.pers-izq .suelo{width:130px;height:12px;border-radius:50%;background:rgba(139,92,246,.25);filter:blur(5px);margin-top:-14px}
+svg.personaje{width:100%;max-width:230px;height:auto;display:block}
+svg.personaje g[id^="lay-"]{transition:opacity .25s}
+.pers-nombre{font-size:.8rem;color:var(--txt2);font-weight:600}
+.stat{display:flex;justify-content:space-between;font-size:.82rem;color:var(--txt2);padding:3px 0}
+.stat b{color:var(--txt);font-variant-numeric:tabular-nums}
+
+.slot-row{
+  display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;
+  background:var(--panel2);border:1px solid var(--borde);margin-bottom:6px;font-size:.8rem;
+}
+.slot-row .ico{font-size:1.05rem}
+.slot-row .nom{flex:1;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slot-row .vacio{color:var(--txt2);font-weight:500;font-style:italic}
+.slot-row .df{font-size:.72rem;color:var(--txt2);font-variant-numeric:tabular-nums}
+.toggle{
+  border:1px solid var(--borde);background:#0e1322;color:var(--txt2);
+  border-radius:8px;padding:6px 9px;font-size:.72rem;font-weight:700;cursor:pointer;transition:.15s;
+  white-space:nowrap;
+}
+.toggle:hover{border-color:#5b4bf5;color:var(--txt)}
+.toggle.on{background:rgba(74,222,128,.12);border-color:#2f7c53;color:var(--verde)}
+
+.inv-grid{display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+.inv-item{
+  background:var(--panel2);border:1px solid var(--borde);border-radius:11px;
+  padding:9px;display:flex;flex-direction:column;gap:5px;font-size:.76rem;
+  transition:.15s;
+}
+.inv-item:hover{border-color:#5b4bf5;transform:translateY(-2px)}
+.inv-item .n{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inv-item .d{color:var(--txt2);font-size:.7rem}
+.inv-item button{padding:6px;font-size:.72rem}
+.vacio-inv{color:var(--txt2);font-size:.78rem;font-style:italic;padding:8px 2px}
+
+/* ---------- ALDEAS ---------- */
+.aldea-card{
+  background:linear-gradient(160deg,#1b2344,#111528);
+  border:1px solid var(--borde);border-radius:16px;padding:14px;margin-bottom:12px;
+  position:relative;overflow:hidden;
+}
+.aldea-card.propia{border-color:#3b4a86}
+.aldea-card.propia::before{
+  content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:linear-gradient(180deg,#5b4bf5,#9333ea);
+}
+.aldea-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.aldea-head h4{font-size:.95rem}
+.aldea-head .lvl{font-size:.72rem;color:var(--txt2);background:var(--panel2);
+  border:1px solid var(--borde);padding:3px 9px;border-radius:20px;font-weight:700}
+.prod-tag{font-size:.72rem;color:var(--verde);font-weight:700}
+.edif-grid{display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}
+.edif{
+  background:#0e1322;border:1px solid var(--borde);border-radius:11px;padding:9px;
+  display:flex;flex-direction:column;gap:5px;font-size:.76rem;
+}
+.edif .top{display:flex;justify-content:space-between;align-items:center;font-weight:700}
+.edif .lvl-badge{font-size:.68rem;color:var(--oro);background:rgba(255,201,60,.1);
+  padding:2px 7px;border-radius:20px;border:1px solid rgba(255,201,60,.3)}
+.edif .desc{color:var(--txt2);font-size:.68rem;line-height:1.35}
+.edif button{padding:7px;font-size:.72rem;border-radius:8px}
+.barra{height:6px;background:#080b14;border-radius:6px;overflow:hidden;border:1px solid var(--borde)}
+.barra > div{height:100%;background:linear-gradient(90deg,#9333ea,#5b4bf5);transition:.3s}
+
+/* ---------- TIENDA ---------- */
+.oferta-banner{
+  border-radius:16px;padding:14px;margin-bottom:14px;position:relative;overflow:hidden;
+  background:linear-gradient(120deg,#2a1440,#3d1a5c 45%,#1a1030);
+  border:1px solid #6b3fa0;display:flex;gap:14px;align-items:center;flex-wrap:wrap;
+}
+.oferta-banner::after{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(115deg,transparent 42%,rgba(255,201,60,.18) 50%,transparent 58%);
+  background-size:250% 100%;animation:brillo 3.5s linear infinite;
+}
+.oferta-banner .ic{font-size:2.1rem;filter:drop-shadow(0 0 12px rgba(255,201,60,.6))}
+.oferta-banner .info{flex:1;min-width:150px}
+.oferta-banner .info h4{font-size:.95rem;color:var(--oro)}
+.oferta-banner .info p{font-size:.75rem;color:#c9b6e8;margin-top:3px}
+.countdown{font-variant-numeric:tabular-nums;font-weight:800;font-size:.85rem;color:#fff}
+.countdown.urgente{color:var(--rojo);animation:pulsoRec .8s infinite}
+
+.tienda-card{position:relative}
+.tienda-card .badge{
+  align-self:flex-start;font-size:.66rem;font-weight:800;letter-spacing:.4px;
+  padding:3px 9px;border-radius:20px;border:1px solid;text-transform:uppercase;
+}
+.tienda-card .icon-arm{font-size:1.8rem;line-height:1}
+.tienda-card h3{font-size:.88rem}
+.stats-mini{font-size:.72rem;color:var(--txt2);line-height:1.5;flex:1}
+.tienda-card.vendido{opacity:.4;filter:grayscale(.8)}
+.tienda-card.rar-epico,.tienda-card.rar-legendario{position:relative}
+.tienda-card.rar-epico::before,.tienda-card.rar-legendario::before{
+  content:'';position:absolute;inset:0;pointer-events:none;border-radius:15px;
+  background:linear-gradient(115deg,transparent 40%,rgba(255,255,255,.14) 50%,transparent 60%);
+  background-size:220% 100%;animation:brillo 2.6s linear infinite;
+}
+.tienda-card.rar-legendario{box-shadow:0 0 0 1px rgba(255,201,60,.35),0 0 26px rgba(255,201,60,.18)}
+
+.seccion-titulo{display:flex;justify-content:space-between;align-items:center;
+  margin:16px 0 10px;font-size:.82rem;color:var(--txt2);font-weight:700}
+.seccion-titulo button{background:none;border:1px solid var(--borde);color:var(--txt2);
+  border-radius:9px;padding:6px 11px;font-size:.72rem;font-weight:700;cursor:pointer;transition:.15s}
+.seccion-titulo button:hover{border-color:#5b4bf5;color:var(--txt)}
+
+/* ---------- ATAQUE ---------- */
+.enemigo{
+  background:linear-gradient(160deg,#261a1f,#131220);
+  border:1px solid #4a2d3a;border-radius:15px;padding:13px;
+  display:flex;flex-direction:column;gap:7px;
+}
+.enemigo h4{font-size:.9rem}
+.enemigo .botin{font-size:.75rem;color:var(--oro)}
+.pv{font-size:.72rem;color:var(--txt2)}
+.pv b{color:var(--verde)}
+.pv b.malo{color:var(--rojo)}
+
+/* ---------- MODAL ---------- */
+#overlay{
+  position:fixed;inset:0;background:rgba(4,6,14,.85);display:none;
+  align-items:center;justify-content:center;padding:16px;z-index:100;backdrop-filter:blur(5px);
+}
+#overlay.abierto{display:flex}
+#modal{
+  background:linear-gradient(160deg,#1d2544,#12172a);border:1px solid #3f4d84;
+  border-radius:18px;padding:22px;max-width:430px;width:100%;text-align:center;
+  display:flex;flex-direction:column;gap:12px;animation:ap .25s ease;
+  max-height:90vh;overflow:auto;
+}
+#modal h2{font-size:1.1rem}
+#modal p{font-size:.82rem;color:var(--txt2);line-height:1.5}
+.grande{
+  font-size:2.8rem;padding:16px;border-radius:16px;border:2px dashed #4a5c94;
+  background:#0f1425;cursor:pointer;user-select:none;transition:.08s;
+}
+.grande:active{transform:scale(.94);background:#1a2340}
+.hud{display:flex;justify-content:space-between;font-weight:800;font-size:.92rem}
+.opciones{display:flex;gap:9px;flex-wrap:wrap}
+.opciones button{flex:1;min-width:110px}
+
+/* ---------- TOASTS + FLOTANTES ---------- */
+#toast{position:fixed;bottom:16px;right:16px;display:flex;flex-direction:column;gap:7px;z-index:200}
+.toast{
+  padding:10px 15px;border-radius:11px;font-weight:700;font-size:.8rem;
+  background:#1e2743;border:1px solid #3b4a78;box-shadow:0 8px 24px rgba(0,0,0,.55);
+  animation:tin .28s ease;max-width:280px;
+}
+.toast.ok{border-color:var(--verde);color:var(--verde)}
+.toast.err{border-color:var(--rojo);color:var(--rojo)}
+.toast.epico{border-color:var(--oro);color:var(--oro);box-shadow:0 0 24px rgba(255,201,60,.35)}
+@keyframes tin{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:none}}
+
+.flotante{
+  position:fixed;transform:translate(-50%,0);font-weight:900;pointer-events:none;
+  animation:flotar 1s ease forwards;z-index:300;font-size:.95rem;
+  text-shadow:0 2px 10px #000,0 0 14px currentColor;
+}
+@keyframes flotar{
+  0%{opacity:1;transform:translate(-50%,0) scale(.9)}
+  35%{opacity:1;transform:translate(-50%,-30px) scale(1.25)}
+  100%{opacity:0;transform:translate(-50%,-70px) scale(1)}
+}
+.flash{position:fixed;inset:0;pointer-events:none;z-index:250;
+  background:radial-gradient(circle,rgba(255,201,60,.22),transparent 62%);
+  animation:flashOut .55s ease forwards}
+@keyframes flashOut{from{opacity:1}to{opacity:0}}
+
+footer{position:fixed;bottom:0;left:0;right:0;text-align:center;font-size:.66rem;
+  color:#3d486b;padding:7px;background:linear-gradient(transparent,#0c0f1c);z-index:5}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="marca">⚔️ Aldea Imperial</div>
+  <div class="recursos">
+    <div class="rec" id="r-madera">🪵 <b>0</b></div>
+    <div class="rec" id="r-oro">🪙 <b>0</b></div>
+    <div class="rec" id="r-diamantes">💎 <b>0</b></div>
+    <div class="rec" id="r-energia">⚡ <b>0</b><small>/0</small></div>
+  </div>
+</header>
+<div id="feed">🟢 Conectando al servidor...</div>
+
+<nav class="tabs">
+  <button data-tab="aldeas" class="activo">🏰 Aldeas</button>
+  <button data-tab="personaje">🧙 Personaje</button>
+  <button data-tab="tienda">🛒 Tienda</button>
+  <button data-tab="atacar">⚔️ Atacar</button>
+  <button data-tab="juegos">🎲 Juegos</button>
+</nav>
+
+<main>
+  <!-- ============ ALDEAS ============ -->
+  <section id="vista-aldeas" class="vista activa">
+    <div class="seccion-titulo">
+      <span>🏰 Tus dominios · <b id="num-aldeas">0</b>/9</span>
+      <span class="prod-tag" id="prod-total">+0 🪵/s · +0 🪙/s</span>
+    </div>
+    <div id="lista-aldeas"></div>
+  </section>
+
+  <!-- ============ PERSONAJE ============ -->
+  <section id="vista-personaje" class="vista">
+    <div class="pers-layout">
+      <div class="card pers-izq">
+        <svg viewBox="0 0 200 340" class="personaje" id="svgPersonaje">
+          <g id="lay-capa">
+            <path d="M74 98 Q38 200 44 302 L156 302 Q162 200 126 98 Z" fill="var(--c-capa)" opacity="0.92"/>
+          </g>
+          <rect x="80" y="196" width="16" height="76" rx="8" fill="#3a4468"/>
+          <rect x="104" y="196" width="16" height="76" rx="8" fill="#3a4468"/>
+          <g id="lay-botas">
+            <rect x="72" y="266" width="30" height="30" rx="9" fill="var(--c-botas)"/>
+            <rect x="98" y="266" width="30" height="30" rx="9" fill="var(--c-botas)"/>
+          </g>
+          <rect x="70" y="96" width="60" height="104" rx="16" fill="#46527d"/>
+          <rect x="46" y="104" width="20" height="86" rx="10" fill="#e0b48c"/>
+          <rect x="134" y="104" width="20" height="86" rx="10" fill="#e0b48c"/>
+          <g id="lay-guantes">
+            <rect x="44" y="168" width="24" height="25" rx="10" fill="var(--c-guantes)"/>
+            <rect x="132" y="168" width="24" height="25" rx="10" fill="var(--c-guantes)"/>
+          </g>
+          <g id="lay-pecho">
+            <rect x="70" y="96" width="60" height="80" rx="18" fill="var(--c-pecho)"/>
+            <path d="M100 104 L100 170" stroke="rgba(0,0,0,.22)" stroke-width="3"/>
+          </g>
+          <g id="lay-hombros">
+            <ellipse cx="62" cy="104" rx="19" ry="15" fill="var(--c-hombros)"/>
+            <ellipse cx="138" cy="104" rx="19" ry="15" fill="var(--c-hombros)"/>
+          </g>
+          <rect x="92" y="84" width="16" height="14" fill="#d9a878"/>
+          <circle cx="100" cy="64" r="30" fill="#e8b98a"/>
+          <circle cx="90" cy="62" r="3.5" fill="#2a2438"/>
+          <circle cx="110" cy="62" r="3.5" fill="#2a2438"/>
+          <path d="M92 76 Q100 82 108 76" stroke="#2a2438" stroke-width="3" fill="none" stroke-linecap="round"/>
+          <g id="lay-casco">
+            <path d="M68 60 Q68 26 100 26 Q132 26 132 60 L132 70 Q100 78 68 70 Z" fill="var(--c-casco)"/>
+            <rect x="72" y="54" width="56" height="9" rx="4.5" fill="#0b0f1c" opacity="0.6"/>
+          </g>
+        </svg>
+        <div class="suelo"></div>
+        <div class="pers-nombre" id="pers-nombre">Tu personaje</div>
+      </div>
+
+      <div class="pers-der" style="display:flex;flex-direction:column;gap:12px">
+        <div class="card">
+          <h3>📊 Estadísticas</h3>
+          <div class="stat"><span>🛡️ Defensa total</span><b id="st-def">0</b></div>
+          <div class="stat"><span>✨ Bonus producción</span><b id="st-prod">+0%</b></div>
+          <div class="stat"><span>⚔️ Bonus ataque</span><b id="st-atk">+0%</b></div>
+          <p class="nota">Las estadísticas se aplican siempre, aunque ocultes la armadura.</p>
+        </div>
+        <div class="card">
+          <h3>🛡️ Equipo equipado</h3>
+          <div id="slots-lista"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <h3>🎒 Inventario</h3>
+      <div id="inventario" class="inv-grid"></div>
+    </div>
+  </section>
+
+  <!-- ============ TIENDA ============ -->
+  <section id="vista-tienda" class="vista">
+    <div id="oferta-banner"></div>
+    <div class="seccion-titulo">
+      <span>🛡️ Armaduras en rotación</span>
+      <button onclick="rotarTienda()">🔄 Renovar (5 💎)</button>
+    </div>
+    <div class="grid" id="tienda-armaduras"></div>
+    <div class="seccion-titulo"><span>🧪 Consumibles</span></div>
+    <div class="grid" id="tienda-consumibles"></div>
+  </section>
+
+  <!-- ============ ATACAR ============ -->
+  <section id="vista-atacar" class="vista">
+    <div class="card" style="margin-bottom:12px">
+      <h3>🛡️ Tus tropas · Nivel <span id="nivel-tropas">1</span></h3>
+      <p>Cada nivel aumenta tu probabilidad de victoria. Los cuarteles de tus aldeas también ayudan.</p>
+      <div class="stat"><span>Victorias: <b id="v-victorias">0</b></span><span>Derrotas: <b id="v-derrotas">0</b></span></div>
+      <button class="accion oro" id="btn-mejora" onclick="mejorarTropas()">Mejorar tropas · <span id="costo-mejora">300</span> 🪙</button>
+    </div>
+    <div class="seccion-titulo">
+      <span>🌍 Aldeas enemigas</span>
+      <button onclick="generarEnemigos(true)">🔄 Explorar</button>
+    </div>
+    <div class="grid" id="lista-enemigos"></div>
+  </section>
+
+  <!-- ============ JUEGOS ============ -->
+  <section id="vista-juegos" class="vista">
+    <div class="grid">
+      <div class="card">
+        <div class="icon" style="font-size:1.9rem">🎰</div>
+        <h3>Ruleta de la suerte</h3>
+        <p>Gira y gana recursos al azar. Puede salir mal... o muy bien.</p>
+        <button class="accion oro" onclick="ruleta()">Girar · 40 🪙</button>
+      </div>
+      <div class="card">
+        <div class="icon" style="font-size:1.9rem">⛏️</div>
+        <h3>Fiebre de la cantera</h3>
+        <p>15 segundos para picar todo lo que puedas.</p>
+        <button class="accion" onclick="cantera()">Jugar · 30 🪙</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="toast"></div>
+<div id="overlay" onclick="if(event.target===this)cerrarModal()">
+  <div id="modal"></div>
+</div>
+<footer>Aldea Imperial · guardado automático</footer>
+
+<script>
+/* ============================================================
+   1. CONSTANTES
+============================================================ */
+const CLAVE = 'aldeaImperial_v3';
+
+const SLOTS = ['casco','pecho','hombros','guantes','botas','capa'];
+const SLOT_NOMBRE = {casco:'Casco',pecho:'Pecho',hombros:'Hombros',guantes:'Guantes',botas:'Botas',capa:'Capa'};
+const SLOT_ICONO  = {casco:'⛑️',pecho:'🛡️',hombros:'🎽',guantes:'🧤',botas:'👢',capa:'🧣'};
+const DEF_BASE    = {casco:6,pecho:14,hombros:8,guantes:5,botas:6,capa:4};
+
+const RAREZAS = [
+  {id:'comun',    nombre:'Común',     color:'#9aa7c7', peso:46, mult:1.0, precio:{oro:90}},
+  {id:'raro',     nombre:'Raro',      color:'#5ad1ff', peso:31, mult:1.9, precio:{diamantes:8}},
+  {id:'epico',    nombre:'Épico',     color:'#b06bff', peso:17, mult:3.2, precio:{diamantes:24}},
+  {id:'legendario',nombre:'Legendario',color:'#ffc93c', peso:6,  mult:5.6, precio:{diamantes:60}}
+];
+const NOMBRES_PIEZA = {
+  casco:   ['Capucha de cuero','Yelmo de hierro','Corona rúnica','Yelmo del Dragón'],
+  pecho:   ['Peto de cuero','Coraza de acero','Peto rúnico','Coraza celestial'],
+  hombros: ['Hombreras de tela','Hombreras de acero','Hombreras rúnicas','Hombreras titánicas'],
+  guantes: ['Guantes de tela','Guantes de malla','Guantes rúnicos','Guantes de titán'],
+  botas:   ['Botas de cuero','Botas de acero','Botas rúnicas','Botas de titán'],
+  capa:    ['Capa raída','Capa de viajero','Capa arcana','Capa del Fénix']
+};
+
+const EDIFICIOS = {
+  aserradero:  {nombre:'Aserradero',  icon:'🌲', desc:'+2 🪵/s por nivel', max:10,
+                costo:n=>({madera: Math.round(60*Math.pow(1.55,n))})},
+  mina:        {nombre:'Mina',        icon:'⛏️', desc:'+2 🪙/s por nivel', max:10,
+                costo:n=>({oro: Math.round(60*Math.pow(1.55,n))})},
+  cristaleria: {nombre:'Cristalería', icon:'💎', desc:'+0.02 💎/s por nivel', max:8,
+                costo:n=>({oro: Math.round(420*Math.pow(1.7,n)), madera: Math.round(300*Math.pow(1.7,n))})},
+  cuartel:     {nombre:'Cuartel',     icon:'🛡️', desc:'+4% prob. victoria por nivel', max:8,
+                costo:n=>({oro: Math.round(260*Math.pow(1.6,n))})},
+  torre:       {nombre:'Torre',       icon:'🏰', desc:'+10 defensa por nivel', max:8,
+                costo:n=>({madera: Math.round(200*Math.pow(1.6,n)), oro: Math.round(150*Math.pow(1.6,n))})}
+};
+
+const CONSUMIBLES = [
+  {id:'pocion', icon:'⚡', nombre:'Poción de energía', desc:'+70 ⚡ al instante', costo:{oro:90}},
+  {id:'kit',    icon:'🏗️', nombre:'Kit de construcción', desc:'+1 nivel a un edificio al azar', costo:{diamantes:10}},
+  {id:'elixir', icon:'🧪', nombre:'Elixir de producción', desc:'x2 producción durante 5 min', costo:{diamantes:14}},
+  {id:'cofre',  icon:'🎁', nombre:'Cofre de recursos', desc:'Botín aleatorio generoso', costo:{diamantes:7}}
+];
+
+const NOMBRES_ALDEA = ['Villa Sombría','Fortaleza Roja','Bastión de Hierro','Aldea Lunar',
+  'Colina del Cuervo','Valle Helado','Ruinas de Fuego','Costa Olvidada','Torre del Trueno',
+  'Pantano Gris','Cumbre Dorada','Refugio Nómada','Cañón de Sal','Bosque de Ceniza'];
+const NOMBRES_JUGADOR = ['Kael','Lyra','Thoran','Mira','Dravok','Selene','Rurik','Isolde','Varek','Nyx'];
+
+/* ============================================================
+   2. ESTADO
+============================================================ */
+const BASE = {
+  madera:600, oro:600, diamantes:45,
+  energia:100, energiaMax:100,
+  nivelTropas:1, victorias:0, derrotas:0,
+  tsEnergia:Date.now(),
+  aldeas:[], enemigos:[], equipo:{}, inventario:[],
+  tienda:null, oferta:null, boostProd:0
+};
+let estado = JSON.parse(JSON.stringify(BASE));
+
+function guardar(){ try{ localStorage.setItem(CLAVE, JSON.stringify(estado)); }catch(e){} }
+function cargar(){
+  try{
+    const raw = localStorage.getItem(CLAVE);
+    if(raw) estado = Object.assign(JSON.parse(JSON.stringify(BASE)), JSON.parse(raw));
+  }catch(e){ estado = JSON.parse(JSON.stringify(BASE)); }
+  const ahora = Date.now();
+  const g = Math.floor((ahora - (estado.tsEnergia||ahora)) / 4000);
+  if(g > 0) estado.energia = Math.min(estado.energiaMax, estado.energia + g);
+  estado.tsEnergia = ahora;
+}
+
+/* ============================================================
+   3. UTILIDADES
+============================================================ */
+function puedePagar(c){ return Object.entries(c).every(([k,v]) => (estado[k]||0) >= v); }
+function pagar(c){
+  if(!puedePagar(c)) return false;
+  Object.entries(c).forEach(([k,v]) => estado[k] -= v);
+  return true;
+}
+function dar(rec){
+  Object.entries(rec).forEach(([k,v]) => {
+    if(k === 'energia') estado.energia = Math.min(estado.energiaMax, estado.energia + v);
+    else estado[k] = (estado[k] || 0) + v;
+  });
+}
+function precioTexto(c){
+  return Object.entries(c).map(([k,v]) => {
+    const ic = {oro:'🪙', madera:'🪵', diamantes:'💎', energia:'⚡'}[k] || k;
+    return `${v} ${ic}`;
+  }).join(' + ');
+}
+function toast(msg, tipo='ok'){
+  const t = document.createElement('div');
+  t.className = 'toast ' + tipo;
+  t.textContent = msg;
+  document.getElementById('toast').appendChild(t);
+  setTimeout(() => { t.style.transition='.3s'; t.style.opacity=0; t.style.transform='translateX(30px)'; }, 2100);
+  setTimeout(() => t.remove(), 2500);
+}
+function floatText(el, txt, color){
+  if(!el) return;
+  const r = el.getBoundingClientRect();
+  const s = document.createElement('div');
+  s.className = 'flotante';
+  s.textContent = txt;
+  s.style.left = (r.left + r.width/2) + 'px';
+  s.style.top = (r.top - 6) + 'px';
+  s.style.color = color || '#7cfc9b';
+  document.body.appendChild(s);
+  setTimeout(() => s.remove(), 1000);
+}
+function flash(color){
+  const d = document.createElement('div');
+  d.className = 'flash';
+  if(color) d.style.background = `radial-gradient(circle, ${color}, transparent 62%)`;
+  document.body.appendChild(d);
+  setTimeout(() => d.remove(), 600);
+}
+
+/* ============================================================
+   4. ARMADURAS
+============================================================ */
+function tiradaRareza(){
+  const total = RAREZAS.reduce((s,r) => s + r.peso, 0);
+  let x = Math.random() * total;
+  for(const r of RAREZAS){ if(x < r.peso) return r; x -= r.peso; }
+  return RAREZAS[0];
+}
+function crearPieza(slot, rarezaId){
+  const idx = Math.max(0, RAREZAS.findIndex(r => r.id === rarezaId));
+  const r = RAREZAS[idx];
+  const def = Math.round(DEF_BASE[slot] * r.mult * (0.85 + Math.random() * 0.3));
+  let bonus = null;
+  if(Math.random() < 0.42 + idx * 0.13){
+    const tipo = Math.random() < 0.55 ? 'prod' : 'atk';
+    const val = Math.max(1, Math.round((2 + idx * 3) * (0.8 + Math.random() * 0.6)));
+    bonus = {tipo, val};
+  }
+  return {
+    id: 'p' + Math.random().toString(36).slice(2, 10),
+    slot, rareza: r.id,
+    nombre: NOMBRES_PIEZA[slot][idx],
+    def, bonus, visible: true
+  };
+}
+function statsEquipo(){
+  let def = 0, prod = 0, atk = 0;
+  SLOTS.forEach(s => {
+    const p = estado.equipo[s];
+    if(!p) return;
+    def += p.def;
+    if(p.bonus){
+      if(p.bonus.tipo === 'prod') prod += p.bonus.val;
+      else atk += p.bonus.val;
+    }
+  });
+  return {def, prod, atk};
+}
+function equipar(id){
+  const i = estado.inventario.findIndex(p => p.id === id);
+  if(i < 0) return;
+  const p = estado.inventario[i];
+  const anterior = estado.equipo[p.slot];
+  estado.equipo[p.slot] = p;
+  estado.inventario.splice(i, 1);
+  if(anterior) estado.inventario.push(anterior);
+  guardar();
+  renderPersonaje();
+  toast('Equipado: ' + p.nombre, 'ok');
+}
+function toggleVisible(slot){
+  const p = estado.equipo[slot];
+  if(!p) return;
+  p.visible = !p.visible;
+  guardar();
+  renderPersonaje();
+  toast(p.visible ? '👁️ Armadura visible' : '🙈 Armadura oculta (stats intactas)');
+}
+
+function renderPersonaje(){
+  const svg = document.getElementById('svgPersonaje');
+
+  // Colores y visibilidad de cada capa
+  SLOTS.forEach(slot => {
+    const p = estado.equipo[slot];
+    const capa = document.getElementById('lay-' + slot);
+    if(!capa) return;
+    if(p){
+      const r = RAREZAS.find(x => x.id === p.rareza);
+      svg.style.setProperty('--c-' + slot, r.color);
+      capa.style.display = p.visible ? '' : 'none';
+      capa.style.opacity = p.visible ? '1' : '0';
+    } else {
+      capa.style.display = 'none';
+    }
+  });
+
+  // Estadísticas
+  const st = statsEquipo();
+  const torres = estado.aldeas.reduce((s,v) => s + (v.edificios.torre || 0), 0);
+  document.getElementById('st-def').textContent = st.def + torres * 10;
+  document.getElementById('st-prod').textContent = '+' + st.prod + '%';
+  document.getElementById('st-atk').textContent = '+' + st.atk + '%';
+
+  // Lista de slots
+  document.getElementById('slots-lista').innerHTML = SLOTS.map(slot => {
+    const p = estado.equipo[slot];
+    if(!p){
+      return `<div class="slot-row">
+        <span class="ico">${SLOT_ICONO[slot]}</span>
+        <span class="nom vacio">${SLOT_NOMBRE[slot]} — vacío</span>
+      </div>`;
+    }
+    const r = RAREZAS.find(x => x.id === p.rareza);
+    const bon = p.bonus ? ` · ${p.bonus.tipo==='prod'?'+'+p.bonus.val+'% prod':'+'+p.bonus.val+'% atk'}` : '';
+    return `<div class="slot-row">
+      <span class="ico">${SLOT_ICONO[slot]}</span>
+      <span class="nom" style="color:${r.color}">${p.nombre}</span>
+      <span class="df">🛡️${p.def}${bon}</span>
+      <button class="toggle ${p.visible?'on':''}" onclick="toggleVisible('${slot}')">
+        ${p.visible ? '👁️' : '🙈'}
+      </button>
+    </div>`;
+  }).join('');
+
+  // Inventario
+  const inv = document.getElementById('inventario');
+  if(!estado.inventario.length){
+    inv.innerHTML = '<div class="vacio-inv">Sin piezas guardadas. Compra armaduras en la tienda.</div>';
+  } else {
+    inv.innerHTML = estado.inventario.map(p => {
+      const r = RAREZAS.find(x => x.id === p.rareza);
+      const bon = p.bonus ? `<br>✨ +${p.bonus.val}% ${p.bonus.tipo==='prod'?'producción':'ataque'}` : '';
+      return `<div class="inv-item" style="border-color:${r.color}44">
+        <div class="n" style="color:${r.color}">${SLOT_ICONO[p.slot]} ${p.nombre}</div>
+        <div class="d">🛡️ +${p.def}${bon}</div>
+        <button class="accion" onclick="equipar('${p.id}')">Equipar</button>
+      </div>`;
+    }).join('');
+  }
+}
+
+/* ============================================================
+   5. ALDEAS Y EDIFICIOS
+============================================================ */
+function aldeaInicial(){
+  return {
+    id: 'a' + Math.random().toString(36).slice(2, 8),
+    nombre: 'Tu Aldea',
+    nivel: 1,
+    edificios: {aserradero:1, mina:1, cristaleria:0, cuartel:0, torre:0}
+  };
+}
+function produccion(){
+  const boost = estado.boostProd > Date.now() ? 2 : 1;
+  let m = 0, o = 0, d = 0;
+  estado.aldeas.forEach(a => {
+    m += (a.edificios.aserradero || 0) * 2;
+    o += (a.edificios.mina || 0) * 2;
+    d += (a.edificios.cristaleria || 0) * 0.02;
+  });
+  const st = statsEquipo();
+  const mult = (1 + st.prod / 100) * boost;
+  return {madera: m * mult, oro: o * mult, diamantes: d * mult, boost};
+}
+
+function renderAldeas(){
+  document.getElementById('num-aldeas').textContent = estado.aldeas.length;
+  const pr = produccion();
+  document.getElementById('prod-total').innerHTML =
+    `+${pr.madera.toFixed(1)} 🪵/s · +${pr.oro.toFixed(1)} 🪙/s` +
+    (pr.diamantes > 0 ? ` · +${pr.diamantes.toFixed(2)} 💎/s` : '') +
+    (pr.boost > 1 ? ' · 🧪x2' : '');
+
+  const cont = document.getElementById('lista-aldeas');
+  cont.innerHTML = estado.aldeas.map(a => {
+    const edifs = Object.entries(EDIFICIOS).map(([tipo, def]) => {
+      const lvl = a.edificios[tipo] || 0;
+      const max = lvl >= def.max;
+      const costo = max ? null : def.costo(lvl);
+      const texto = max ? 'MÁX' : precioTexto(costo);
+      const puede = !max && puedePagar(costo);
+      return `<div class="edif">
+        <div class="top">
+          <span>${def.icon} ${def.nombre}</span>
+          <span class="lvl-badge">Nv ${lvl}</span>
+        </div>
+        <div class="desc">${def.desc}</div>
+        <div class="barra"><div style="width:${(lvl/def.max)*100}%"></div></div>
+        <button class="accion ${puede?'':'gris'}" ${max?'disabled':''}
+          onclick="construir('${a.id}','${tipo}',this)">${max ? 'Máximo' : 'Mejorar · ' + texto}</button>
+      </div>`;
+    }).join('');
+
+    return `<div class="aldea-card propia">
+      <div class="aldea-head">
+        <h4>🏘️ ${a.nombre}</h4>
+        <span class="lvl">Nivel ${a.nivel}</span>
+      </div>
+      <div class="edif-grid">${edifs}</div>
+    </div>`;
+  }).join('');
+}
+
+function construir(idAldea, tipo, btn){
+  const a = estado.aldeas.find(x => x.id === idAldea);
+  if(!a) return;
+  const def = EDIFICIOS[tipo];
+  const lvl = a.edificios[tipo] || 0;
+  if(lvl >= def.max){ toast('Nivel máximo alcanzado', 'err'); return; }
+  const costo = def.costo(lvl);
+  if(!pagar(costo)){ toast('Recursos insuficientes', 'err'); return; }
+
+  a.edificios[tipo] = lvl + 1;
+  guardar();
+  renderRecursos();
+  renderAldeas();
+  renderPersonaje();
+  floatText(btn, `Nv ${lvl+1}`, '#7cfc9b');
+  toast(`${def.icon} ${def.nombre} → nivel ${lvl+1}`, 'ok');
+}
+
+/* ============================================================
+   6. TIENDA
+============================================================ */
+function generarTienda(){
+  const armaduras = [];
+  const usados = new Set();
+  while(armaduras.length < 3){
+    const slot = SLOTS[Math.floor(Math.random() * SLOTS.length)];
+    const r = tiradaRareza();
+    const key = slot + r.id;
+    if(usados.has(key)) continue;
+    usados.add(key);
+    const pieza = crearPieza(slot, r.id);
+    armaduras.push({pieza, precio: Object.assign({}, r.precio), vendido: false});
+  }
+  estado.tienda = {armaduras, ts: Date.now()};
+  generarOferta();
+}
+function generarOferta(){
+  const slot = SLOTS[Math.floor(Math.random() * SLOTS.length)];
+  const r = Math.random() < 0.55 ? RAREZAS[3] : RAREZAS[2];
+  const pieza = crearPieza(slot, r.id);
+  const precioBase = Object.assign({}, r.precio);
+  const precio = {};
+  Object.entries(precioBase).forEach(([k,v]) => precio[k] = Math.max(1, Math.round(v * 0.5)));
+  estado.oferta = {pieza, precio, tsFin: Date.now() + 10 * 60 * 1000, vendido: false};
+}
+function rotarTienda(){
+  if(!pagar({diamantes:5})){ toast('Necesitas 5 💎', 'err'); return; }
+  generarTienda();
+  guardar(); renderRecursos(); renderTienda();
+  toast('🔄 Tienda renovada', 'ok');
+}
+
+function renderTienda(){
+  if(!estado.tienda) generarTienda();
+  if(Date.now() - estado.tienda.ts > 5 * 60 * 1000) generarTienda();
+  if(!estado.oferta || Date.now() > estado.oferta.tsFin) generarOferta();
+
+  // --- Oferta ---
+  const o = estado.oferta;
+  const ro = RAREZAS.find(x => x.id === o.pieza.rareza);
+  const bonO = o.pieza.bonus ? `<br>✨ +${o.pieza.bonus.val}% ${o.pieza.bonus.tipo==='prod'?'producción':'ataque'}` : '';
+  document.getElementById('oferta-banner').innerHTML = `
+    <div class="oferta-banner">
+      <div class="ic">${SLOT_ICONO[o.pieza.slot]}</div>
+      <div class="info">
+        <h4>🔥 OFERTA DEL DÍA · ${ro.nombre}</h4>
+        <p><b style="color:${ro.color}">${o.pieza.nombre}</b> — 🛡️ +${o.pieza.def}${bonO}</p>
+        <p>Termina en <span class="countdown" id="cd-oferta">--:--</span></p>
+      </div>
+      <button class="accion oro" style="width:auto;padding:11px 18px" ${o.vendido?'disabled':''}
+        onclick="comprarOferta(this)">${o.vendido ? 'Vendido' : 'Comprar · ' + precioTexto(o.precio)}</button>
+    </div>`;
+
+  // --- Armaduras ---
+  document.getElementById('tienda-armaduras').innerHTML = estado.tienda.armaduras.map((it, i) => {
+    const p = it.pieza;
+    const r = RAREZAS.find(x => x.id === p.rareza);
+    const puede = puedePagar(it.precio);
+    const bon = p.bonus ? `<br>✨ +${p.bonus.val}% ${p.bonus.tipo==='prod'?'producción':'ataque'}` : '';
+    return `<div class="card tienda-card rar-${p.rareza} ${it.vendido?'vendido':''}">
+      <div class="badge" style="color:${r.color};border-color:${r.color}66;background:${r.color}18">${r.nombre}</div>
+      <div class="icon-arm" style="color:${r.color}">${SLOT_ICONO[p.slot]}</div>
+      <h3>${p.nombre}</h3>
+      <div class="stats-mini">🛡️ +${p.def} Defensa${bon}</div>
+      <button class="accion ${puede?'compra':'gris'}" ${it.vendido?'disabled':''}
+        onclick="comprarArmadura(${i}, this)">
+        ${it.vendido ? '✓ Vendido' : precioTexto(it.precio)}
+      </button>
+    </div>`;
+  }).join('');
+
+  // --- Consumibles ---
+  document.getElementById('tienda-consumibles').innerHTML = CONSUMIBLES.map(c => {
+    const puede = puedePagar(c.costo);
+    return `<div class="card">
+      <div style="font-size:1.9rem">${c.icon}</div>
+      <h3>${c.nombre}</h3>
+      <p>${c.desc}</p>
+      <button class="accion ${puede?'compra':'gris'}" onclick="comprarConsumible('${c.id}', this)">
+        ${precioTexto(c.costo)}
+      </button>
+    </div>`;
+  }).join('');
+
+  actualizarCountdown();
+}
+
+function comprarArmadura(i, btn){
+  const it = estado.tienda.armaduras[i];
+  if(!it || it.vendido) return;
+  if(!pagar(it.precio)){ toast('Recursos insuficientes', 'err'); return; }
+  it.vendido = true;
+  estado.inventario.push(it.pieza);
+  guardar();
+  renderRecursos(); renderPersonaje(); renderTienda();
+  const r = RAREZAS.find(x => x.id === it.pieza.rareza);
+  floatText(btn, '¡ADQUIRIDO!', r.color);
+  if(it.pieza.rareza === 'legendario' || it.pieza.rareza === 'epico') flash(r.color + '55');
+  toast(`✨ ${it.pieza.nombre} añadido al inventario`, it.pieza.rareza === 'legendario' ? 'epico' : 'ok');
+}
+
+function comprarOferta(btn){
+  const o = estado.oferta;
+  if(o.vendido) return;
+  if(!pagar(o.precio)){ toast('Recursos insuficientes', 'err'); return; }
+  o.vendido = true;
+  estado.inventario.push(o.pieza);
+  guardar();
+  renderRecursos(); renderPersonaje(); renderTienda();
+  flash('rgba(255,201,60,.5)');
+  floatText(btn, '¡OFERTA!', '#ffc93c');
+  toast('🔥 ¡Oferta conseguida!', 'epico');
+}
+
+function comprarConsumible(id, btn){
+  const c = CONSUMIBLES.find(x => x.id === id);
+  if(!c || !pagar(c.costo)){ toast('Recursos insuficientes', 'err'); return; }
+
+  switch(id){
+    case 'pocion':
+      dar({energia: 70});
+      floatText(btn, '+70 ⚡', '#7cfc9b');
+      toast('⚡ Energía recargada'); break;
+    case 'kit': {
+      const a = estado.aldeas[Math.floor(Math.random() * estado.aldeas.length)];
+      const tipos = Object.keys(EDIFICIOS).filter(t => (a.edificios[t]||0) < EDIFICIOS[t].max);
+      if(!tipos.length){ toast('Todos los edificios al máximo', 'err'); estado.diamantes += c.costo.diamantes; renderRecursos(); return; }
+      const t = tipos[Math.floor(Math.random() * tipos.length)];
+      a.edificios[t] = (a.edificios[t] || 0) + 1;
+      floatText(btn, '+1 nivel', '#b06bff');
+      toast(`🏗️ ${EDIFICIOS[t].nombre} → nivel ${a.edificios[t]}`, 'ok');
+      renderAldeas();
+      break;
+    }
+    case 'elixir':
+      estado.boostProd = Date.now() + 5 * 60 * 1000;
+      floatText(btn, 'x2', '#ffc93c');
+      toast('🧪 Producción x2 durante 5 min', 'epico');
+      break;
+    case 'cofre': {
+      const opciones = [
+        {madera: 500, oro: 500},
+        {oro: 900},
+        {madera: 900},
+        {diamantes: 12},
+        {madera: 400, oro: 400, diamantes: 6}
+      ];
+      const g = opciones[Math.floor(Math.random() * opciones.length)];
+      dar(g);
+      const txt = Object.entries(g).map(([k,v]) => `+${v} ${ {madera:'🪵',oro:'🪙',diamantes:'💎'}[k] }`).join(' · ');
+      floatText(btn, txt, '#ffc93c');
+      toast('🎁 ' + txt, 'epico');
+      break;
+    }
+  }
+  guardar();
+  renderRecursos();
+  renderAldeas();
+  renderPersonaje();
+  renderTienda();
+}
+
+function actualizarCountdown(){
+  const el = document.getElementById('cd-oferta');
+  if(!el || !estado.oferta) return;
+  const rest = Math.max(0, estado.oferta.tsFin - Date.now());
+  const m = Math.floor(rest / 60000);
+  const s = Math.floor((rest % 60000) / 1000);
+  el.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  el.classList.toggle('urgente', rest < 60000);
+  if(rest <= 0 && !estado.oferta.vendido){ generarOferta(); }
+}
+
+/* ============================================================
+   7. ATAQUES Y CONQUISTA
+============================================================ */
+function generarEnemigos(manual){
+  const usados = new Set();
+  const lista = [];
+  while(lista.length < 4){
+    const nombre = NOMBRES_ALDEA[Math.floor(Math.random() * NOMBRES_ALDEA.length)];
+    if(usados.has(nombre)) continue;
+    usados.add(nombre);
+    const nivel = 1 + Math.floor(Math.random() * 8);
+    lista.push({
+      id: 'e' + Math.random().toString(36).slice(2, 8),
+      nombre, nivel,
+      botin: {
+        madera: nivel * 70 + Math.floor(Math.random() * 90),
+        oro: nivel * 80 + Math.floor(Math.random() * 100),
+        diamantes: Math.random() < 0.5 ? 1 + Math.floor(Math.random() * Math.ceil(nivel / 2)) : 0
+      }
+    });
+  }
+  estado.enemigos = lista;
+  guardar();
+  renderAtaque();
+  if(manual) toast('🔍 Nuevas aldeas avistadas');
+}
+
+function cuartelesTotales(){
+  return estado.aldeas.reduce((s, v) => s + (v.edificios.cuartel || 0), 0);
+}
+function probVictoria(a){
+  const st = statsEquipo();
+  let p = 0.40 + estado.nivelTropas * 0.05 + cuartelesTotales() * 0.04
+          + st.atk * 0.005 - a.nivel * 0.05;
+  return Math.max(0.08, Math.min(0.95, p));
+}
+function puedeConquistar(a){
+  return estado.aldeas.length < 9 && (estado.nivelTropas + Math.floor(cuartelesTotales() / 2)) >= a.nivel;
+}
+
+function renderAtaque(){
+  document.getElementById('nivel-tropas').textContent = estado.nivelTropas;
+  document.getElementById('v-victorias').textContent = estado.victorias;
+  document.getElementById('v-derrotas').textContent = estado.derrotas;
+  const costo = estado.nivelTropas * 300;
+  document.getElementById('costo-mejora').textContent = costo;
+  document.getElementById('btn-mejora').disabled = estado.oro < costo;
+
+  document.getElementById('lista-enemigos').innerHTML = estado.enemigos.map((a, i) => {
+    const pv = Math.round(probVictoria(a) * 100);
+    const puede = puedeConquistar(a);
+    return `<div class="enemigo">
+      <h4>🏘️ ${a.nombre}</h4>
+      <div class="stat"><span>Nivel</span><b>${a.nivel}</b></div>
+      <div class="botin">🪵 ${a.botin.madera} · 🪙 ${a.botin.oro}${a.botin.diamantes ? ' · 💎 ' + a.botin.diamantes : ''}</div>
+      <div class="pv">Victoria: <b class="${pv < 40 ? 'malo' : ''}">${pv}%</b>${puede ? ' · <b>Conquistable</b>' : ''}</div>
+      <button class="accion rojo" onclick="atacar(${i})" ${estado.energia < 15 ? 'disabled' : ''}>
+        ⚔️ Atacar · 15 ⚡
+      </button>
+    </div>`;
+  }).join('');
+}
+
+function atacar(i){
+  const a = estado.enemigos[i];
+  if(!a) return;
+  if(estado.energia < 15){ toast('Necesitas 15 ⚡', 'err'); return; }
+
+  estado.energia -= 15;
+  const gana = Math.random() < probVictoria(a);
+  guardar();
+
+  if(gana){
+    estado.victorias++;
+    abrirModal(`
+      <h2>🎉 ¡Victoria!</h2>
+      <p>Has derrotado a las defensas de <b>${a.nombre}</b>.</p>
+      <div class="opciones">
+        <button class="accion oro" onclick="saquear(${i})">🎒 Saquear</button>
+        <button class="accion verde" onclick="conquistar(${i})" ${puedeConquistar(a) ? '' : 'disabled'}>
+          🏴 Conquistar${puedeConquistar(a) ? '' : ' (requiere más tropas)'}
+        </button>
+      </div>
+      <button class="accion" style="background:#2c3555" onclick="cerrarModal()">Retirarse</button>
+    `);
+  } else {
+    estado.derrotas++;
+    const perdida = Math.min(estado.oro, 50);
+    estado.oro -= perdida;
+    toast(`💀 Derrota... -${perdida} 🪙`, 'err');
+    abrirModal(`
+      <h2>💀 Derrota</h2>
+      <p>Tus tropas fueron repelidas en <b>${a.nombre}</b>.</p>
+      <p>Pérdida: <b style="color:#ff6b6b">${perdida} 🪙</b></p>
+      <p class="nota">Mejora tus tropas y construye cuarteles para aumentar tus probabilidades.</p>
+      <button class="accion" onclick="cerrarModal()">Continuar</button>
+    `);
+  }
+  guardar();
+  renderRecursos();
+  renderAtaque();
+}
+
+function saquear(i){
+  const a = estado.enemigos[i];
+  if(!a) return;
+  dar(a.botin);
+  a.nivel = Math.max(1, a.nivel - 1);
+  a.botin.madera = Math.round(a.botin.madera * 0.6);
+  a.botin.oro = Math.round(a.botin.oro * 0.6);
+  cerrarModal();
+  guardar();
+  renderRecursos(); renderAtaque(); renderAldeas();
+  flash('rgba(255,201,60,.35)');
+  toast('🎒 Botín saqueado', 'ok');
+}
+
+function conquistar(i){
+  const a = estado.enemigos[i];
+  if(!a) return;
+  if(!puedeConquistar(a)){ toast('No cumples los requisitos', 'err'); return; }
+
+  const nivelBase = Math.max(1, Math.ceil(a.nivel / 2));
+  estado.aldeas.push({
+    id: 'a' + Math.random().toString(36).slice(2, 8),
+    nombre: a.nombre,
+    nivel: a.nivel,
+    edificios: {aserradero: nivelBase, mina: nivelBase, cristaleria: 0, cuartel: 0, torre: 0}
+  });
+  estado.enemigos.splice(i, 1);
+
+  cerrarModal();
+  guardar();
+  renderRecursos(); renderAldeas(); renderAtaque(); renderPersonaje();
+  flash('rgba(74,222,128,.35)');
+  toast(`🏴 ¡${a.nombre} es tuya!`, 'epico');
+  if(estado.enemigos.length < 3) generarEnemigos(false);
+}
+
+function mejorarTropas(){
+  const costo = estado.nivelTropas * 300;
+  if(estado.oro < costo){ toast('Oro insuficiente', 'err'); return; }
+  estado.oro -= costo;
+  estado.nivelTropas++;
+  guardar();
+  renderRecursos(); renderAtaque();
+  toast(`🛡️ Tropas mejoradas al nivel ${estado.nivelTropas}`, 'ok');
+}
+
+/* ============================================================
+   8. MINIJUEGOS
+============================================================ */
+let intervalosModal = [];
+function abrirModal(html){
+  document.getElementById('modal').innerHTML = html;
+  document.getElementById('overlay').classList.add('abierto');
+}
+function cerrarModal(){
+  intervalosModal.forEach(clearInterval);
+  intervalosModal = [];
+  document.getElementById('overlay').classList.remove('abierto');
+}
+
+function ruleta(){
+  if(!pagar({oro:40})){ toast('Necesitas 40 🪙', 'err'); return; }
+  const premios = [
+    {txt:'Nada... 😢', rec:{}, peso:22},
+    {txt:'+80 🪵', rec:{madera:80}, peso:20},
+    {txt:'+80 🪙', rec:{oro:80}, peso:20},
+    {txt:'+160 🪵', rec:{madera:160}, peso:14},
+    {txt:'+160 🪙', rec:{oro:160}, peso:14},
+    {txt:'+3 💎', rec:{diamantes:3}, peso:7},
+    {txt:'¡JACKPOT! +6 💎 +300 🪙', rec:{diamantes:6, oro:300}, peso:3}
+  ];
+  const total = premios.reduce((s,p) => s + p.peso, 0);
+  let r = Math.random() * total, elegido = premios[0];
+  for(const p of premios){ if(r < p.peso){ elegido = p; break; } r -= p.peso; }
+
+  abrirModal(`<h2>🎰 Ruleta</h2><p>Girando...</p><div class="grande" id="ruleta">❓</div>`);
+  const simbolos = ['🪵','🪙','💎','❓','⚡','🎁'];
+  let n = 0;
+  const iv = setInterval(() => {
+    const el = document.getElementById('ruleta');
+    if(el) el.textContent = simbolos[n++ % simbolos.length];
+  }, 80);
+  intervalosModal.push(iv);
+
+  setTimeout(() => {
+    clearInterval(iv);
+    dar(elegido.rec);
+    guardar(); renderRecursos(); renderAldeas(); renderPersonaje();
+    document.getElementById('modal').innerHTML = `
+      <h2>🎰 Ruleta</h2>
+      <div class="grande">${elegido.txt.includes('Nada') ? '😢' : '🎉'}</div>
+      <h2>${elegido.txt}</h2>
+      <button class="accion" onclick="cerrarModal()">Continuar</button>`;
+  }, 1700);
+}
+
+function cantera(){
+  if(!pagar({oro:30})){ toast('Necesitas 30 🪙', 'err'); return; }
+  let clics = 0, tiempo = 15;
+  abrirModal(`
+    <h2>⛏️ Fiebre de la cantera</h2>
+    <div class="hud"><span>⏱️ <b id="tiempo">15</b>s</span><span>🪨 <b id="clics">0</b></span></div>
+    <div class="grande" id="piedra">🪨</div>
+    <p>¡Pica rápido para conseguir madera y oro!</p>
+  `);
+  const piedra = document.getElementById('piedra');
+  piedra.onclick = () => {
+    clics++;
+    document.getElementById('clics').textContent = clics;
+    piedra.textContent = ['🪨','💥','⛏️','🪨'][clics % 4];
+  };
+  const iv = setInterval(() => {
+    tiempo--;
+    const el = document.getElementById('tiempo');
+    if(el) el.textContent = tiempo;
+    if(tiempo <= 0){
+      clearInterval(iv);
+      const madera = clics * 5, oro = clics * 4;
+      dar({madera, oro});
+      guardar(); renderRecursos(); renderAldeas();
+      document.getElementById('modal').innerHTML = `
+        <h2>⏱️ ¡Tiempo!</h2>
+        <p>Conseguiste <b>${clics}</b> golpes.</p>
+        <h2>+${madera} 🪵 · +${oro} 🪙</h2>
+        <button class="accion" onclick="cerrarModal()">Recoger</button>`;
+    }
+  }, 1000);
+  intervalosModal.push(iv);
+}
+
+/* ============================================================
+   9. RENDER GLOBAL
+============================================================ */
+function renderRecursos(){
+  const set = (id, val) => {
+    const el = document.getElementById(id);
+    if(!el) return;
+    const b = el.querySelector('b');
+    if(b.textContent !== String(val)){
+      b.textContent = val;
+      el.classList.remove('pulso');
+      void el.offsetWidth;
+      el.classList.add('pulso');
+    }
+  };
+  set('r-madera', Math.floor(estado.madera));
+  set('r-oro', Math.floor(estado.oro));
+  set('r-diamantes', Math.floor(estado.diamantes));
+  const e = document.getElementById('r-energia');
+  e.querySelector('b').textContent = Math.floor(estado.energia);
+  e.querySelector('small').textContent = '/' + estado.energiaMax;
+}
+function render(){ renderRecursos(); renderAldeas(); renderPersonaje(); renderAtaque(); }
+
+/* ============================================================
+   10. FEED "ONLINE"
+============================================================ */
+const FEED_ACCIONES = [
+  () => `${pick(NOMBRES_JUGADOR)} conquistó ${pick(NOMBRES_ALDEA)}`,
+  () => `${pick(NOMBRES_JUGADOR)} saqueó ${pick(NOMBRES_ALDEA)}`,
+  () => `${pick(NOMBRES_JUGADOR)} encontró una Coraza celestial`,
+  () => `${pick(NOMBRES_JUGADOR)} mejoró su cuartel a nivel ${2 + Math.floor(Math.random()*5)}`,
+  () => `${pick(NOMBRES_JUGADOR)} perdió contra ${pick(NOMBRES_ALDEA)}`,
+  () => `${pick(NOMBRES_JUGADOR)} se unió al servidor`,
+  () => `${pick(NOMBRES_JUGADOR)} compró el Elixir de producción`
+];
+function pick(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
+function actualizarFeed(){
+  const el = document.getElementById('feed');
+  el.textContent = '🟢 ' + pick(FEED_ACCIONES)();
+  el.classList.add('nuevo');
+  setTimeout(() => el.classList.remove('nuevo'), 1200);
+}
+
+/* ============================================================
+   11. TABS
+============================================================ */
+document.querySelectorAll('nav.tabs button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('activo'));
+    document.querySelectorAll('.vista').forEach(v => v.classList.remove('activa'));
+    btn.classList.add('activo');
+    document.getElementById('vista-' + btn.dataset.tab).classList.add('activa');
+    if(btn.dataset.tab === 'tienda') renderTienda();
+    if(btn.dataset.tab === 'atacar') renderAtaque();
+  });
+});
+
+/* ============================================================
+   12. LOOPS
+============================================================ */
+let tickCount = 0;
+
+setInterval(() => {
+  const ahora = Date.now();
+
+  // Energía
+  const g = Math.floor((ahora - estado.tsEnergia) / 4000);
+  if(g > 0){
+    estado.energia = Math.min(estado.energiaMax, estado.energia + g);
+    estado.tsEnergia = ahora;
+  }
+
+  // Producción pasiva
+  const pr = produccion();
+  estado.madera += pr.madera;
+  estado.oro += pr.oro;
+  estado.diamantes += pr.diamantes;
+
+  // Guardado periódico
+  tickCount++;
+  if(tickCount % 5 === 0) guardar();
+
+  renderRecursos();
+  actualizarCountdown();
+
+  // Actualizar etiqueta de producción y botones de la vista de aldeas
+  const pt = document.getElementById('prod-total');
+  if(pt){
+    pt.innerHTML = `+${pr.madera.toFixed(1)} 🪵/s · +${pr.oro.toFixed(1)} 🪙/s` +
+      (pr.diamantes > 0 ? ` · +${pr.diamantes.toFixed(2)} 💎/s` : '') +
+      (pr.boost > 1 ? ' · 🧪x2' : '');
+  }
+  document.querySelectorAll('.aldea-card button[onclick^="construir"]').forEach(b => {
+    if(!b.disabled) b.classList.toggle('gris', false);
+  });
+}, 1000);
+
+setInterval(actualizarFeed, 7000);
+
+/* ============================================================
+   13. INICIO
+============================================================ */
+function init(){
+  cargar();
+  if(!estado.aldeas || !estado.aldeas.length) estado.aldeas = [aldeaInicial()];
+  if(!estado.equipo) estado.equipo = {};
+  if(!estado.inventario) estado.inventario = [];
+  if(!estado.enemigos || !estado.enemigos.length) generarEnemigos(false);
+  if(!estado.tienda) generarTienda();
+  if(!estado.oferta || Date.now() > estado.oferta.tsFin) generarOferta();
+
+  render();
+  renderTienda();
+  actualizarFeed();
+  guardar();
+}
+
+init();
+</script>
+</body>
+</html>

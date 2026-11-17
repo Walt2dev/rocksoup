@@ -33,8 +33,11 @@ import {
   uploadDefaultPackFiles,
 } from "./game/texturePacks.js";
 import { LanClient } from "./net/lanClient.js";
+import { createCloudSaveStore } from "./net/cloudSave.js";
 import { SocialUI } from "./net/social.js";
 import { HudMenu } from "./ui/hudMenu.js";
+import { createAccountUI } from "./ui/account.js";
+import { createStoreUI } from "./ui/store.js";
 import { loadAssets } from "./render/assets.js";
 import { DIFFICULTIES } from "./game/towerDefense.js";
 import { exportAnimationPack } from "./game/packExport.js";
@@ -75,6 +78,8 @@ const screens = {
   character: byId("screen-character"),
   dev: byId("screen-dev"),
   lan: byId("screen-lan"),
+  account: byId("screen-account"),
+  store: byId("screen-store"),
   game: byId("screen-game"),
   exit: byId("screen-exit"),
 };
@@ -90,6 +95,10 @@ const ui = {
   btnNew: byId("btn-new"),
   btnContinue: byId("btn-continue"),
   btnLan: byId("btn-lan"),
+  btnAccount: byId("btn-account"),
+  btnStore: byId("btn-store"),
+  btnAccountBack: byId("btn-account-back"),
+  btnStoreBack: byId("btn-store-back"),
   btnPersonalization: byId("btn-personalization"),
   btnLanBack: byId("btn-lan-back"),
   lanSkin: byId("lan-skin"),
@@ -371,6 +380,10 @@ let exitTimer = null;
 let saveStore;
 let lanClient = null;
 let lanPlaying = false;
+let accountUI = null;
+let storeUI = null;
+let activeCloudSave = null;
+let activeCloudWorld = null;
 let pendingNewSeed = null;
 let selectedSkin = "explorer";
 let selectedBanner = {
@@ -472,15 +485,21 @@ function beginGame(seed, saveState, characterSkin = null, options = {}) {
     updateUrlSeed(seed);
 
     if (game) {
+      game.save();
       game.stop();
       game = null;
     }
+    if (activeCloudSave) {
+      void activeCloudSave.flush();
+    }
+    activeCloudSave = options.cloudSaveStore ?? null;
+    activeCloudWorld = options.cloudWorld ?? null;
 
     showScreen("game");
     game = new Game({
       canvas: ui.canvas,
       assets,
-      saveStore,
+      saveStore: options.saveStore ?? saveStore,
       seed,
       saveState,
       characterSkin,
@@ -704,6 +723,58 @@ function continueGame() {
   beginGame(save.seed, save);
 }
 
+function startCloudWorld(world, meta = {}) {
+  if (!world?.seed) {
+    return;
+  }
+
+  const cloudSaveStore = createCloudSaveStore({
+    baseStore: saveStore,
+    worldId: world.id,
+    initialVersion: world.version,
+    onError: (error) => {
+      game?.notify?.(`No se pudo guardar en la nube: ${error.message}`);
+    },
+  });
+
+  const saveState = meta.newWorld ? null : world.payload ?? null;
+  beginGame(
+    world.seed,
+    saveState,
+    saveState?.characterSkin ?? null,
+    {
+      saveStore: cloudSaveStore,
+      cloudSaveStore,
+      cloudWorld: world,
+      colonyBanner: saveState?.colonyBanner ?? null,
+      difficulty: saveState?.difficulty ?? null,
+    },
+  );
+
+  if (game) {
+    game.notify?.(`Mundo en la nube: ${world.name}`);
+    if (meta.grants && Object.keys(meta.grants).length > 0) {
+      game.notify?.("Recompensas de la tienda aplicadas a este mundo.");
+    }
+  }
+}
+
+function openAccountScreen() {
+  if (!accountUI) {
+    return;
+  }
+  accountUI.open();
+  showScreen("account");
+}
+
+function openStoreScreen(productId = null) {
+  if (!storeUI) {
+    return;
+  }
+  showScreen("store");
+  storeUI.open(productId);
+}
+
 function setLanStatus(message, isError = false) {
   ui.lanStatus.textContent = message;
   ui.lanStatus.classList.toggle("lan-status-error", isError);
@@ -848,8 +919,14 @@ function startLanGame(message) {
   };
 
   if (game) {
+    game.save();
     game.stop();
     game = null;
+  }
+  if (activeCloudSave) {
+    void activeCloudSave.flush();
+    activeCloudSave = null;
+    activeCloudWorld = null;
   }
 
   showScreen("game");
@@ -913,6 +990,14 @@ function connectLan() {
       ui.lanConnectCard.hidden = true;
       ui.lanLobbyCard.hidden = false;
       ui.lanLobbyStatus.textContent = "Conectado. Esperando lista de jugadores...";
+    },
+    onGrants: (message) => {
+      const labels = Array.isArray(message.labels) ? message.labels : [];
+      game?.notify?.(
+        labels.length > 0
+          ? `Recompensas aplicadas: ${labels.join(", ")}`
+          : "Recompensas de la tienda aplicadas.",
+      );
     },
     onLobby: (message) => updateLanLobby(message),
     onStart: (message) => startLanGame(message),
@@ -1271,8 +1356,15 @@ async function removeDevPack() {
 
 function returnToMenu() {
   if (game) {
+    game.save();
     game.stop();
     game = null;
+  }
+
+  if (activeCloudSave) {
+    void activeCloudSave.flush();
+    activeCloudSave = null;
+    activeCloudWorld = null;
   }
 
   closeLanConnection();
@@ -1315,12 +1407,33 @@ async function boot() {
     await new Promise((resolve) => window.setTimeout(resolve, 140));
     refreshSaveInfo();
     showScreen("menu");
+    void accountUI?.refresh?.();
   } catch (error) {
     console.error(error);
     ui.loadStatus.textContent = "No se pudo preparar el mundo. Recarga la página.";
     ui.progressFill.style.background = "var(--danger)";
   }
 }
+
+accountUI = createAccountUI({
+  onPlayWorld: (world, meta) => startCloudWorld(world, meta),
+  onOpenStore: (productId) => openStoreScreen(productId ?? null),
+  onUploadLocal: () => saveStore.read(),
+  onUserChanged: () => storeUI?.refresh?.(),
+});
+accountUI.setOnBack(() => {
+  refreshSaveInfo();
+  showScreen("menu");
+});
+
+storeUI = createStoreUI({
+  onOpenAccount: () => openAccountScreen(),
+  onPurchased: () => accountUI?.refresh?.(),
+  onBack: () => {
+    refreshSaveInfo();
+    showScreen("menu");
+  },
+});
 
 ui.btnNew.addEventListener("click", startNewGame);
 ui.btnCharacterBack.addEventListener("click", () => {
@@ -1358,6 +1471,16 @@ ui.devDefaultApply.addEventListener("click", applyDefaultPackFiles);
 ui.devDefaultClear.addEventListener("click", clearDefaultPackFiles);
 ui.btnContinue.addEventListener("click", continueGame);
 ui.btnLan.addEventListener("click", openLanScreen);
+ui.btnAccount.addEventListener("click", openAccountScreen);
+ui.btnStore.addEventListener("click", () => openStoreScreen());
+ui.btnAccountBack.addEventListener("click", () => {
+  refreshSaveInfo();
+  showScreen("menu");
+});
+ui.btnStoreBack.addEventListener("click", () => {
+  refreshSaveInfo();
+  showScreen("menu");
+});
 ui.btnLanConnect.addEventListener("click", connectLan);
 ui.btnLanStart.addEventListener("click", () => {
   ui.lanLobbyStatus.textContent = "Iniciando mundo...";
@@ -1413,11 +1536,27 @@ window.addEventListener("keydown", (event) => {
   } else if (event.key === "Escape" && document.body.dataset.screen === "dev") {
     refreshSaveInfo();
     showScreen("menu");
+  } else if (
+    event.key === "Escape" &&
+    document.body.dataset.screen === "account"
+  ) {
+    refreshSaveInfo();
+    showScreen("menu");
+  } else if (
+    event.key === "Escape" &&
+    document.body.dataset.screen === "store"
+  ) {
+    storeUI?.closeModal?.();
+    refreshSaveInfo();
+    showScreen("menu");
   }
 });
 
 window.addEventListener("pagehide", (event) => {
   game?.save();
+  if (activeCloudSave) {
+    void activeCloudSave.flush();
+  }
   if (!event.persisted) {
     lanClient?.close();
   }

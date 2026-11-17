@@ -9,6 +9,7 @@
     "dev": "node server/lan-server.mjs",
     "dev:env": "node --env-file=.env server/lan-server.mjs",
     "test": "node --test \"tests/**/*.test.mjs\"",
+    "check:deploy": "node scripts/check-deploy.mjs",
     "lan": "node server/lan-server.mjs"
   },
   "engines": {
