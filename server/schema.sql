@@ -169,3 +169,16 @@ CREATE TABLE IF NOT EXISTS paypal_events (
   created_at BIGINT NOT NULL,
   raw_json LONGTEXT NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS play_sessions (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED NULL,
+  player_name VARCHAR(24) NOT NULL,
+  connected_at BIGINT NOT NULL,
+  last_seen_at BIGINT NOT NULL,
+  disconnected_at BIGINT NULL,
+  duration_ms BIGINT UNSIGNED NULL,
+  KEY idx_play_user (user_id, connected_at),
+  KEY idx_play_connected (connected_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+

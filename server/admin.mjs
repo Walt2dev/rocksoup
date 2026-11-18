@@ -1,12 +1,30 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { snapshotPvp } from "./pvp.mjs";
 
+function realSecret(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const trimmed = value.trim();
+  if (!trimmed || /^REEMPLAZA/i.test(trimmed) || /^TU_/i.test(trimmed)) {
+    return "";
+  }
+  return trimmed;
+}
+
+export function getAdminSecrets(env = process.env) {
+  const values = [env.ADMIN_PASSWORD, env.ADMIN_TOKEN]
+    .map(realSecret)
+    .filter(Boolean);
+  return [...new Set(values)];
+}
+
 export function getAdminToken(env = process.env) {
-  return typeof env.ADMIN_TOKEN === "string" ? env.ADMIN_TOKEN.trim() : "";
+  return getAdminSecrets(env)[0] ?? "";
 }
 
 export function isAdminConfigured(env = process.env) {
-  return getAdminToken(env).length > 0;
+  return getAdminSecrets(env).length > 0;
 }
 
 function digest(value) {
@@ -18,6 +36,13 @@ export function adminAuthorized(expectedToken, providedToken) {
     return false;
   }
   return timingSafeEqual(digest(expectedToken), digest(providedToken));
+}
+
+export function adminAuthorizedAny(expectedTokens, providedToken) {
+  if (!providedToken) {
+    return false;
+  }
+  return expectedTokens.some((token) => adminAuthorized(token, providedToken));
 }
 
 export function bearerToken(headerValue) {

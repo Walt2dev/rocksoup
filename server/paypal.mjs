@@ -154,6 +154,9 @@ export function createPayPal({ env = process.env, logger = console } = {}) {
       locale: "es_MX",
       "disable-funding": "credit",
     });
+    if (intent === "capture") {
+      params.set("enable-funding", "card");
+    }
     if (intent === "subscription") {
       params.set("vault", "true");
     }
@@ -336,6 +339,18 @@ export function createPayPal({ env = process.env, logger = console } = {}) {
     return result?.verification_status === "SUCCESS";
   }
 
+  async function verifyCredentials() {
+    if (!configured) {
+      return { ok: false, error: "PayPal no está configurado" };
+    }
+    try {
+      await getAccessToken();
+      return { ok: true, error: null };
+    } catch (error) {
+      return { ok: false, error: error.message };
+    }
+  }
+
   return {
     configured,
     mode,
@@ -343,6 +358,7 @@ export function createPayPal({ env = process.env, logger = console } = {}) {
     webhookId,
     publicConfig,
     getAccessToken,
+    verifyCredentials,
     createOrder,
     captureOrder,
     getOrder,

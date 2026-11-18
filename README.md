@@ -55,9 +55,12 @@ Abre `http://localhost:3000` en el equipo anfitrión o la URL del despliegue.
 ### Panel de administración
 
 - Disponible en `/admin`.
-- Requiere definir `ADMIN_TOKEN`; sin token la ruta y la API devuelven 404.
+- Pide una **clave de administración** (`ADMIN_PASSWORD` o `ADMIN_TOKEN`);
+  sin clave la ruta y la API devuelven 404.
 - Muestra conectados, salud, posición, tiempo conectado, evento y TOP del
   ranking. Se actualiza cada 2 segundos.
+- Incluye un resumen de jugadores únicos, tiempo jugado, compras e ingresos, con
+  selector de rango de **7, 30 o 90 días**.
 - Permite **descargar** e **importar** el mundo en JSON. La importación se
   aplica al reiniciar/redeployar la app.
 
@@ -173,6 +176,11 @@ productos de prueba de **5 MXN** y pestañas **Exclusivo**, **Para Mi**,
 > rechaza el token y el checkout falla. Tras cambiar variables, reinicia la app
 > y confirma `configured:true` y `webhookConfigured:true` en `/api/health`.
 
+Los botones de compra habilitan también **tarjeta** (`enable-funding=card`). Si
+no aparece la opción de tarjeta, actívala en la cuenta PayPal Business
+(Advanced Credit and Debit Card Payments) o valora Mercado Pago/Stripe como
+pasarela separada.
+
 El dinero se abona en el saldo de tu PayPal Business (y desde ahí lo retiras a
 tu banco o cuenta personal). PayPal descuenta su comisión habitual por
 transacción. Revisa también tu política de reembolsos y obligaciones fiscales
@@ -195,7 +203,8 @@ No se necesita Client Secret para el flujo de ID Token usado aquí.
 - `PORT`: puerto HTTP/WebSocket (por defecto `3000`).
 - `SAVE_PATH`: ruta del guardado (útil en volúmenes persistentes).
 - `SAVE_DIR`: carpeta del guardado si no usas `SAVE_PATH`.
-- `ADMIN_TOKEN`: token del panel `/admin`.
+- `ADMIN_PASSWORD`: clave para entrar a `/admin` (recomendada).
+- `ADMIN_TOKEN`: token alternativo para `/admin` y scripts.
 - `WORLD_ID`: identificador del mundo persistente (`main` por defecto).
 - `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`.
 - `MYSQL_SSL`, `MYSQL_SSL_CA`, `MYSQL_CONNECTION_LIMIT`.

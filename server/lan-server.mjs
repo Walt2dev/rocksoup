@@ -39,10 +39,10 @@ import {
   hashToken,
 } from "./leaderboardStore.mjs";
 import {
-  adminAuthorized,
+  adminAuthorizedAny,
   bearerToken,
   buildAdminSnapshot,
-  getAdminToken,
+  getAdminSecrets,
 } from "./admin.mjs";
 import { createWorldStore, normalizeWorldId } from "./worldStore.mjs";
 import { createAmbientSync } from "./ambientSync.mjs";
@@ -50,6 +50,7 @@ import { createDatabase } from "./db.mjs";
 import { createAuthStore, sessionTokenFromRequest } from "./authStore.mjs";
 import { createAccountStore } from "./accountStore.mjs";
 import { createStoreStore } from "./storeStore.mjs";
+import { createPlaySessionStore } from "./playSessionStore.mjs";
 import { createPayPal } from "./paypal.mjs";
 import { createMailer } from "./mailer.mjs";
 import { createApiHandler } from "./api.mjs";
@@ -414,6 +415,7 @@ const leaderboardStore = createLeaderboardStore();
 leaderboardStore.init().catch(() => {});
 
 const database = createDatabase();
+const playSessionStore = createPlaySessionStore({ db: database });
 const authStore = createAuthStore({ db: database });
 const accountStore = createAccountStore({ db: database });
 const paypal = createPayPal();
@@ -435,10 +437,11 @@ const apiHandler = createApiHandler({
 
 database
   .init()
-  .then((ready) => {
+  .then(async (ready) => {
     if (!ready) {
       return false;
     }
+    await playSessionStore.closeStale({ staleAfterMs: 2 * 60 * 1000 });
     return storeStore.init();
   })
   .catch((error) => {
@@ -881,6 +884,7 @@ async function handleJoin(ws, message) {
     id: nextPlayerId++,
     token,
     accountId: accountUser?.id ?? null,
+    email: accountUser?.email ?? null,
     profileKey,
     name: saved?.name || accountUser?.displayName || name,
     color,
@@ -902,6 +906,9 @@ async function handleJoin(ws, message) {
     lastAmbientAttackAt: 0,
     lastStateAt: 0,
     lastLeaderboardAt: 0,
+    lastPlayTouchAt: 0,
+    playSessionId: null,
+    playSessionPromise: null,
     connectedAt: Date.now(),
     chatLimiter: new ChatLimiter(),
   };
@@ -931,6 +938,17 @@ async function handleJoin(ws, message) {
   }
 
   clients.set(ws, client);
+  client.playSessionPromise = playSessionStore
+    .start({
+      userId: client.accountId,
+      playerName: client.name,
+      now: client.connectedAt,
+    })
+    .then((sessionId) => {
+      client.playSessionId = sessionId;
+      return sessionId;
+    })
+    .catch(() => null);
   if (pvp.phase === "active") {
     ensureParticipant(pvp, client);
   }
@@ -968,6 +986,11 @@ async function handleJoin(ws, message) {
 }
 
 function handleState(client, message) {
+  const now = Date.now();
+  if (client.playSessionId && now - client.lastPlayTouchAt >= 30000) {
+    client.lastPlayTouchAt = now;
+    void playSessionStore.touch(client.playSessionId, now);
+  }
   if (Number.isFinite(message.x) && Number.isFinite(message.y)) {
     client.x = message.x;
     client.y = message.y;
@@ -1458,6 +1481,18 @@ function handleClose(ws) {
   }
 
   clients.delete(ws);
+  if (client.playSessionId) {
+    void playSessionStore.finish(client.playSessionId);
+  } else if (client.playSessionPromise) {
+    client.playSessionPromise
+      .then((sessionId) => {
+        if (sessionId) {
+          return playSessionStore.finish(sessionId);
+        }
+        return null;
+      })
+      .catch(() => {});
+  }
   ambientSync.removeOwner(client.id);
   console.log(`[LAN] ${client.name} desconectado`);
 
@@ -1535,11 +1570,11 @@ async function fetchEgressIp(timeoutMs = 6000) {
 }
 
 function verifyAdminRequest(req) {
-  const adminToken = getAdminToken();
-  if (!adminToken) {
+  const secrets = getAdminSecrets();
+  if (secrets.length === 0) {
     return { ok: false, status: 404 };
   }
-  if (!adminAuthorized(adminToken, bearerToken(req.headers.authorization))) {
+  if (!adminAuthorizedAny(secrets, bearerToken(req.headers.authorization))) {
     return { ok: false, status: 401 };
   }
   return { ok: true, status: 200 };
@@ -1605,15 +1640,15 @@ const server = createServer(async (req, res) => {
         return;
       }
 
-      const adminToken = getAdminToken();
+      const secrets = getAdminSecrets();
 
-      if (!adminToken) {
+      if (secrets.length === 0) {
         res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
         res.end("Not found");
         return;
       }
 
-      if (!adminAuthorized(adminToken, bearerToken(req.headers.authorization))) {
+      if (!adminAuthorizedAny(secrets, bearerToken(req.headers.authorization))) {
         res.writeHead(401, {
           "Content-Type": "application/json; charset=utf-8",
           "Cache-Control": "no-store",
@@ -1639,6 +1674,189 @@ const server = createServer(async (req, res) => {
         "Cache-Control": "no-store",
       });
       res.end(JSON.stringify(snapshot));
+      return;
+    }
+
+    if (pathname === "/api/admin/stats") {
+      const auth = verifyAdminRequest(req);
+
+      if (!auth.ok) {
+        if (auth.status === 404) {
+          res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("Not found");
+        } else {
+          res.writeHead(401, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store",
+            "WWW-Authenticate": "Bearer",
+          });
+          res.end(JSON.stringify({ error: "No autorizado" }));
+        }
+        return;
+      }
+
+      if (req.method !== "GET") {
+        res.writeHead(405, { Allow: "GET" });
+        res.end();
+        return;
+      }
+
+      if (!database.isAvailable()) {
+        res.writeHead(503, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-store",
+        });
+        res.end(JSON.stringify({ error: "Base de datos no disponible" }));
+        return;
+      }
+
+      const requestedDays = Number(url.searchParams.get("days"));
+      const days = [7, 30, 90].includes(requestedDays) ? requestedDays : 7;
+      const now = Date.now();
+      const since = now - days * 24 * 60 * 60 * 1000;
+      const today = new Date(now);
+      today.setHours(0, 0, 0, 0);
+      const todayStart = today.getTime();
+
+      try {
+        const [
+          totalUsersRows,
+          newUsersRows,
+          newUsersTodayRows,
+          recentPurchaseRows,
+          rangePurchaseTotals,
+          allPurchaseTotals,
+          todayPurchaseRows,
+          subscriptionRows,
+          play,
+        ] = await Promise.all([
+          database.query("SELECT COUNT(*) AS total FROM users"),
+          database.query("SELECT COUNT(*) AS total FROM users WHERE created_at >= ?", [since]),
+          database.query("SELECT COUNT(*) AS total FROM users WHERE created_at >= ?", [todayStart]),
+          database.query(
+            `SELECT p.id, p.user_id, u.email, u.display_name, p.product_id,
+                    p.amount_cents, p.currency, p.status, p.grant_status,
+                    p.created_at, p.captured_at
+             FROM purchases p
+             LEFT JOIN users u ON u.id = p.user_id
+             WHERE p.created_at >= ?
+             ORDER BY p.created_at DESC
+             LIMIT 100`,
+            [since],
+          ),
+          database.query(
+            `SELECT currency, status, COUNT(*) AS count,
+                    COALESCE(SUM(amount_cents), 0) AS total_cents
+             FROM purchases
+             WHERE created_at >= ?
+             GROUP BY currency, status
+             ORDER BY currency ASC, status ASC`,
+            [since],
+          ),
+          database.query(
+            `SELECT currency, status, COUNT(*) AS count,
+                    COALESCE(SUM(amount_cents), 0) AS total_cents
+             FROM purchases
+             GROUP BY currency, status
+             ORDER BY currency ASC, status ASC`,
+          ),
+          database.query(
+            `SELECT COUNT(*) AS count, COALESCE(SUM(amount_cents), 0) AS total_cents
+             FROM purchases
+             WHERE created_at >= ? AND status = 'completed'`,
+            [todayStart],
+          ),
+          database.query(
+            `SELECT plan_key, status, COUNT(*) AS count
+             FROM subscriptions
+             GROUP BY plan_key, status
+             ORDER BY plan_key ASC, status ASC`,
+          ),
+          playSessionStore.rangeStats({ days, now }),
+        ]);
+
+        const online = [...clients.values()].map((client) => ({
+          id: client.id,
+          accountId: client.accountId ?? null,
+          name: client.name,
+          email: client.email ?? null,
+          connectedForMs: Math.max(0, now - client.connectedAt),
+          lastStateAgeMs: Number.isFinite(client.lastStateAt)
+            ? Math.max(0, now - client.lastStateAt)
+            : null,
+        }));
+
+        const recentPurchases = recentPurchaseRows.map((row) => {
+          const product = storeStore.getProduct(row.product_id);
+          return {
+            id: row.id,
+            userId: Number(row.user_id) || null,
+            email: row.email ?? null,
+            displayName: row.display_name ?? null,
+            productId: row.product_id,
+            productName: product?.name ?? row.product_id,
+            amountCents: Number(row.amount_cents) || 0,
+            amount: (Number(row.amount_cents) || 0) / 100,
+            currency: row.currency,
+            status: row.status,
+            grantStatus: row.grant_status,
+            createdAt: Number(row.created_at) || 0,
+            capturedAt: Number(row.captured_at) || 0,
+          };
+        });
+
+        const mapTotals = (rows) =>
+          rows.map((row) => ({
+            currency: row.currency,
+            status: row.status,
+            count: Number(row.count) || 0,
+            totalCents: Number(row.total_cents) || 0,
+            total: (Number(row.total_cents) || 0) / 100,
+          }));
+
+        res.writeHead(200, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-store",
+        });
+        res.end(
+          JSON.stringify({
+            ok: true,
+            now,
+            rangeDays: days,
+            online,
+            users: {
+              total: Number(totalUsersRows[0]?.total) || 0,
+              newToday: Number(newUsersTodayRows[0]?.total) || 0,
+              newInRange: Number(newUsersRows[0]?.total) || 0,
+            },
+            play,
+            purchases: {
+              today: {
+                count: Number(todayPurchaseRows[0]?.count) || 0,
+                totalCents: Number(todayPurchaseRows[0]?.total_cents) || 0,
+              },
+              recent: recentPurchases,
+              totals: mapTotals(rangePurchaseTotals),
+              allTimeTotals: mapTotals(allPurchaseTotals),
+            },
+            subscriptions: subscriptionRows.map((row) => {
+              const product = storeStore.getProduct(row.plan_key);
+              return {
+                planKey: row.plan_key,
+                name: product?.name ?? row.plan_key,
+                status: row.status,
+                count: Number(row.count) || 0,
+              };
+            }),
+          }),
+        );
+      } catch (error) {
+        res.writeHead(500, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-store",
+        });
+        res.end(JSON.stringify({ error: error.message || "Error interno" }));
+      }
       return;
     }
 
@@ -1686,8 +1904,9 @@ const server = createServer(async (req, res) => {
           ),
         ),
       ];
-      const [egress, ...probes] = await Promise.all([
+      const [egress, paypalAuth, ...probes] = await Promise.all([
         fetchEgressIp(),
+        paypal.verifyCredentials?.() ?? Promise.resolve({ ok: false, error: "sin verificación" }),
         ...hosts.map((host) => probeTcp(host, port)),
       ]);
 
@@ -1707,6 +1926,13 @@ const server = createServer(async (req, res) => {
           mail: {
             ...mailer.publicConfig(),
             lastResult: mailer.lastResult?.() ?? null,
+          },
+          paypal: {
+            mode: paypal.mode,
+            configured: paypal.configured,
+            webhookConfigured: Boolean(paypal.webhookId),
+            tokenOk: paypalAuth.ok,
+            tokenError: paypalAuth.error,
           },
           probes,
         }),

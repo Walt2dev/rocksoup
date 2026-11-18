@@ -1,5 +1,7 @@
 const TOKEN_KEY = "rocksoup-admin-token";
+const RANGE_KEY = "rocksoup-admin-range";
 const POLL_MS = 2000;
+const STATS_POLL_MS = 15000;
 
 const el = {
   login: document.getElementById("admin-login"),
@@ -10,11 +12,22 @@ const el = {
   status: document.getElementById("admin-status"),
   updated: document.getElementById("admin-updated"),
   logout: document.getElementById("admin-logout"),
+  range: document.getElementById("admin-range"),
+  online: document.getElementById("admin-online"),
+  uniqueToday: document.getElementById("admin-unique-today"),
+  avgToday: document.getElementById("admin-avg-today"),
+  purchasesToday: document.getElementById("admin-purchases-today"),
+  revenueToday: document.getElementById("admin-revenue-today"),
   playerCount: document.getElementById("admin-player-count"),
   started: document.getElementById("admin-started"),
   event: document.getElementById("admin-event"),
   host: document.getElementById("admin-host"),
   players: document.getElementById("admin-players"),
+  activity: document.getElementById("admin-activity"),
+  topPlayers: document.getElementById("admin-top-players"),
+  purchases: document.getElementById("admin-purchases"),
+  purchaseTotals: document.getElementById("admin-purchase-totals"),
+  subscriptions: document.getElementById("admin-subscriptions"),
   rankingPoints: document.getElementById("admin-ranking-points"),
   rankingBest: document.getElementById("admin-ranking-best"),
   worldDownload: document.getElementById("admin-world-download"),
@@ -23,8 +36,17 @@ const el = {
 };
 
 let token = sessionStorage.getItem(TOKEN_KEY) ?? "";
+let rangeDays = Number(sessionStorage.getItem(RANGE_KEY)) || 7;
+if (![7, 30, 90].includes(rangeDays)) {
+  rangeDays = 7;
+}
+if (el.range) {
+  el.range.value = String(rangeDays);
+}
 let timer = null;
+let statsTimer = null;
 let fetching = false;
+let fetchingStats = false;
 
 function formatDuration(ms) {
   const total = Math.max(0, Math.floor((Number.isFinite(ms) ? ms : 0) / 1000));
@@ -48,15 +70,45 @@ function formatAge(ms) {
   return `hace ${formatDuration(ms)}`;
 }
 
+function formatMoney(cents, currency = "MXN") {
+  const value = (Number(cents) || 0) / 100;
+  try {
+    return new Intl.NumberFormat("es-MX", {
+      style: "currency",
+      currency,
+    }).format(value);
+  } catch {
+    return `$${value.toFixed(2)} ${currency}`;
+  }
+}
+
+function formatDateTime(timestamp) {
+  if (!timestamp) {
+    return "-";
+  }
+  return new Date(timestamp).toLocaleString("es-MX", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+}
+
+function todayKey() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function formatEvent(event) {
   if (!event) {
     return "Sin datos";
   }
   if (event.phase === "active") {
-    return `Activo · ${formatDuration(event.remainingMs)}`;
+    return `Activo Â· ${formatDuration(event.remainingMs)}`;
   }
   if (Number.isFinite(event.startsInMs)) {
-    return `Próximo en ${formatDuration(event.startsInMs)}`;
+    return `PrÃ³ximo en ${formatDuration(event.startsInMs)}`;
   }
   return "Inactivo";
 }
@@ -131,6 +183,7 @@ function renderPlayers(data) {
     players.find((player) => player.id === data.hostId)?.name ?? "-";
 
   el.playerCount.textContent = String(players.length);
+  el.online.textContent = String(players.length);
   el.started.textContent = data.started ? "En curso" : "Lobby";
   el.event.textContent = formatEvent(data.event);
   el.host.textContent = hostName;
@@ -141,12 +194,12 @@ function renderPlayers(data) {
       { label: "Jugador", value: (row) => row.name },
       { label: "Salud", value: (row) => `${Math.round(row.health)}` },
       {
-        label: "Posición",
+        label: "PosiciÃ³n",
         value: (row) =>
           `${Number(row.x).toFixed(1)}, ${Number(row.y).toFixed(1)}`,
       },
       { label: "Conectado", value: (row) => formatDuration(row.connectedForMs) },
-      { label: "Último estado", value: (row) => formatAge(row.lastStateAgeMs) },
+      { label: "Ãšltimo estado", value: (row) => formatAge(row.lastStateAgeMs) },
       { label: "Duendes", value: (row) => row.workers },
       { label: "Puntos evento", value: (row) => row.eventScore },
       { label: "Kills evento", value: (row) => row.eventKills },
@@ -172,7 +225,87 @@ function renderRanking(container, rows, sort) {
       { label: "Victorias", value: (row) => row.eventsWon },
     ],
     rows.map((row, index) => ({ ...row, __rank: index + 1 })),
-    "Todavía no hay puntuaciones.",
+    "TodavÃ­a no hay puntuaciones.",
+  );
+}
+
+function renderStats(data) {
+  const play = data?.play ?? {};
+  const byDay = Array.isArray(play.byDay) ? play.byDay : [];
+  const today = byDay.find((entry) => entry.date === todayKey());
+  const purchasesToday = data?.purchases?.today ?? {};
+
+  el.online.textContent = String(Array.isArray(data?.online) ? data.online.length : 0);
+  el.uniqueToday.textContent = today ? String(today.uniquePlayers) : "0";
+  el.avgToday.textContent = today ? formatDuration(today.avgMs) : "-";
+  el.purchasesToday.textContent = String(purchasesToday.count ?? 0);
+  el.revenueToday.textContent = formatMoney(purchasesToday.totalCents ?? 0);
+
+  renderTable(
+    el.activity,
+    [
+      { label: "Fecha", value: (row) => row.date },
+      { label: "Sesiones", value: (row) => row.sessions },
+      { label: "Ãšnicos", value: (row) => row.uniquePlayers },
+      { label: "Tiempo total", value: (row) => formatDuration(row.totalMs) },
+      { label: "Tiempo medio", value: (row) => formatDuration(row.avgMs) },
+    ],
+    byDay,
+    "Sin actividad en el rango.",
+  );
+
+  renderTable(
+    el.topPlayers,
+    [
+      { label: "Jugador", value: (row) => row.name },
+      { label: "Sesiones", value: (row) => row.sessions },
+      { label: "Tiempo total", value: (row) => formatDuration(row.totalMs) },
+    ],
+    Array.isArray(play.topPlayers) ? play.topPlayers : [],
+    "Sin sesiones registradas.",
+  );
+
+  renderTable(
+    el.purchases,
+    [
+      { label: "Fecha", value: (row) => formatDateTime(row.createdAt) },
+      {
+        label: "Jugador",
+        value: (row) => row.email || row.displayName || "â€”",
+      },
+      { label: "Producto", value: (row) => row.productName },
+      { label: "Monto", value: (row) => formatMoney(row.amountCents, row.currency) },
+      { label: "Estado", value: (row) => row.status },
+      { label: "Entrega", value: (row) => row.grantStatus },
+    ],
+    Array.isArray(data?.purchases?.recent) ? data.purchases.recent : [],
+    "Sin compras en el rango.",
+  );
+
+  const totals = Array.isArray(data?.purchases?.totals)
+    ? data.purchases.totals
+    : [];
+  renderTable(
+    el.purchaseTotals,
+    [
+      { label: "Moneda", value: (row) => row.currency },
+      { label: "Estado", value: (row) => row.status },
+      { label: "Compras", value: (row) => row.count },
+      { label: "Total", value: (row) => formatMoney(row.totalCents, row.currency) },
+    ],
+    totals,
+    "Sin totales en el rango.",
+  );
+
+  renderTable(
+    el.subscriptions,
+    [
+      { label: "Plan", value: (row) => row.name },
+      { label: "Estado", value: (row) => row.status },
+      { label: "Cantidad", value: (row) => row.count },
+    ],
+    Array.isArray(data?.subscriptions) ? data.subscriptions : [],
+    "Sin suscripciones.",
   );
 }
 
@@ -184,7 +317,7 @@ function render(data) {
   renderRanking(el.rankingBest, leaderboard.best ?? [], "best");
 
   setStatus(
-    `Actualizado · ranking en ${data.rankingSource === "mysql" ? "MySQL" : "JSON"}`,
+    `Actualizado Â· ranking en ${data.rankingSource === "mysql" ? "MySQL" : "JSON"}`,
   );
   el.updated.textContent = new Date(data.now).toLocaleTimeString();
 }
@@ -202,12 +335,12 @@ async function fetchAdmin() {
     });
 
     if (response.status === 401) {
-      showLogin("Token incorrecto.");
+      showLogin("Clave incorrecta.");
       return;
     }
 
     if (response.status === 404) {
-      showLogin("El servidor no tiene ADMIN_TOKEN configurado.");
+      showLogin("El servidor no tiene clave de administraciÃ³n configurada.");
       return;
     }
 
@@ -220,9 +353,45 @@ async function fetchAdmin() {
     showDashboard();
     render(data);
   } catch {
-    setStatus("Sin conexión con el servidor.", true);
+    setStatus("Sin conexiÃ³n con el servidor.", true);
   } finally {
     fetching = false;
+  }
+}
+
+async function fetchStats() {
+  if (fetchingStats || !token) {
+    return;
+  }
+
+  fetchingStats = true;
+  try {
+    const response = await fetch(`/api/admin/stats?days=${rangeDays}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+
+    if (response.status === 401) {
+      showLogin("Clave incorrecta.");
+      return;
+    }
+
+    if (response.status === 404) {
+      showLogin("El servidor no tiene clave de administraciÃ³n configurada.");
+      return;
+    }
+
+    if (!response.ok) {
+      setStatus(`Error de estadÃ­sticas (${response.status}).`, true);
+      return;
+    }
+
+    const data = await response.json();
+    renderStats(data);
+  } catch {
+    setStatus("Sin conexiÃ³n con el servidor.", true);
+  } finally {
+    fetchingStats = false;
   }
 }
 
@@ -233,12 +402,21 @@ function startPolling() {
       void fetchAdmin();
     }
   }, POLL_MS);
+  statsTimer = window.setInterval(() => {
+    if (!document.hidden) {
+      void fetchStats();
+    }
+  }, STATS_POLL_MS);
 }
 
 function stopPolling() {
   if (timer !== null) {
     window.clearInterval(timer);
     timer = null;
+  }
+  if (statsTimer !== null) {
+    window.clearInterval(statsTimer);
+    statsTimer = null;
   }
 }
 
@@ -247,7 +425,7 @@ el.loginForm.addEventListener("submit", (event) => {
   const value = el.token.value.trim();
 
   if (value.length === 0) {
-    showLogin("Escribe el token de administración.");
+    showLogin("Escribe el token de administraciÃ³n.");
     return;
   }
 
@@ -255,18 +433,26 @@ el.loginForm.addEventListener("submit", (event) => {
   sessionStorage.setItem(TOKEN_KEY, token);
   showDashboard();
   void fetchAdmin();
+  void fetchStats();
+});
+
+el.range?.addEventListener("change", () => {
+  const value = Number(el.range.value);
+  rangeDays = [7, 30, 90].includes(value) ? value : 7;
+  sessionStorage.setItem(RANGE_KEY, String(rangeDays));
+  void fetchStats();
 });
 
 el.logout.addEventListener("click", () => {
   token = "";
   sessionStorage.removeItem(TOKEN_KEY);
   el.token.value = "";
-  showLogin("Token eliminado. Introduce otro para continuar.");
+  showLogin("Clave eliminada. Introduce otra para continuar.");
 });
 
 async function downloadWorld() {
   if (!token) {
-    showLogin("Introduce el token para descargar el mundo.");
+    showLogin("Introduce la clave para descargar el mundo.");
     return;
   }
 
@@ -299,7 +485,7 @@ async function downloadWorld() {
     URL.revokeObjectURL(url);
     el.worldStatus.textContent = "Mundo descargado.";
   } catch {
-    el.worldStatus.textContent = "Error de conexión al descargar.";
+    el.worldStatus.textContent = "Error de conexiÃ³n al descargar.";
   }
 }
 
@@ -310,7 +496,7 @@ async function importWorld(event) {
   }
 
   if (!token) {
-    showLogin("Introduce el token para importar el mundo.");
+    showLogin("Introduce la clave para importar el mundo.");
     event.target.value = "";
     return;
   }
@@ -337,7 +523,7 @@ async function importWorld(event) {
 
     el.worldStatus.textContent = `Mundo importado (${data.worldId ?? "main"}). Reinicia la app para aplicarlo.`;
   } catch {
-    el.worldStatus.textContent = "Error de conexión al importar.";
+    el.worldStatus.textContent = "Error de conexiÃ³n al importar.";
   } finally {
     event.target.value = "";
   }
@@ -349,12 +535,14 @@ el.worldFile?.addEventListener("change", importWorld);
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden && token && !el.dashboard.hidden) {
     void fetchAdmin();
+    void fetchStats();
   }
 });
 
 if (token) {
   showDashboard();
   void fetchAdmin();
+  void fetchStats();
 } else {
   showLogin();
 }
