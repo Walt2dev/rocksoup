@@ -144,6 +144,15 @@ const SCHEMA = [
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 ];
 
+const NETWORK_ERRORS = new Set([
+  "ETIMEDOUT",
+  "ECONNREFUSED",
+  "ENOTFOUND",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "EAI_AGAIN",
+]);
+
 function sanitizeDbError(error, config) {
   const code = String(error?.code ?? "DB_INIT_FAILED").slice(0, 64);
   let message = String(error?.message ?? "Error desconocido").slice(0, 300);
@@ -173,6 +182,7 @@ export function createDatabase({ env = process.env, logger = console } = {}) {
   let available = false;
   let initPromise = null;
   let activeHost = null;
+  let activeCredentials = null;
   let attempts = [];
   let lastError = configured
     ? null
@@ -196,57 +206,89 @@ export function createDatabase({ env = process.env, logger = console } = {}) {
       } catch (error) {
         lastError = sanitizeDbError(error, config);
         logger.warn?.(`[DB] No se pudo cargar mysql2: ${error.message}`);
+        initPromise = null;
         return false;
       }
 
       const ssl = buildSsl(config, logger);
+      const credentialSets =
+        config.credentialSets?.length > 0
+          ? config.credentialSets
+          : [
+              {
+                source: "MYSQL",
+                user: config.user,
+                password: config.password,
+                database: config.database,
+              },
+            ];
       attempts = [];
+      activeCredentials = null;
 
       for (const host of connectionHosts(config)) {
-        let candidate = null;
-        try {
-          candidate = mysql.createPool({
-            host,
-            port: config.port,
-            user: config.user,
-            password: config.password,
-            database: config.database,
-            waitForConnections: true,
-            connectionLimit: config.connectionLimit,
-            queueLimit: 40,
-            enableKeepAlive: true,
-            connectTimeout: 8000,
-            ...(ssl ? { ssl } : {}),
-          });
-          await candidate.query("SELECT 1");
-          for (const statement of SCHEMA) {
-            await candidate.query(statement);
+        for (const credentials of credentialSets) {
+          if (!credentials.user || !credentials.database) {
+            continue;
           }
-          pool = candidate;
-          available = true;
-          activeHost = host;
-          lastError = null;
-          logger.log?.(
-            `[DB] MySQL listo: cuentas, mundos y tienda activos (${host}).`,
-          );
-          return true;
-        } catch (error) {
-          await candidate?.end().catch(() => {});
-          const failure = sanitizeDbError(error, config);
-          attempts.push({ host, ...failure });
-          logger.warn?.(
-            `[DB] MySQL no disponible en ${host}:${config.port}/${config.database}: ${error.message}`,
-          );
+          let candidate = null;
+          try {
+            candidate = mysql.createPool({
+              host,
+              port: config.port,
+              user: credentials.user,
+              password: credentials.password,
+              database: credentials.database,
+              waitForConnections: true,
+              connectionLimit: config.connectionLimit,
+              queueLimit: 40,
+              enableKeepAlive: true,
+              connectTimeout: 5000,
+              ...(ssl ? { ssl } : {}),
+            });
+            await candidate.query("SELECT 1");
+            for (const statement of SCHEMA) {
+              await candidate.query(statement);
+            }
+            pool = candidate;
+            available = true;
+            activeHost = host;
+            activeCredentials = credentials;
+            lastError = null;
+            logger.log?.(
+              `[DB] MySQL listo: cuentas, mundos y tienda activos (${host}, credenciales ${credentials.source}).`,
+            );
+            return true;
+          } catch (error) {
+            await candidate?.end().catch(() => {});
+            const failure = sanitizeDbError(error, {
+              password: credentials.password,
+            });
+            attempts.push({
+              host,
+              source: credentials.source,
+              user: credentials.user,
+              database: credentials.database,
+              ...failure,
+            });
+            logger.warn?.(
+              `[DB] MySQL no disponible en ${host} con credenciales ${credentials.source}: ${error.message}`,
+            );
+            if (NETWORK_ERRORS.has(failure.code)) {
+              break;
+            }
+          }
         }
       }
 
       available = false;
       pool = null;
       activeHost = null;
+      activeCredentials = null;
       lastError = attempts[0] ?? {
         code: "DB_INIT_FAILED",
         message: "No se pudo conectar a MySQL",
       };
+      initPromise = null;
       return false;
     })();
 
@@ -309,7 +351,21 @@ export function createDatabase({ env = process.env, logger = console } = {}) {
       database: config?.database ?? null,
       hosts: config ? connectionHosts(config) : [],
       activeHost,
-      attempts: attempts.map(({ host, code }) => ({ host, code })),
+      activeSource: activeCredentials?.source ?? null,
+      activeUser: activeCredentials?.user ?? null,
+      credentials: (config?.credentialSets ?? []).map(
+        ({ source, user, database, hasPassword }) => ({
+          source,
+          user,
+          database,
+          hasPassword,
+        }),
+      ),
+      attempts: attempts.map(({ host, source, code }) => ({
+        host,
+        source,
+        code,
+      })),
     }),
     init,
     query,

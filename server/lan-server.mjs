@@ -411,10 +411,9 @@ const pvpConfig = {
 const pvp = createPvpState(Date.now(), pvpConfig);
 const chatHistory = new ChatHistory(CHAT_CONFIG.historyLimit);
 const leaderboardStore = createLeaderboardStore();
-await leaderboardStore.init();
+leaderboardStore.init().catch(() => {});
 
 const database = createDatabase();
-await database.init();
 const authStore = createAuthStore({ db: database });
 const accountStore = createAccountStore({ db: database });
 const paypal = createPayPal();
@@ -423,7 +422,6 @@ const storeStore = createStoreStore({
   accountStore,
   paypal,
 });
-await storeStore.init();
 const mailer = createMailer();
 const apiHandler = createApiHandler({
   db: database,
@@ -434,6 +432,18 @@ const apiHandler = createApiHandler({
   mailer,
   readRequestBody,
 });
+
+database
+  .init()
+  .then((ready) => {
+    if (!ready) {
+      return false;
+    }
+    return storeStore.init();
+  })
+  .catch((error) => {
+    console.warn(`[DB] Inicialización en segundo plano falló: ${error.message}`);
+  });
 
 function appendWorldLore(event) {
   state.lore = appendLoreEvent(state.lore, event);

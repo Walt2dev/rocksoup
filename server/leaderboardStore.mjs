@@ -72,13 +72,66 @@ export function readDbConfig(env = process.env) {
     ...new Set(explicitHosts.filter((value) => value !== host)),
   ];
 
+  const mysqlUser = firstEnv(env, ["MYSQL_USER"]);
+  const dbUser = firstEnv(env, ["DB_USER"]);
+  const mysqlPassword = firstEnv(env, ["MYSQL_PASSWORD"]);
+  const dbPassword = firstEnv(env, ["DB_PASSWORD"]);
+  const mysqlDatabase = firstEnv(env, ["MYSQL_DATABASE"]);
+  const dbDatabase = firstEnv(env, ["DB_NAME"]);
+  const credentialSets = [];
+  const seenCredentials = new Set();
+
+  function addCredentials(source, user, password, database) {
+    if (!user || !database) {
+      return;
+    }
+    const key = `${user}\u0000${password}\u0000${database}`;
+    if (seenCredentials.has(key)) {
+      return;
+    }
+    seenCredentials.add(key);
+    credentialSets.push({
+      source,
+      user,
+      password,
+      database,
+      hasPassword: Boolean(password),
+    });
+  }
+
+  addCredentials(
+    "MYSQL",
+    mysqlUser || dbUser,
+    mysqlPassword || dbPassword,
+    mysqlDatabase || dbDatabase,
+  );
+  addCredentials(
+    "DB",
+    dbUser || mysqlUser,
+    dbPassword || mysqlPassword,
+    dbDatabase || mysqlDatabase,
+  );
+  if (dbUser && mysqlPassword && mysqlPassword !== dbPassword) {
+    addCredentials("DB_USER+MYSQL_PASSWORD", dbUser, mysqlPassword, dbDatabase || mysqlDatabase);
+  }
+  if (mysqlUser && dbPassword && mysqlPassword !== dbPassword) {
+    addCredentials("MYSQL_USER+DB_PASSWORD", mysqlUser, dbPassword, mysqlDatabase || dbDatabase);
+  }
+
+  const primary = credentialSets[0] ?? {
+    user: mysqlUser || dbUser,
+    password: mysqlPassword || dbPassword,
+    database: mysqlDatabase || dbDatabase,
+  };
+
   return {
     host,
     alternateHosts,
     port,
-    user: firstEnv(env, ["MYSQL_USER", "DB_USER"]),
-    password: firstEnv(env, ["MYSQL_PASSWORD", "DB_PASSWORD"]),
-    database: firstEnv(env, ["MYSQL_DATABASE", "DB_NAME"]),
+    user: primary.user,
+    password: primary.password,
+    database: primary.database,
+    credentialSets,
     sslMode: String(firstEnv(env, ["MYSQL_SSL", "DB_SSL"])).toLowerCase(),
     sslCaPath: firstEnv(env, ["MYSQL_SSL_CA", "DB_SSL_CA"]),
     connectionLimit,

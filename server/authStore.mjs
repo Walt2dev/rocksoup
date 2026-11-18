@@ -588,8 +588,12 @@ export function createAuthStore({ db, env = process.env, logger = console } = {}
 
   return {
     googleClientId,
-    isConfigured: Boolean(googleClientId) || db.isAvailable(),
-    passwordAuthAvailable: db.isAvailable(),
+    get isConfigured() {
+      return Boolean(googleClientId) || db.isAvailable();
+    },
+    get passwordAuthAvailable() {
+      return db.isAvailable();
+    },
     registerWithPassword,
     loginWithPassword,
     loginWithGoogle,

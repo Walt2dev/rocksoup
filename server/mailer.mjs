@@ -141,6 +141,9 @@ export function createMailer({ env = process.env, logger = console } = {}) {
         child.kill();
         finish({ ok: false, transport: "sendmail", error: "sendmail agotó el tiempo" });
       }, 15000);
+      child.stdin.on("error", () => {
+        // Si sendmail cierra el pipe (EPIPE) no debe tumbar el proceso.
+      });
       child.stderr.on("data", (chunk) => {
         stderr += chunk.toString();
         if (stderr.length > 2000) {
@@ -161,7 +164,11 @@ export function createMailer({ env = process.env, logger = console } = {}) {
               },
         );
       });
-      child.stdin.end(`${headers}\r\n\r\n${body}\r\n`);
+      try {
+        child.stdin.end(`${headers}\r\n\r\n${body}\r\n`);
+      } catch (error) {
+        finish({ ok: false, transport: "sendmail", error: error.message });
+      }
     });
   }
 
