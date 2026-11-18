@@ -320,15 +320,17 @@ export function createApiHandler({
 
     try {
       if (pathname === "/api/health" && req.method === "GET") {
+        const paypalConfig = paypal.publicConfig();
         sendJson(res, 200, {
           ok: true,
           db: db.isAvailable(),
-          dbConfigured: db.configured,
-          dbHost: db.activeHost?.() ?? null,
-          dbError: db.isAvailable() ? null : (db.error?.() ?? null),
           auth: authStore.isConfigured,
-          paypal: paypal.publicConfig(),
-          mail: mailer?.publicConfig?.() ?? null,
+          paypal: {
+            configured: paypalConfig.configured,
+            mode: paypalConfig.mode,
+            webhookConfigured: paypalConfig.webhookConfigured,
+          },
+          mail: { configured: mailer?.isConfigured === true },
         });
         return true;
       }

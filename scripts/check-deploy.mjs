@@ -52,16 +52,13 @@ try {
     );
   } else {
     line(health.status === 200, "Servidor Node con /api", `HTTP ${health.status}`);
-    const dbDetail = health.data?.db
-      ? health.data?.dbHost
-        ? `host ${health.data.dbHost}`
-        : ""
-      : health.data?.dbConfigured === false
-        ? "faltan MYSQL_HOST / MYSQL_USER / MYSQL_DATABASE en el entorno"
-        : [health.data?.dbError?.code, health.data?.dbError?.message]
-            .filter(Boolean)
-            .join(": ") || "sin detalle; revisa el log [DB]";
-    line(health.data?.db === true, "MySQL conectado", dbDetail);
+    line(
+      health.data?.db === true,
+      "MySQL conectado",
+      health.data?.db
+        ? ""
+        : "revisa los logs del servidor o /api/admin/diagnose con ADMIN_TOKEN",
+    );
     line(health.data?.auth === true, "Google configurado");
     line(
       health.data?.paypal?.configured === true,
@@ -73,8 +70,8 @@ try {
     line(
       health.data?.mail?.configured === true,
       "Correo configurado",
-      health.data?.mail?.transport
-        ? `transporte ${health.data.mail.transport}`
+      health.data?.mail?.configured
+        ? ""
         : "define SMTP_* o SENDMAIL_PATH",
     );
   }

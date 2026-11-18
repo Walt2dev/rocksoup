@@ -1577,6 +1577,7 @@ const server = createServer(async (req, res) => {
     }
 
     if (pathname === "/health" || pathname === "/healthz") {
+      const paypalConfig = paypal.publicConfig();
       res.writeHead(200, {
         "Content-Type": "application/json; charset=utf-8",
         "Cache-Control": "no-store",
@@ -1585,13 +1586,13 @@ const server = createServer(async (req, res) => {
         JSON.stringify({
           ok: true,
           db: database.isAvailable(),
-          dbConfigured: database.configured,
-          dbHost: database.activeHost(),
-          dbError: database.isAvailable() ? null : (database.error?.() ?? null),
           auth: authStore.isConfigured,
-          paypal: paypal.publicConfig(),
-          mail: mailer.publicConfig(),
-          savePath: SAVE_PATH,
+          paypal: {
+            configured: paypalConfig.configured,
+            mode: paypalConfig.mode,
+            webhookConfigured: paypalConfig.webhookConfigured,
+          },
+          mail: { configured: mailer.isConfigured === true },
         }),
       );
       return;
