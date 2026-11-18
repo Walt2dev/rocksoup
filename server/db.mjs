@@ -143,12 +143,28 @@ const SCHEMA = [
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 ];
 
+function sanitizeDbError(error, config) {
+  const code = String(error?.code ?? "DB_INIT_FAILED").slice(0, 64);
+  let message = String(error?.message ?? "Error desconocido").slice(0, 300);
+  const password = config?.password;
+  if (password) {
+    message = message.split(password).join("***");
+  }
+  return { code, message };
+}
+
 export function createDatabase({ env = process.env, logger = console } = {}) {
   const config = readDbConfig(env);
   const configured = isLeaderboardDbConfigured(env);
   let pool = null;
   let available = false;
   let initPromise = null;
+  let lastError = configured
+    ? null
+    : {
+        code: "DB_NOT_CONFIGURED",
+        message: "Faltan MYSQL_HOST, MYSQL_USER o MYSQL_DATABASE",
+      };
 
   async function init() {
     if (!configured) {
@@ -180,11 +196,13 @@ export function createDatabase({ env = process.env, logger = console } = {}) {
           await pool.query(statement);
         }
         available = true;
+        lastError = null;
         logger.log?.("[DB] MySQL listo: cuentas, mundos y tienda activos.");
         return true;
       } catch (error) {
         available = false;
         pool = null;
+        lastError = sanitizeDbError(error, config);
         logger.warn?.(
           `[DB] MySQL no disponible para cuentas/tienda (${config.host}:${config.port}/${config.database}): ${error.message}`,
         );
@@ -240,6 +258,7 @@ export function createDatabase({ env = process.env, logger = console } = {}) {
   return {
     configured,
     isAvailable: () => available,
+    error: () => lastError,
     init,
     query,
     execute,

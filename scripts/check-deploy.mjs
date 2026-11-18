@@ -52,7 +52,14 @@ try {
     );
   } else {
     line(health.status === 200, "Servidor Node con /api", `HTTP ${health.status}`);
-    line(health.data?.db === true, "MySQL conectado");
+    const dbDetail = health.data?.db
+      ? ""
+      : health.data?.dbConfigured === false
+        ? "faltan MYSQL_HOST / MYSQL_USER / MYSQL_DATABASE en el entorno"
+        : [health.data?.dbError?.code, health.data?.dbError?.message]
+            .filter(Boolean)
+            .join(": ") || "sin detalle; revisa el log [DB]";
+    line(health.data?.db === true, "MySQL conectado", dbDetail);
     line(health.data?.auth === true, "Google configurado");
     line(
       health.data?.paypal?.configured === true,

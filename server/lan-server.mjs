@@ -1531,6 +1531,8 @@ const server = createServer(async (req, res) => {
         JSON.stringify({
           ok: true,
           db: database.isAvailable(),
+          dbConfigured: database.configured,
+          dbError: database.isAvailable() ? null : (database.error?.() ?? null),
           auth: authStore.isConfigured,
           paypal: paypal.publicConfig(),
           savePath: SAVE_PATH,

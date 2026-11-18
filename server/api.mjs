@@ -322,6 +322,8 @@ export function createApiHandler({
         sendJson(res, 200, {
           ok: true,
           db: db.isAvailable(),
+          dbConfigured: db.configured,
+          dbError: db.isAvailable() ? null : (db.error?.() ?? null),
           auth: authStore.isConfigured,
           paypal: paypal.publicConfig(),
         });

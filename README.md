@@ -76,6 +76,22 @@ Si MySQL no está configurado o falla, el servidor continúa con `lan-save.json`
 para el mundo LAN. Las cuentas, los mundos en la nube y la tienda requieren
 MySQL: sin base de datos esas rutas responden `503`.
 
+#### Si `/api/health` devuelve `db:false`
+
+1. Revisa la respuesta: ahora incluye `dbConfigured` y `dbError` con el código y
+   el mensaje saneado (sin contraseña).
+2. En el host también puedes ejecutar `npm run check:db` para ver el error exacto
+   y comprobar la conexión con las variables del entorno.
+3. En el log de arranque busca `[DB]`:
+   - `Cannot find package 'mysql2'`: ejecuta `npm install --omit=dev` en el
+     servidor y reinicia la app.
+   - `DB_NOT_CONFIGURED`: faltan `MYSQL_HOST`, `MYSQL_USER` o `MYSQL_DATABASE`
+     en las variables del hosting.
+   - `ECONNREFUSED`, `ETIMEDOUT`, `ENOTFOUND`: el host no llega al puerto 3306.
+     Habilita la IP de salida del servidor Node en **cPanel → Remote MySQL**.
+   - `ER_ACCESS_DENIED_ERROR`: revisa usuario/contraseña (la contraseña no se
+     muestra en `dbError`).
+
 ## Cuentas, mundos en la nube y lore
 
 - **Registro con correo y contraseña** en MySQL. La contraseña se guarda con
@@ -139,6 +155,11 @@ productos de prueba de **5 MXN** y pestañas **Exclusivo**, **Para Mi**,
    `PAYMENT.SALE.COMPLETED`.
 10. Prueba una compra y una suscripción en Sandbox. Cuando todo funcione, cambia
     `PAYPAL_MODE=live` y usa las credenciales Live.
+
+> `PAYPAL_MODE` debe coincidir con las credenciales. Si `/api/health` muestra
+> `paypal.mode:"sandbox"` pero las credenciales son Live (o al revés), PayPal
+> rechaza el token y el checkout falla. Tras cambiar variables, reinicia la app
+> y confirma `configured:true` y `webhookConfigured:true` en `/api/health`.
 
 El dinero se abona en el saldo de tu PayPal Business (y desde ahí lo retiras a
 tu banco o cuenta personal). PayPal descuenta su comisión habitual por
