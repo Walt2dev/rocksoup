@@ -26,15 +26,24 @@ export function hashToken(token) {
   return createHash("sha256").update(token).digest("hex");
 }
 
+function firstEnv(env, keys) {
+  if (!env) {
+    return "";
+  }
+  for (const key of keys) {
+    const value = env[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return "";
+}
+
 export function isLeaderboardDbConfigured(env = process.env) {
   return Boolean(
-    env &&
-      typeof env.MYSQL_HOST === "string" &&
-      env.MYSQL_HOST.length > 0 &&
-      typeof env.MYSQL_USER === "string" &&
-      env.MYSQL_USER.length > 0 &&
-      typeof env.MYSQL_DATABASE === "string" &&
-      env.MYSQL_DATABASE.length > 0,
+    firstEnv(env, ["MYSQL_HOST", "DB_HOST"]) &&
+      firstEnv(env, ["MYSQL_USER", "DB_USER"]) &&
+      firstEnv(env, ["MYSQL_DATABASE", "DB_NAME"]),
   );
 }
 
@@ -43,24 +52,22 @@ export function readDbConfig(env = process.env) {
     return null;
   }
 
-  const port = Number(env.MYSQL_PORT) > 0
-    ? Math.floor(Number(env.MYSQL_PORT))
+  const rawPort = firstEnv(env, ["MYSQL_PORT", "DB_PORT"]);
+  const port = Number(rawPort) > 0
+    ? Math.floor(Number(rawPort))
     : DEFAULT_PORT;
   const connectionLimit = Number(env.MYSQL_CONNECTION_LIMIT) > 0
     ? Math.min(20, Math.max(1, Math.floor(Number(env.MYSQL_CONNECTION_LIMIT))))
     : DEFAULT_CONNECTION_LIMIT;
 
   return {
-    host: String(env.MYSQL_HOST),
+    host: firstEnv(env, ["MYSQL_HOST", "DB_HOST"]),
     port,
-    user: String(env.MYSQL_USER),
-    password: typeof env.MYSQL_PASSWORD === "string" ? env.MYSQL_PASSWORD : "",
-    database: String(env.MYSQL_DATABASE),
-    sslMode: String(env.MYSQL_SSL ?? "").toLowerCase(),
-    sslCaPath:
-      typeof env.MYSQL_SSL_CA === "string" && env.MYSQL_SSL_CA.length > 0
-        ? env.MYSQL_SSL_CA
-        : "",
+    user: firstEnv(env, ["MYSQL_USER", "DB_USER"]),
+    password: firstEnv(env, ["MYSQL_PASSWORD", "DB_PASSWORD"]),
+    database: firstEnv(env, ["MYSQL_DATABASE", "DB_NAME"]),
+    sslMode: String(firstEnv(env, ["MYSQL_SSL", "DB_SSL"])).toLowerCase(),
+    sslCaPath: firstEnv(env, ["MYSQL_SSL_CA", "DB_SSL_CA"]),
     connectionLimit,
   };
 }

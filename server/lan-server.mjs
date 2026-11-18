@@ -1,9 +1,9 @@
 import "./loadEnv.mjs";
 import { createServer } from "node:http";
 import { readFile, writeFile, rename, mkdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { accessSync, constants as fsConstants, existsSync, mkdirSync } from "node:fs";
 import { extname, join, resolve, sep, dirname } from "node:path";
-import { networkInterfaces } from "node:os";
+import { tmpdir } from "node:os";
 import { randomBytes } from "node:crypto";
 import { WebSocketServer } from "ws";
 
@@ -64,13 +64,34 @@ import {
 } from "./grants.mjs";
 
 const ROOT = resolve(process.cwd());
-const SAVE_DIR = process.env.SAVE_DIR
-  ? resolve(process.env.SAVE_DIR)
-  : join(ROOT, "server");
-const SAVE_PATH = process.env.SAVE_PATH
-  ? resolve(process.env.SAVE_PATH)
-  : join(SAVE_DIR, "lan-save.json");
-const PORT = Number(process.env.PORT || 3000);
+const HOST = "0.0.0.0";
+
+function pickSavePath() {
+  const candidates = [];
+  if (process.env.SAVE_PATH) {
+    candidates.push(resolve(process.env.SAVE_PATH));
+  }
+  if (process.env.SAVE_DIR) {
+    candidates.push(join(resolve(process.env.SAVE_DIR), "lan-save.json"));
+  }
+  candidates.push(join(ROOT, "data", "lan-save.json"));
+  candidates.push(join(tmpdir(), "rocksoup", "lan-save.json"));
+
+  for (const candidate of candidates) {
+    try {
+      const directory = dirname(candidate);
+      mkdirSync(directory, { recursive: true });
+      accessSync(directory, fsConstants.W_OK);
+      return candidate;
+    } catch {
+      // Prueba la siguiente ruta escribible.
+    }
+  }
+  return join(tmpdir(), "rocksoup", "lan-save.json");
+}
+
+const SAVE_PATH = pickSavePath();
+const PORT = Number(process.env.PORT) || 3000;
 const WORLD_ID = normalizeWorldId(process.env.WORLD_ID);
 const MAX_PLAYERS = 6;
 const PLAYER_COLORS = ["#e0a458", "#7ec699", "#6ca9e0", "#d97b6c", "#b58ce0", "#d8c46a"];
@@ -1501,6 +1522,23 @@ const server = createServer(async (req, res) => {
       pathname = "/admin.html";
     }
 
+    if (pathname === "/health" || pathname === "/healthz") {
+      res.writeHead(200, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+      });
+      res.end(
+        JSON.stringify({
+          ok: true,
+          db: database.isAvailable(),
+          auth: authStore.isConfigured,
+          paypal: paypal.publicConfig(),
+          savePath: SAVE_PATH,
+        }),
+      );
+      return;
+    }
+
     if (pathname === "/api/admin/players") {
       if (req.method !== "GET") {
         res.writeHead(405, { Allow: "GET" });
@@ -1771,17 +1809,13 @@ setInterval(() => {
   void saveState();
 }, 15000);
 
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`[LAN] Servidor listo en el puerto ${PORT}`);
-  console.log(`[LAN] PC local: http://localhost:${PORT}`);
-  for (const entries of Object.values(networkInterfaces())) {
-    for (const entry of entries ?? []) {
-      if (entry.family === "IPv4" && !entry.internal) {
-        console.log(`[LAN] Tablet/otros: http://${entry.address}:${PORT}`);
-      }
-    }
+server.listen(PORT, HOST, () => {
+  console.log(`[LAN] Servidor escuchando en ${HOST}:${PORT}`);
+  console.log(`[LAN] PORT recibido: ${process.env.PORT ?? "no definido"}`);
+  if (process.env.PUBLIC_BASE_URL) {
+    console.log(`[LAN] URL pública: ${process.env.PUBLIC_BASE_URL}`);
   }
-  console.log("[LAN] Los jugadores deben estar en la misma red Wi-Fi.");
+  console.log(`[LAN] Guardado: ${SAVE_PATH}`);
   console.log(
     `[LAN] Mundo persistente: ${WORLD_ID} · ${
       worldStore.isAvailable() ? "MySQL" : "JSON"

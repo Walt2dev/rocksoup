@@ -178,7 +178,7 @@ export function createDatabase({ env = process.env, logger = console } = {}) {
         available = false;
         pool = null;
         logger.warn?.(
-          `[DB] MySQL no disponible para cuentas/tienda: ${error.message}`,
+          `[DB] MySQL no disponible para cuentas/tienda (${config.host}:${config.port}/${config.database}): ${error.message}`,
         );
         return false;
       }
