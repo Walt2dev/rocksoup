@@ -323,6 +323,7 @@ export function createApiHandler({
           ok: true,
           db: db.isAvailable(),
           dbConfigured: db.configured,
+          dbHost: db.activeHost?.() ?? null,
           dbError: db.isAvailable() ? null : (db.error?.() ?? null),
           auth: authStore.isConfigured,
           paypal: paypal.publicConfig(),

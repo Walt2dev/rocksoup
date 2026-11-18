@@ -5,6 +5,7 @@ import { accessSync, constants as fsConstants, existsSync, mkdirSync } from "nod
 import { extname, join, resolve, sep, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { randomBytes } from "node:crypto";
+import { connect as netConnect } from "node:net";
 import { WebSocketServer } from "ws";
 
 import { World } from "../js/world/world.js";
@@ -1480,6 +1481,46 @@ function handleClose(ws) {
   scheduleSave();
 }
 
+function probeTcp(host, port, timeoutMs = 6000) {
+  return new Promise((resolve) => {
+    const socket = netConnect({ host, port });
+    let settled = false;
+    const finish = (result) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      socket.destroy();
+      resolve({ host, port, ...result });
+    };
+    socket.setTimeout(timeoutMs);
+    socket.once("connect", () => finish({ connected: true, error: null }));
+    socket.once("timeout", () => finish({ connected: false, error: "ETIMEDOUT" }));
+    socket.once("error", (error) => {
+      finish({ connected: false, error: error.code || error.message });
+    });
+  });
+}
+
+async function fetchEgressIp(timeoutMs = 6000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch("https://api.ipify.org", {
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      return { ip: null, error: `HTTP ${response.status}` };
+    }
+    const ip = (await response.text()).trim();
+    return { ip: ip || null, error: ip ? null : "respuesta vacía" };
+  } catch (error) {
+    return { ip: null, error: error.code || error.message };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function verifyAdminRequest(req) {
   const adminToken = getAdminToken();
   if (!adminToken) {
@@ -1532,6 +1573,7 @@ const server = createServer(async (req, res) => {
           ok: true,
           db: database.isAvailable(),
           dbConfigured: database.configured,
+          dbHost: database.activeHost(),
           dbError: database.isAvailable() ? null : (database.error?.() ?? null),
           auth: authStore.isConfigured,
           paypal: paypal.publicConfig(),
@@ -1582,6 +1624,57 @@ const server = createServer(async (req, res) => {
         "Cache-Control": "no-store",
       });
       res.end(JSON.stringify(snapshot));
+      return;
+    }
+
+    if (pathname === "/api/admin/diagnose") {
+      const auth = verifyAdminRequest(req);
+
+      if (!auth.ok) {
+        if (auth.status === 404) {
+          res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("Not found");
+        } else {
+          res.writeHead(401, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store",
+            "WWW-Authenticate": "Bearer",
+          });
+          res.end(JSON.stringify({ error: "No autorizado" }));
+        }
+        return;
+      }
+
+      if (req.method !== "GET") {
+        res.writeHead(405, { Allow: "GET" });
+        res.end();
+        return;
+      }
+
+      const info = database.info();
+      const port = info.port ?? 3306;
+      const hosts = [...new Set([info.host, info.activeHost, "127.0.0.1", "localhost"].filter(Boolean))];
+      const [egress, ...probes] = await Promise.all([
+        fetchEgressIp(),
+        ...hosts.map((host) => probeTcp(host, port)),
+      ]);
+
+      res.writeHead(200, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+      });
+      res.end(
+        JSON.stringify({
+          ok: true,
+          egress,
+          db: {
+            ...info,
+            available: database.isAvailable(),
+            error: database.error(),
+          },
+          probes,
+        }),
+      );
       return;
     }
 

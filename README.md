@@ -78,17 +78,29 @@ MySQL: sin base de datos esas rutas responden `503`.
 
 #### Si `/api/health` devuelve `db:false`
 
-1. Revisa la respuesta: ahora incluye `dbConfigured` y `dbError` con el código y
-   el mensaje saneado (sin contraseña).
-2. En el host también puedes ejecutar `npm run check:db` para ver el error exacto
+1. Revisa la respuesta: ahora incluye `dbConfigured`, `dbHost` y `dbError` con el
+   código y el mensaje saneado (sin contraseña).
+2. El servidor prueba `MYSQL_HOST` y luego hosts alternativos
+   (`MYSQL_HOST_FALLBACKS`, `127.0.0.1`, `localhost`). Si conecta por un host
+   alternativo, `dbHost` lo muestra; útil cuando la base solo es accesible desde
+   la red interna del hosting.
+3. Para diagnosticar desde el hosting, define `ADMIN_TOKEN` y llama:
+   ```text
+   GET /api/admin/diagnose
+   Authorization: Bearer <ADMIN_TOKEN>
+   ```
+   Devuelve la IP pública de salida (`egress`), el estado de la conexión y un
+   test TCP al puerto 3306 por cada host. Con esa IP puedes abrir
+   **cPanel → Remote MySQL**.
+4. En el host también puedes ejecutar `npm run check:db` para ver el error exacto
    y comprobar la conexión con las variables del entorno.
-3. En el log de arranque busca `[DB]`:
+5. En el log de arranque busca `[DB]`:
    - `Cannot find package 'mysql2'`: ejecuta `npm install --omit=dev` en el
      servidor y reinicia la app.
    - `DB_NOT_CONFIGURED`: faltan `MYSQL_HOST`, `MYSQL_USER` o `MYSQL_DATABASE`
      en las variables del hosting.
    - `ECONNREFUSED`, `ETIMEDOUT`, `ENOTFOUND`: el host no llega al puerto 3306.
-     Habilita la IP de salida del servidor Node en **cPanel → Remote MySQL**.
+     Autoriza la IP de salida (`egress`) en **cPanel → Remote MySQL**.
    - `ER_ACCESS_DENIED_ERROR`: revisa usuario/contraseña (la contraseña no se
      muestra en `dbError`).
 

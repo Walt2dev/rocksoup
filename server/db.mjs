@@ -153,12 +153,24 @@ function sanitizeDbError(error, config) {
   return { code, message };
 }
 
+function connectionHosts(config) {
+  const hosts = [
+    config.host,
+    ...(config.fallbackHosts ?? []),
+    "127.0.0.1",
+    "localhost",
+  ];
+  return [...new Set(hosts.filter(Boolean))];
+}
+
 export function createDatabase({ env = process.env, logger = console } = {}) {
   const config = readDbConfig(env);
   const configured = isLeaderboardDbConfigured(env);
   let pool = null;
   let available = false;
   let initPromise = null;
+  let activeHost = null;
+  let attempts = [];
   let lastError = configured
     ? null
     : {
@@ -175,39 +187,64 @@ export function createDatabase({ env = process.env, logger = console } = {}) {
     }
 
     initPromise = (async () => {
+      let mysql;
       try {
-        const mysql = await import("mysql2/promise");
-        const ssl = buildSsl(config, logger);
-        pool = mysql.createPool({
-          host: config.host,
-          port: config.port,
-          user: config.user,
-          password: config.password,
-          database: config.database,
-          waitForConnections: true,
-          connectionLimit: config.connectionLimit,
-          queueLimit: 40,
-          enableKeepAlive: true,
-          connectTimeout: 8000,
-          ...(ssl ? { ssl } : {}),
-        });
-        await pool.query("SELECT 1");
-        for (const statement of SCHEMA) {
-          await pool.query(statement);
-        }
-        available = true;
-        lastError = null;
-        logger.log?.("[DB] MySQL listo: cuentas, mundos y tienda activos.");
-        return true;
+        mysql = await import("mysql2/promise");
       } catch (error) {
-        available = false;
-        pool = null;
         lastError = sanitizeDbError(error, config);
-        logger.warn?.(
-          `[DB] MySQL no disponible para cuentas/tienda (${config.host}:${config.port}/${config.database}): ${error.message}`,
-        );
+        logger.warn?.(`[DB] No se pudo cargar mysql2: ${error.message}`);
         return false;
       }
+
+      const ssl = buildSsl(config, logger);
+      attempts = [];
+
+      for (const host of connectionHosts(config)) {
+        let candidate = null;
+        try {
+          candidate = mysql.createPool({
+            host,
+            port: config.port,
+            user: config.user,
+            password: config.password,
+            database: config.database,
+            waitForConnections: true,
+            connectionLimit: config.connectionLimit,
+            queueLimit: 40,
+            enableKeepAlive: true,
+            connectTimeout: 8000,
+            ...(ssl ? { ssl } : {}),
+          });
+          await candidate.query("SELECT 1");
+          for (const statement of SCHEMA) {
+            await candidate.query(statement);
+          }
+          pool = candidate;
+          available = true;
+          activeHost = host;
+          lastError = null;
+          logger.log?.(
+            `[DB] MySQL listo: cuentas, mundos y tienda activos (${host}).`,
+          );
+          return true;
+        } catch (error) {
+          await candidate?.end().catch(() => {});
+          const failure = sanitizeDbError(error, config);
+          attempts.push({ host, ...failure });
+          logger.warn?.(
+            `[DB] MySQL no disponible en ${host}:${config.port}/${config.database}: ${error.message}`,
+          );
+        }
+      }
+
+      available = false;
+      pool = null;
+      activeHost = null;
+      lastError = attempts[0] ?? {
+        code: "DB_INIT_FAILED",
+        message: "No se pudo conectar a MySQL",
+      };
+      return false;
     })();
 
     return initPromise;
@@ -259,6 +296,17 @@ export function createDatabase({ env = process.env, logger = console } = {}) {
     configured,
     isAvailable: () => available,
     error: () => lastError,
+    activeHost: () => activeHost,
+    attempts: () =>
+      attempts.map(({ host, code, message }) => ({ host, code, message })),
+    info: () => ({
+      configured,
+      host: config?.host ?? null,
+      port: config?.port ?? null,
+      database: config?.database ?? null,
+      activeHost,
+      attempts: attempts.map(({ host, code }) => ({ host, code })),
+    }),
     init,
     query,
     execute,

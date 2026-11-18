@@ -53,7 +53,9 @@ try {
   } else {
     line(health.status === 200, "Servidor Node con /api", `HTTP ${health.status}`);
     const dbDetail = health.data?.db
-      ? ""
+      ? health.data?.dbHost
+        ? `host ${health.data.dbHost}`
+        : ""
       : health.data?.dbConfigured === false
         ? "faltan MYSQL_HOST / MYSQL_USER / MYSQL_DATABASE en el entorno"
         : [health.data?.dbError?.code, health.data?.dbError?.message]

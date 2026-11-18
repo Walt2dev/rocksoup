@@ -59,6 +59,10 @@ export function readDbConfig(env = process.env) {
   const connectionLimit = Number(env.MYSQL_CONNECTION_LIMIT) > 0
     ? Math.min(20, Math.max(1, Math.floor(Number(env.MYSQL_CONNECTION_LIMIT))))
     : DEFAULT_CONNECTION_LIMIT;
+  const fallbackHosts = firstEnv(env, ["MYSQL_HOST_FALLBACKS", "DB_HOST_FALLBACKS"])
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
 
   return {
     host: firstEnv(env, ["MYSQL_HOST", "DB_HOST"]),
@@ -69,6 +73,7 @@ export function readDbConfig(env = process.env) {
     sslMode: String(firstEnv(env, ["MYSQL_SSL", "DB_SSL"])).toLowerCase(),
     sslCaPath: firstEnv(env, ["MYSQL_SSL_CA", "DB_SSL_CA"]),
     connectionLimit,
+    fallbackHosts,
   };
 }
 
