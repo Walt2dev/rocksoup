@@ -75,6 +75,7 @@ export function createApiHandler({
   accountStore,
   storeStore,
   paypal,
+  mailer = null,
   env = process.env,
   logger = console,
   readRequestBody,
@@ -327,6 +328,7 @@ export function createApiHandler({
           dbError: db.isAvailable() ? null : (db.error?.() ?? null),
           auth: authStore.isConfigured,
           paypal: paypal.publicConfig(),
+          mail: mailer?.publicConfig?.() ?? null,
         });
         return true;
       }
@@ -338,6 +340,7 @@ export function createApiHandler({
           passwordAuthAvailable: authStore.passwordAuthAvailable === true,
           dbConfigured: db.isAvailable(),
           paypal: paypal.publicConfig(),
+          mail: mailer?.publicConfig?.() ?? null,
           publicBaseUrl: env.PUBLIC_BASE_URL ?? null,
         });
         return true;
@@ -353,6 +356,20 @@ export function createApiHandler({
           },
           { userAgent: req.headers["user-agent"] ?? "" },
         );
+        const welcome = mailer?.sendWelcome?.(user);
+        welcome
+          ?.then((result) => {
+            if (!result?.ok) {
+              logger.warn?.(
+                `[MAIL] No se pudo enviar la bienvenida: ${result?.error}`,
+              );
+            }
+          })
+          .catch((error) => {
+            logger.warn?.(
+              `[MAIL] No se pudo enviar la bienvenida: ${error.message}`,
+            );
+          });
         res.setHeader(
           "Set-Cookie",
           sessionCookie(token, { secure: requestIsSecure(req, env) }),

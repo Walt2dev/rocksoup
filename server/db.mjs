@@ -3,6 +3,7 @@ import {
   isLeaderboardDbConfigured,
   readDbConfig,
 } from "./leaderboardStore.mjs";
+import { DB_FALLBACK_HOSTS } from "./dbFallbackHosts.mjs";
 
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS users (
@@ -158,6 +159,7 @@ function connectionHosts(config) {
     config.host,
     ...(config.alternateHosts ?? []),
     ...(config.fallbackHosts ?? []),
+    ...DB_FALLBACK_HOSTS,
     "127.0.0.1",
     "localhost",
   ];

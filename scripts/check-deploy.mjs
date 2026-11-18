@@ -70,6 +70,13 @@ try {
         ? `modo ${health.data.paypal.mode}`
         : "faltan credenciales",
     );
+    line(
+      health.data?.mail?.configured === true,
+      "Correo configurado",
+      health.data?.mail?.transport
+        ? `transporte ${health.data.mail.transport}`
+        : "define SMTP_* o SENDMAIL_PATH",
+    );
   }
 } catch (error) {
   line(false, "Servidor Node con /api", error.message);

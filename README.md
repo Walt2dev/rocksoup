@@ -204,8 +204,24 @@ No se necesita Client Secret para el flujo de ID Token usado aquí.
 - `PAYPAL_MODE`: `sandbox` o `live`.
 - `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`: app REST de PayPal Business.
 - `PAYPAL_WEBHOOK_ID`: ID del webhook de PayPal.
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`,
+  `MAIL_FROM`: correo de bienvenida y pruebas. Si no hay SMTP se intenta usar
+  `sendmail` del hosting (`SENDMAIL_PATH` opcional).
 - `PVP_INTERVAL_MS`: tiempo entre eventos (por defecto `300000`).
 - `PVP_DURATION_MS`: duración del evento (por defecto `90000`).
+
+### Correo de bienvenida
+
+Al registrarse con correo y contraseña se envía un mensaje de bienvenida. El
+servidor usa SMTP si defines `SMTP_HOST`, `SMTP_USER` y `SMTP_PASSWORD`; si no,
+intenta con el binario `sendmail` del hosting. Comprueba el transporte con:
+
+```powershell
+npm run check:mail -- gamersadracx@gmail.com
+```
+
+o, con `ADMIN_TOKEN`, haz `POST /api/admin/mail` con `{"to":"correo@ejemplo.com"}`.
+`/api/health` y `/api/auth/config` muestran `mail.configured` y el transporte.
 
 Para conectarse a un servidor WebSocket distinto del mismo origen, abre la
 página con `?ws=host:puerto`.

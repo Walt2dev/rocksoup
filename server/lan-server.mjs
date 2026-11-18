@@ -51,6 +51,7 @@ import { createAuthStore, sessionTokenFromRequest } from "./authStore.mjs";
 import { createAccountStore } from "./accountStore.mjs";
 import { createStoreStore } from "./storeStore.mjs";
 import { createPayPal } from "./paypal.mjs";
+import { createMailer } from "./mailer.mjs";
 import { createApiHandler } from "./api.mjs";
 import {
   appendLoreEvent,
@@ -423,12 +424,14 @@ const storeStore = createStoreStore({
   paypal,
 });
 await storeStore.init();
+const mailer = createMailer();
 const apiHandler = createApiHandler({
   db: database,
   authStore,
   accountStore,
   storeStore,
   paypal,
+  mailer,
   readRequestBody,
 });
 
@@ -1577,6 +1580,7 @@ const server = createServer(async (req, res) => {
           dbError: database.isAvailable() ? null : (database.error?.() ?? null),
           auth: authStore.isConfigured,
           paypal: paypal.publicConfig(),
+          mail: mailer.publicConfig(),
           savePath: SAVE_PATH,
         }),
       );
@@ -1653,7 +1657,24 @@ const server = createServer(async (req, res) => {
 
       const info = database.info();
       const port = info.port ?? 3306;
-      const hosts = [...new Set([...(info.hosts ?? []), info.activeHost].filter(Boolean))];
+      const requestedHosts = [
+        ...url.searchParams.getAll("host"),
+        ...String(url.searchParams.get("hosts") ?? "").split(","),
+      ]
+        .map((value) => value.trim())
+        .filter(
+          (value) =>
+            value.length > 0 &&
+            value.length <= 255 &&
+            /^[A-Za-z0-9._:-]+$/.test(value),
+        );
+      const hosts = [
+        ...new Set(
+          [...(info.hosts ?? []), info.activeHost, ...requestedHosts].filter(
+            Boolean,
+          ),
+        ),
+      ];
       const [egress, ...probes] = await Promise.all([
         fetchEgressIp(),
         ...hosts.map((host) => probeTcp(host, port)),
@@ -1672,9 +1693,60 @@ const server = createServer(async (req, res) => {
             available: database.isAvailable(),
             error: database.error(),
           },
+          mail: mailer.publicConfig(),
           probes,
         }),
       );
+      return;
+    }
+
+    if (pathname === "/api/admin/mail") {
+      const auth = verifyAdminRequest(req);
+
+      if (!auth.ok) {
+        if (auth.status === 404) {
+          res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("Not found");
+        } else {
+          res.writeHead(401, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store",
+            "WWW-Authenticate": "Bearer",
+          });
+          res.end(JSON.stringify({ error: "No autorizado" }));
+        }
+        return;
+      }
+
+      if (req.method !== "POST") {
+        res.writeHead(405, { Allow: "POST" });
+        res.end();
+        return;
+      }
+
+      let body = {};
+      try {
+        const raw = await readRequestBody(req, 16 * 1024);
+        body = raw ? JSON.parse(raw) : {};
+      } catch {
+        res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ error: "JSON inválido" }));
+        return;
+      }
+
+      const to = String(body.to ?? "gamersadracx@gmail.com").slice(0, 190);
+      const result = await mailer.send({
+        to,
+        subject: "Prueba de correo — Sopa de Piedras",
+        text: "Este es un correo de prueba de Sopa de Piedras. Si lo recibes, el envío funciona.",
+        html: "<p>Este es un correo de prueba de <strong>Sopa de Piedras</strong>. Si lo recibes, el envío funciona.</p>",
+      });
+
+      res.writeHead(result.ok ? 200 : 502, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+      });
+      res.end(JSON.stringify(result));
       return;
     }
 
