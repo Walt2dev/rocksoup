@@ -1703,7 +1703,10 @@ const server = createServer(async (req, res) => {
             available: database.isAvailable(),
             error: database.error(),
           },
-          mail: mailer.publicConfig(),
+          mail: {
+            ...mailer.publicConfig(),
+            lastResult: mailer.lastResult?.() ?? null,
+          },
           probes,
         }),
       );
@@ -1745,18 +1748,28 @@ const server = createServer(async (req, res) => {
       }
 
       const to = String(body.to ?? "gamersadracx@gmail.com").slice(0, 190);
-      const result = await mailer.send({
-        to,
-        subject: "Prueba de correo — Sopa de Piedras",
-        text: "Este es un correo de prueba de Sopa de Piedras. Si lo recibes, el envío funciona.",
-        html: "<p>Este es un correo de prueba de <strong>Sopa de Piedras</strong>. Si lo recibes, el envío funciona.</p>",
-      });
+      mailer
+        .send({
+          to,
+          subject: "Prueba de correo — Sopa de Piedras",
+          text: "Este es un correo de prueba de Sopa de Piedras. Si lo recibes, el envío funciona.",
+          html: "<p>Este es un correo de prueba de <strong>Sopa de Piedras</strong>. Si lo recibes, el envío funciona.</p>",
+        })
+        .catch((error) => {
+          console.warn(`[MAIL] Error al enviar la prueba: ${error.message}`);
+        });
 
-      res.writeHead(result.ok ? 200 : 502, {
+      res.writeHead(202, {
         "Content-Type": "application/json; charset=utf-8",
         "Cache-Control": "no-store",
       });
-      res.end(JSON.stringify(result));
+      res.end(
+        JSON.stringify({
+          queued: true,
+          to,
+          transport: mailer.transport,
+        }),
+      );
       return;
     }
 

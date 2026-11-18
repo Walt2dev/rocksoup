@@ -55,6 +55,16 @@ export function createMailer({ env = process.env, logger = console } = {}) {
   const sendmailPath = findSendmail(env);
   const smtpConfigured = Boolean(smtpHost && smtpUser && smtpPass);
   const transport = smtpConfigured ? "smtp" : sendmailPath ? "sendmail" : null;
+  let lastResult = null;
+
+  function record(message, result) {
+    lastResult = {
+      ...result,
+      to: message?.to ?? null,
+      at: Date.now(),
+    };
+    return lastResult;
+  }
 
   async function sendSmtp(message) {
     let nodemailer;
@@ -186,14 +196,18 @@ export function createMailer({ env = process.env, logger = console } = {}) {
     if (smtpConfigured) {
       const result = await sendSmtp(safeMessage);
       if (result.ok || !sendmailPath) {
-        return result;
+        return record(safeMessage, result);
       }
       logger.warn?.(`[MAIL] SMTP falló (${result.error}); probando sendmail.`);
     }
     if (sendmailPath) {
-      return sendSendmail(safeMessage);
+      return record(safeMessage, await sendSendmail(safeMessage));
     }
-    return { ok: false, transport: null, error: "Correo no configurado" };
+    return record(safeMessage, {
+      ok: false,
+      transport: null,
+      error: "Correo no configurado",
+    });
   }
 
   async function sendWelcome(user) {
@@ -228,6 +242,7 @@ export function createMailer({ env = process.env, logger = console } = {}) {
     from,
     send,
     sendWelcome,
+    lastResult: () => lastResult,
     publicConfig: () => ({
       configured: Boolean(transport),
       transport,
