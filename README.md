@@ -78,31 +78,32 @@ MySQL: sin base de datos esas rutas responden `503`.
 
 ## Cuentas, mundos en la nube y lore
 
-- **Invitado**: el modo LAN sigue funcionando con un token local, incluso sin
-  internet ni MySQL.
-- **Google Sign-In**: en el menú **Mi cuenta** cada jugador puede entrar con su
-  cuenta de Google. El servidor verifica el ID Token de Google y crea una sesión
-  `HttpOnly`. No se guardan contraseñas.
-- Google exige HTTPS o `localhost`. Desde una IP LAN (`192.168.x.x`) el botón de
-  Google no funcionará; para eso está el modo invitado. Si el servidor se abre
-  por un dominio HTTPS, Google Sign-In sí está disponible para todos.
+- **Registro con correo y contraseña** en MySQL. La contraseña se guarda con
+  `scrypt` y sal aleatoria.
+- **Google Sign-In opcional**: si defines `GOOGLE_CLIENT_ID`, el jugador también
+  puede entrar con Google. La misma sesión se reutiliza en tienda, menú y
+  multijugador.
+- El multijugador online y las compras requieren cuenta. El jugador inicia
+  sesión una sola vez al entrar al menú.
+- Google exige HTTPS o `localhost`; para LAN local se usa correo/contraseña.
 - **Un mundo individual gratis** por cuenta, guardado en MySQL. Cada slot extra
   cuesta **15 MXN** (pago único) y se compra en la tienda.
 - **Lore del mundo**: el servidor guarda una crónica automática de eventos
   (creación, jugadores que entran/salen, ganadores PvP, inicio de partida) y la
   muestra en la cuenta. En LAN también se persiste dentro del mundo compartido.
+- **Compras registradas**: cada pago queda en `purchases` con usuario, producto,
+  monto, moneda, estado y order ID de PayPal.
 - El guardado local (`localStorage`) sigue funcionando como caché y respaldo.
-  Al iniciar sesión se puede subir la partida local a la nube.
 
 ## Tienda y PayPal Business
 
-La tienda integrada incluye recursos, diamantes, armaduras, el slot de mundo de
-15 MXN y las suscripciones Noble, Lord y Feudo con recursos cada 24 horas.
+La tienda integrada incluye recursos, diamantes, armaduras, herramientas, el
+slot de mundo de 15 MXN y las suscripciones Noble, Lord y Feudo con recursos
+cada 24 horas.
 
-También existe un **modo invitado** para comprar sin crear cuenta ni depender de
-Google: las compras de un solo pago se guardan en `guest-store.json` dentro de
-`SAVE_DIR` y los artículos se aplican a la partida local al iniciar o continuar.
-Incluye dos productos de prueba de **5 MXN**.
+La tienda se puede ver sin cuenta, pero **comprar requiere iniciar sesión**. Hay
+productos de prueba de **5 MXN** y pestañas **Exclusivo**, **Para Mi**,
+**Recursos** y **Packs**.
 
 > **Importante:** una cuenta PayPal **personal no puede usar la API de cobros**.
 > Para que el pago llegue solo a tu cuenta y el artículo se entregue
