@@ -1653,7 +1653,7 @@ const server = createServer(async (req, res) => {
 
       const info = database.info();
       const port = info.port ?? 3306;
-      const hosts = [...new Set([info.host, info.activeHost, "127.0.0.1", "localhost"].filter(Boolean))];
+      const hosts = [...new Set([...(info.hosts ?? []), info.activeHost].filter(Boolean))];
       const [egress, ...probes] = await Promise.all([
         fetchEgressIp(),
         ...hosts.map((host) => probeTcp(host, port)),

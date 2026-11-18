@@ -156,6 +156,7 @@ function sanitizeDbError(error, config) {
 function connectionHosts(config) {
   const hosts = [
     config.host,
+    ...(config.alternateHosts ?? []),
     ...(config.fallbackHosts ?? []),
     "127.0.0.1",
     "localhost",
@@ -304,6 +305,7 @@ export function createDatabase({ env = process.env, logger = console } = {}) {
       host: config?.host ?? null,
       port: config?.port ?? null,
       database: config?.database ?? null,
+      hosts: config ? connectionHosts(config) : [],
       activeHost,
       attempts: attempts.map(({ host, code }) => ({ host, code })),
     }),

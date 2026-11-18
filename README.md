@@ -80,10 +80,10 @@ MySQL: sin base de datos esas rutas responden `503`.
 
 1. Revisa la respuesta: ahora incluye `dbConfigured`, `dbHost` y `dbError` con el
    código y el mensaje saneado (sin contraseña).
-2. El servidor prueba `MYSQL_HOST` y luego hosts alternativos
-   (`MYSQL_HOST_FALLBACKS`, `127.0.0.1`, `localhost`). Si conecta por un host
-   alternativo, `dbHost` lo muestra; útil cuando la base solo es accesible desde
-   la red interna del hosting.
+2. El servidor prueba `MYSQL_HOST`, `DB_HOST`, los hosts de
+   `MYSQL_HOST_FALLBACKS`, `127.0.0.1` y `localhost`. Si conecta por un host
+   alternativo, `dbHost` lo muestra; útil cuando el hosting inyecta un
+   `MYSQL_HOST` obsoleto y `DB_HOST` tiene el correcto.
 3. Para diagnosticar desde el hosting, define `ADMIN_TOKEN` y llama:
    ```text
    GET /api/admin/diagnose

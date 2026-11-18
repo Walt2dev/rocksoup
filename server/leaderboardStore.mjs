@@ -63,9 +63,18 @@ export function readDbConfig(env = process.env) {
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
+  const explicitHosts = [
+    firstEnv(env, ["MYSQL_HOST"]),
+    firstEnv(env, ["DB_HOST"]),
+  ].filter(Boolean);
+  const host = explicitHosts[0] ?? "";
+  const alternateHosts = [
+    ...new Set(explicitHosts.filter((value) => value !== host)),
+  ];
 
   return {
-    host: firstEnv(env, ["MYSQL_HOST", "DB_HOST"]),
+    host,
+    alternateHosts,
     port,
     user: firstEnv(env, ["MYSQL_USER", "DB_USER"]),
     password: firstEnv(env, ["MYSQL_PASSWORD", "DB_PASSWORD"]),
