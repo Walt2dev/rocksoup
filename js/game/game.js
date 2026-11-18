@@ -3437,6 +3437,49 @@ export class Game {
     this.save();
   }
 
+  applyStoreGrants(grants) {
+    if (!grants || typeof grants !== "object") {
+      return false;
+    }
+    const labels = [];
+    for (const [key, amount] of Object.entries(grants.resources ?? {})) {
+      if (Number.isFinite(amount) && amount > 0) {
+        const added = this.inventory.add(key, Math.floor(amount));
+        if (added > 0) {
+          labels.push(`${added} ${key}`);
+        }
+      }
+    }
+    for (const [key, amount] of Object.entries(grants.items ?? {})) {
+      if (Number.isFinite(amount) && amount > 0) {
+        const added = this.inventory.addItem(key, Math.floor(amount));
+        if (added > 0) {
+          labels.push(`${added} ${key}`);
+        }
+      }
+    }
+    for (const upgrade of grants.upgrades ?? []) {
+      if (typeof upgrade === "string" && !this.inventory.hasUpgrade(upgrade)) {
+        this.inventory.addUpgrade(upgrade);
+        labels.push(upgrade);
+      }
+    }
+    if (Number.isFinite(grants.energy) && grants.energy > 0) {
+      const energy = this.playerEnergy;
+      const before = energy.current;
+      energy.current = Math.min(energy.max, before + grants.energy);
+      if (energy.current > before) {
+        labels.push(`+${Math.round(energy.current - before)} energía`);
+      }
+    }
+    if (labels.length === 0) {
+      return false;
+    }
+    this.save();
+    this.notify?.(`Compra aplicada: ${labels.join(", ")}`);
+    return true;
+  }
+
   save() {
     if (this.network) {
       this.sendNetworkState();

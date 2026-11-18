@@ -4,6 +4,27 @@ const CURRENCY = "MXN";
 
 export const STORE_PRODUCTS = Object.freeze([
   {
+    id: "energy_small",
+    name: "Poción de energía",
+    description: "Recupera 25 de energía al instante. Ideal para una compra de prueba.",
+    category: "resources",
+    kind: "one_time",
+    priceCents: 500,
+    icon: "⚡",
+    badge: "5 MXN",
+    grants: { energy: 25 },
+  },
+  {
+    id: "coal_small",
+    name: "Puñado de carbón",
+    description: "20 de carbón para la fogata o el horno.",
+    category: "resources",
+    kind: "one_time",
+    priceCents: 500,
+    icon: "🪨",
+    grants: { resources: { C: 20 } },
+  },
+  {
     id: "energy_full",
     name: "Energía llena",
     description: "Recupera al instante 100 puntos de energía para seguir explorando.",

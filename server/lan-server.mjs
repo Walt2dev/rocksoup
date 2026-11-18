@@ -49,6 +49,7 @@ import { createDatabase } from "./db.mjs";
 import { createAuthStore, sessionTokenFromRequest } from "./authStore.mjs";
 import { createAccountStore } from "./accountStore.mjs";
 import { createStoreStore } from "./storeStore.mjs";
+import { createGuestStore } from "./guestStore.mjs";
 import { createPayPal } from "./paypal.mjs";
 import { createApiHandler } from "./api.mjs";
 import {
@@ -422,11 +423,16 @@ const storeStore = createStoreStore({
   paypal,
 });
 await storeStore.init();
+const guestStore = createGuestStore({
+  dataDir: dirname(SAVE_PATH),
+  paypal,
+});
 const apiHandler = createApiHandler({
   db: database,
   authStore,
   accountStore,
   storeStore,
+  guestStore,
   paypal,
   readRequestBody,
 });

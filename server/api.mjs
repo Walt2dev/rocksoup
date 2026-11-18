@@ -74,6 +74,7 @@ export function createApiHandler({
   authStore,
   accountStore,
   storeStore,
+  guestStore,
   paypal,
   env = process.env,
   logger = console,
@@ -422,6 +423,43 @@ export function createApiHandler({
 
       if (pathname === "/api/store/config" && req.method === "GET") {
         sendJson(res, 200, storeStore.config());
+        return true;
+      }
+
+      if (pathname === "/api/store/guest/orders" && req.method === "POST") {
+        const body = await readJson(req);
+        const order = await guestStore.createOrder(body.guestId, body.productId);
+        sendJson(res, 201, order);
+        return true;
+      }
+
+      const guestCaptureMatch = pathname.match(
+        /^\/api\/store\/guest\/orders\/([^/]+)\/capture$/,
+      );
+      if (guestCaptureMatch && req.method === "POST") {
+        const body = await readJson(req);
+        const result = await guestStore.captureOrder(
+          body.guestId,
+          decodeURIComponent(guestCaptureMatch[1]),
+        );
+        sendJson(res, 200, result);
+        return true;
+      }
+
+      if (pathname === "/api/store/guest/grants" && req.method === "GET") {
+        const guestId = url.searchParams.get("guestId");
+        const result = await guestStore.pendingGrants(guestId);
+        sendJson(res, 200, result);
+        return true;
+      }
+
+      if (pathname === "/api/store/guest/grants/ack" && req.method === "POST") {
+        const body = await readJson(req);
+        const result = await guestStore.acknowledgeGrants(
+          body.guestId,
+          body.grants,
+        );
+        sendJson(res, 200, result);
         return true;
       }
 

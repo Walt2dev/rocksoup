@@ -406,6 +406,58 @@ try {
   saveStore = createSaveStore(null);
 }
 
+const STORE_PENDING_KEY = "rocksoup.store.pending.v1";
+
+function readStorePendingGrants() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(STORE_PENDING_KEY) ?? "null");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeStorePendingGrants(grants) {
+  try {
+    window.localStorage.setItem(STORE_PENDING_KEY, JSON.stringify(grants));
+  } catch {
+    // Almacenamiento bloqueado.
+  }
+}
+
+function mergeStoreGrants(first, second) {
+  const a = first && typeof first === "object" ? first : {};
+  const b = second && typeof second === "object" ? second : {};
+  const resources = { ...(a.resources ?? {}) };
+  const items = { ...(a.items ?? {}) };
+  for (const [key, amount] of Object.entries(b.resources ?? {})) {
+    resources[key] = (resources[key] ?? 0) + amount;
+  }
+  for (const [key, amount] of Object.entries(b.items ?? {})) {
+    items[key] = (items[key] ?? 0) + amount;
+  }
+  return {
+    resources,
+    items,
+    upgrades: [...new Set([...(a.upgrades ?? []), ...(b.upgrades ?? [])])],
+    energy: (a.energy ?? 0) + (b.energy ?? 0),
+  };
+}
+
+function addStorePendingGrants(grants) {
+  const merged = mergeStoreGrants(readStorePendingGrants(), grants);
+  writeStorePendingGrants(merged);
+}
+
+function applyStorePendingGrants(gameInstance) {
+  const grants = readStorePendingGrants();
+  if (!grants || Object.keys(grants).length === 0) {
+    return;
+  }
+  writeStorePendingGrants({});
+  gameInstance?.applyStoreGrants?.(grants);
+}
+
 function showScreen(name) {
   for (const [screenName, element] of Object.entries(screens)) {
     element.classList.toggle("is-active", screenName === name);
@@ -510,6 +562,7 @@ function beginGame(seed, saveState, characterSkin = null, options = {}) {
     });
     game.start();
     attachHudMenu();
+    applyStorePendingGrants(game);
 
     if (new URLSearchParams(window.location.search).has("debug")) {
       window.__rocksoup = game;
@@ -1429,6 +1482,10 @@ accountUI.setOnBack(() => {
 storeUI = createStoreUI({
   onOpenAccount: () => openAccountScreen(),
   onPurchased: () => accountUI?.refresh?.(),
+  onGrants: (grants) => {
+    addStorePendingGrants(grants);
+    return true;
+  },
   onBack: () => {
     refreshSaveInfo();
     showScreen("menu");

@@ -99,6 +99,11 @@ MySQL: sin base de datos esas rutas responden `503`.
 La tienda integrada incluye recursos, diamantes, armaduras, el slot de mundo de
 15 MXN y las suscripciones Noble, Lord y Feudo con recursos cada 24 horas.
 
+También existe un **modo invitado** para comprar sin crear cuenta ni depender de
+Google: las compras de un solo pago se guardan en `guest-store.json` dentro de
+`SAVE_DIR` y los artículos se aplican a la partida local al iniciar o continuar.
+Incluye dos productos de prueba de **5 MXN**.
+
 > **Importante:** una cuenta PayPal **personal no puede usar la API de cobros**.
 > Para que el pago llegue solo a tu cuenta y el artículo se entregue
 > automáticamente necesitas una cuenta **PayPal Business**.
