@@ -495,6 +495,14 @@ export class SocialUI {
     this.lanClient?.requestLeaderboard?.();
   }
 
+  showGlobalRanking() {
+    if (!this.enabled) {
+      return;
+    }
+    this.rankingSort = "conquer";
+    this.openRanking();
+  }
+
   closeRanking() {
     if (!this.rankingOpen) {
       return;

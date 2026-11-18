@@ -4291,7 +4291,10 @@ body.touch-enabled .hud-bottom {
   }
 }
 .admin-body {
+  height: var(--app-height);
   min-height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 24px;
   background:
     radial-gradient(1200px 600px at 20% -10%, rgba(224, 164, 88, 0.08), transparent 60%),
@@ -4381,6 +4384,39 @@ body.touch-enabled .hud-bottom {
   margin: 0;
   color: var(--muted);
   font-size: 11px;
+}
+
+.admin-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-tab {
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.admin-tab.is-active {
+  color: var(--text);
+  border-color: var(--accent);
+  background: rgba(224, 164, 88, 0.14);
+}
+
+.admin-tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.admin-tab-panel[hidden] {
+  display: none;
 }
 
 .admin-cards {

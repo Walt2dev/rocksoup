@@ -1,5 +1,6 @@
 const TOKEN_KEY = "rocksoup-admin-token";
 const RANGE_KEY = "rocksoup-admin-range";
+const TAB_KEY = "rocksoup-admin-tab";
 const POLL_MS = 2000;
 const STATS_POLL_MS = 15000;
 
@@ -12,6 +13,7 @@ const el = {
   status: document.getElementById("admin-status"),
   updated: document.getElementById("admin-updated"),
   logout: document.getElementById("admin-logout"),
+  tabs: document.getElementById("admin-tabs"),
   range: document.getElementById("admin-range"),
   online: document.getElementById("admin-online"),
   uniqueToday: document.getElementById("admin-unique-today"),
@@ -38,6 +40,7 @@ const el = {
 };
 
 let token = sessionStorage.getItem(TOKEN_KEY) ?? "";
+let activeTab = sessionStorage.getItem(TAB_KEY) || "resumen";
 let rangeDays = Number(sessionStorage.getItem(RANGE_KEY)) || 7;
 if (![7, 30, 90].includes(rangeDays)) {
   rangeDays = 7;
@@ -559,6 +562,37 @@ async function importWorld(event) {
 
 el.worldDownload?.addEventListener("click", downloadWorld);
 el.worldFile?.addEventListener("change", importWorld);
+
+function setAdminTab(tab) {
+  const buttons = el.tabs?.querySelectorAll("[data-admin-tab]") ?? [];
+  let valid = false;
+  for (const button of buttons) {
+    if (button.dataset.adminTab === tab) {
+      valid = true;
+    }
+  }
+  if (!valid) {
+    tab = "resumen";
+  }
+  activeTab = tab;
+  sessionStorage.setItem(TAB_KEY, tab);
+  for (const button of buttons) {
+    button.classList.toggle("is-active", button.dataset.adminTab === tab);
+  }
+  for (const panel of document.querySelectorAll("[data-tab-panel]")) {
+    panel.hidden = panel.dataset.tabPanel !== tab;
+  }
+}
+
+el.tabs?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-admin-tab]");
+  if (!button) {
+    return;
+  }
+  setAdminTab(button.dataset.adminTab);
+});
+
+setAdminTab(activeTab);
 
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden && token && !el.dashboard.hidden) {

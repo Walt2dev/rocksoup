@@ -44,128 +44,146 @@
           </button>
         </div>
 
-        <div class="admin-cards">
-          <article class="admin-card">
-            <span>Conectados ahora</span>
-            <strong id="admin-online">0</strong>
-          </article>
-          <article class="admin-card">
-            <span>Únicos hoy</span>
-            <strong id="admin-unique-today">0</strong>
-          </article>
-          <article class="admin-card">
-            <span>Tiempo medio hoy</span>
-            <strong id="admin-avg-today">-</strong>
-          </article>
-          <article class="admin-card">
-            <span>Compras hoy</span>
-            <strong id="admin-purchases-today">0</strong>
-          </article>
-          <article class="admin-card">
-            <span>Ingresos hoy</span>
-            <strong id="admin-revenue-today">$0</strong>
-          </article>
-        </div>
+        <nav id="admin-tabs" class="admin-tabs" aria-label="Secciones de administración">
+          <button class="admin-tab is-active" type="button" data-admin-tab="resumen">Resumen</button>
+          <button class="admin-tab" type="button" data-admin-tab="mundo">Mundo</button>
+          <button class="admin-tab" type="button" data-admin-tab="jugadores">Jugadores</button>
+          <button class="admin-tab" type="button" data-admin-tab="actividad">Actividad</button>
+          <button class="admin-tab" type="button" data-admin-tab="compras">Compras</button>
+          <button class="admin-tab" type="button" data-admin-tab="ranking">Ranking</button>
+          <button class="admin-tab" type="button" data-admin-tab="clanes">Clanes</button>
+        </nav>
 
-        <div class="admin-cards">
-          <article class="admin-card">
-            <span>Jugadores</span>
-            <strong id="admin-player-count">0</strong>
-          </article>
-          <article class="admin-card">
-            <span>Partida</span>
-            <strong id="admin-started">-</strong>
-          </article>
-          <article class="admin-card">
-            <span>Evento</span>
-            <strong id="admin-event">-</strong>
-          </article>
-          <article class="admin-card">
-            <span>Host</span>
-            <strong id="admin-host">-</strong>
-          </article>
-        </div>
-
-        <div class="admin-toolbar">
-          <label class="admin-muted" for="admin-range">Rango de actividad</label>
-          <select id="admin-range" class="admin-range">
-            <option value="7" selected>7 días</option>
-            <option value="30">30 días</option>
-            <option value="90">90 días</option>
-          </select>
-        </div>
-
-        <section class="admin-section">
-          <h2>Mundo</h2>
-          <p class="admin-muted">
-            Descarga una copia de seguridad o importa un mundo. La importación
-            se aplica al reiniciar/redeployar la aplicación.
-          </p>
-          <div class="admin-world-actions">
-            <button id="admin-world-download" class="menu-button" type="button">
-              Descargar mundo
-            </button>
-            <label class="menu-button admin-file-button">
-              Importar mundo
-              <input
-                id="admin-world-file"
-                type="file"
-                accept="application/json,.json"
-                hidden
-              />
-            </label>
+        <section class="admin-tab-panel" data-tab-panel="resumen">
+          <div class="admin-cards">
+            <article class="admin-card">
+              <span>Conectados ahora</span>
+              <strong id="admin-online">0</strong>
+            </article>
+            <article class="admin-card">
+              <span>Únicos hoy</span>
+              <strong id="admin-unique-today">0</strong>
+            </article>
+            <article class="admin-card">
+              <span>Tiempo medio hoy</span>
+              <strong id="admin-avg-today">-</strong>
+            </article>
+            <article class="admin-card">
+              <span>Compras hoy</span>
+              <strong id="admin-purchases-today">0</strong>
+            </article>
+            <article class="admin-card">
+              <span>Ingresos hoy</span>
+              <strong id="admin-revenue-today">$0</strong>
+            </article>
           </div>
-          <p id="admin-world-status" class="admin-status" role="status"></p>
+
+          <div class="admin-cards">
+            <article class="admin-card">
+              <span>Jugadores</span>
+              <strong id="admin-player-count">0</strong>
+            </article>
+            <article class="admin-card">
+              <span>Partida</span>
+              <strong id="admin-started">-</strong>
+            </article>
+            <article class="admin-card">
+              <span>Evento</span>
+              <strong id="admin-event">-</strong>
+            </article>
+            <article class="admin-card">
+              <span>Host</span>
+              <strong id="admin-host">-</strong>
+            </article>
+          </div>
         </section>
 
-        <section class="admin-section">
-          <h2>Conectados</h2>
-          <div id="admin-players" class="admin-table-wrap"></div>
+        <section class="admin-tab-panel" data-tab-panel="mundo" hidden>
+          <section class="admin-section">
+            <h2>Mundo</h2>
+            <p class="admin-muted">
+              Descarga una copia de seguridad o importa un mundo. La importación
+              se aplica al reiniciar/redeployar la aplicación.
+            </p>
+            <div class="admin-world-actions">
+              <button id="admin-world-download" class="menu-button" type="button">
+                Descargar mundo
+              </button>
+              <label class="menu-button admin-file-button">
+                Importar mundo
+                <input
+                  id="admin-world-file"
+                  type="file"
+                  accept="application/json,.json"
+                  hidden
+                />
+              </label>
+            </div>
+            <p id="admin-world-status" class="admin-status" role="status"></p>
+          </section>
         </section>
 
-        <section class="admin-section">
-          <h2>Actividad de juego</h2>
-          <div id="admin-activity" class="admin-table-wrap"></div>
+        <section class="admin-tab-panel" data-tab-panel="jugadores" hidden>
+          <section class="admin-section">
+            <h2>Conectados</h2>
+            <div id="admin-players" class="admin-table-wrap"></div>
+          </section>
+          <section class="admin-section">
+            <h2>Top jugadores por tiempo</h2>
+            <div id="admin-top-players" class="admin-table-wrap"></div>
+          </section>
         </section>
 
-        <section class="admin-section">
-          <h2>Top jugadores por tiempo</h2>
-          <div id="admin-top-players" class="admin-table-wrap"></div>
+        <section class="admin-tab-panel" data-tab-panel="actividad" hidden>
+          <div class="admin-toolbar">
+            <label class="admin-muted" for="admin-range">Rango de actividad</label>
+            <select id="admin-range" class="admin-range">
+              <option value="7" selected>7 días</option>
+              <option value="30">30 días</option>
+              <option value="90">90 días</option>
+            </select>
+          </div>
+          <section class="admin-section">
+            <h2>Actividad de juego</h2>
+            <div id="admin-activity" class="admin-table-wrap"></div>
+          </section>
         </section>
 
-        <section class="admin-section">
-          <h2>Compras recientes</h2>
-          <div id="admin-purchases" class="admin-table-wrap"></div>
+        <section class="admin-tab-panel" data-tab-panel="compras" hidden>
+          <section class="admin-section">
+            <h2>Compras recientes</h2>
+            <div id="admin-purchases" class="admin-table-wrap"></div>
+          </section>
+          <section class="admin-section">
+            <h2>Totales por moneda</h2>
+            <div id="admin-purchase-totals" class="admin-table-wrap"></div>
+          </section>
+          <section class="admin-section">
+            <h2>Suscripciones</h2>
+            <div id="admin-subscriptions" class="admin-table-wrap"></div>
+          </section>
         </section>
 
-        <section class="admin-section">
-          <h2>Totales por moneda</h2>
-          <div id="admin-purchase-totals" class="admin-table-wrap"></div>
+        <section class="admin-tab-panel" data-tab-panel="ranking" hidden>
+          <section class="admin-section">
+            <h2>Ranking de conquista</h2>
+            <div id="admin-ranking" class="admin-table-wrap"></div>
+          </section>
+          <section class="admin-section">
+            <h2>TOP por puntos</h2>
+            <div id="admin-ranking-points" class="admin-table-wrap"></div>
+          </section>
+          <section class="admin-section">
+            <h2>TOP por mejor evento</h2>
+            <div id="admin-ranking-best" class="admin-table-wrap"></div>
+          </section>
         </section>
 
-        <section class="admin-section">
-          <h2>Suscripciones</h2>
-          <div id="admin-subscriptions" class="admin-table-wrap"></div>
-        </section>
-
-        <section class="admin-section">
-          <h2>Ranking de conquista</h2>
-          <div id="admin-ranking" class="admin-table-wrap"></div>
-        </section>
-
-        <section class="admin-section">
-          <h2>Clanes y alianzas</h2>
-          <div id="admin-clans" class="admin-table-wrap"></div>
-        </section>
-
-        <section class="admin-section">
-          <h2>TOP por puntos</h2>
-          <div id="admin-ranking-points" class="admin-table-wrap"></div>
-        </section>
-
-        <section class="admin-section">
-          <h2>TOP por mejor evento</h2>
-          <div id="admin-ranking-best" class="admin-table-wrap"></div>
+        <section class="admin-tab-panel" data-tab-panel="clanes" hidden>
+          <section class="admin-section">
+            <h2>Clanes y alianzas</h2>
+            <div id="admin-clans" class="admin-table-wrap"></div>
+          </section>
         </section>
       </section>
     </main>

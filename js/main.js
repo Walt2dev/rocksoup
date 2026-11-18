@@ -1034,6 +1034,7 @@ function startLanGame(message) {
     social.setLeaderboard(message.leaderboard, message.leaderboardBest);
     social.setEvent(message.event);
     hudMenu?.refresh();
+    window.setTimeout(() => social.showGlobalRanking(), 600);
 
     if (new URLSearchParams(window.location.search).has("debug")) {
       window.__rocksoup = game;
