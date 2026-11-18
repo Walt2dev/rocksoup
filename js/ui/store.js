@@ -1,45 +1,19 @@
-import { api } from "../net/api.js";
+﻿import { api } from "../net/api.js";
 import { getCurrentUser } from "../net/auth.js";
-import { LAN_TOKEN_KEY } from "../game/settings.js";
 
-const CATEGORY_LABELS = {
+const TAB_LABELS = {
+  exclusive: "Exclusivo",
+  recommended: "Para Mi",
   resources: "Recursos",
-  diamonds: "Diamantes",
-  armor: "Armaduras",
-  world: "Mundos",
-  subscription: "Suscripciones",
+  packs: "Packs",
 };
 
-const CATEGORY_ORDER = ["resources", "diamonds", "armor", "world", "subscription"];
+const TAB_ORDER = ["exclusive", "recommended", "resources", "packs"];
+const PACK_IDS = new Set(["feudo_chest", "adventurer_pack"]);
 const NAMESPACE = {
   capture: "paypalCapture",
   subscription: "paypalSubscription",
 };
-
-function guestId() {
-  try {
-    const stored = window.localStorage.getItem(LAN_TOKEN_KEY);
-    if (stored && /^[a-zA-Z0-9_-]{8,80}$/.test(stored)) {
-      return stored;
-    }
-    let token;
-    if (globalThis.crypto?.randomUUID) {
-      token = globalThis.crypto.randomUUID().replaceAll("-", "");
-    } else if (globalThis.crypto?.getRandomValues) {
-      const bytes = new Uint8Array(16);
-      globalThis.crypto.getRandomValues(bytes);
-      token = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-    } else {
-      token = `guest${Date.now().toString(16)}${Math.floor(
-        performance.now() * 1000,
-      ).toString(16)}`;
-    }
-    window.localStorage.setItem(LAN_TOKEN_KEY, token);
-    return token;
-  } catch {
-    return `guest${Date.now().toString(16)}`;
-  }
-}
 
 function el(id) {
   return document.getElementById(id);
@@ -77,7 +51,7 @@ function setModalStatus(message, isError = false) {
 
 function loadSdk(url, namespace) {
   if (!url) {
-    return Promise.reject(new Error("PayPal no está configurado"));
+    return Promise.reject(new Error("PayPal no estÃ¡ configurado"));
   }
   if (window[namespace]) {
     return Promise.resolve(window[namespace]);
@@ -134,14 +108,14 @@ export function createStoreUI({
   onOpenAccount,
   onPurchased,
   onGrants,
+  getPlayerState,
   onBack,
 } = {}) {
   let user = null;
   let products = [];
   let config = null;
   let summary = null;
-  let guestInfo = null;
-  let category = "resources";
+  let category = "exclusive";
   let activeProduct = null;
   let buyButton = null;
   let preparing = false;
@@ -156,19 +130,79 @@ export function createStoreUI({
     const text = document.createElement("p");
     text.className = "account-note";
     text.textContent =
-      "Modo invitado: puedes comprar y pagar con PayPal sin crear cuenta. Los artículos se aplican a tu partida local.";
+      "Inicia sesiÃ³n o crea tu cuenta para comprar. La compra queda registrada en tu perfil.";
     const actions = document.createElement("div");
     actions.className = "store-login-actions";
-    const balance = document.createElement("span");
-    balance.className = "store-guest-balance";
-    balance.textContent = `💎 ${guestInfo?.diamonds ?? 0}`;
     const account = document.createElement("button");
     account.type = "button";
-    account.className = "menu-button";
-    account.textContent = "Mi cuenta (opcional)";
+    account.className = "menu-button primary";
+    account.textContent = "Iniciar sesiÃ³n / Crear cuenta";
     account.addEventListener("click", () => onOpenAccount?.());
-    actions.append(balance, account);
+    actions.append(account);
     container.append(text, actions);
+  }
+
+  function productTab(product) {
+    if (product.category === "armor" || product.category === "world") {
+      return "exclusive";
+    }
+    if (product.category === "subscription" || PACK_IDS.has(product.id)) {
+      return "packs";
+    }
+    return "resources";
+  }
+
+  function getRecommendations() {
+    const save = getPlayerState?.() ?? null;
+    const recommendations = [];
+    const add = (id, reason) => {
+      const product = products.find((entry) => entry.id === id);
+      if (product && !recommendations.some((entry) => entry.product.id === id)) {
+        recommendations.push({ product, reason });
+      }
+    };
+
+    if (!save) {
+      add("energy_small", "Prueba desde 5 MXN");
+      add("adventurer_pack", "Ideal para empezar");
+      add("diamonds_20", "Popular");
+      return recommendations.slice(0, 6);
+    }
+
+    const inventory = save.inventory ?? {};
+    const resources = inventory.resources ?? {};
+    const upgrades = Array.isArray(inventory.upgrades) ? inventory.upgrades : [];
+    const tools = Array.isArray(inventory.tools) ? inventory.tools : [];
+    const energy = Number(save.player?.energy ?? 100);
+
+    if (energy < 50) {
+      add("energy_small", `Tienes ${Math.round(energy)} de energía`);
+    }
+    if ((resources.C ?? 0) < 40) {
+      add("coal_small", "Te falta carbón");
+    }
+    if ((resources.Fe ?? 0) < 20) {
+      add("iron_pack", "Te falta hierro");
+    }
+    if ((resources.oro ?? 0) < 20) {
+      add("gold_pack", "Te falta oro");
+    }
+    if (!upgrades.includes("leatherArmor")) {
+      add("armor_leather", "Mejora tu defensa");
+    }
+    if (!tools.includes("axe")) {
+      add("tool_axe", "No tienes hacha");
+    }
+    if (!tools.includes("pickaxe")) {
+      add("tool_pickaxe", "No tienes pico");
+    }
+    if (recommendations.length < 3) {
+      add("adventurer_pack", "Pack de inicio");
+    }
+    if (recommendations.length === 0) {
+      add("feudo_chest", "Recursos para tu feudo");
+    }
+    return recommendations.slice(0, 6);
   }
 
   function renderTabs() {
@@ -176,16 +210,13 @@ export function createStoreUI({
     if (!tabs) {
       return;
     }
-    const categories = CATEGORY_ORDER.filter((key) =>
-      products.some((product) => product.category === key),
-    );
     tabs.replaceChildren(
-      ...categories.map((key) => {
+      ...TAB_ORDER.map((key) => {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "store-tab";
         button.classList.toggle("is-active", key === category);
-        button.textContent = CATEGORY_LABELS[key] ?? key;
+        button.textContent = TAB_LABELS[key] ?? key;
         button.addEventListener("click", () => {
           category = key;
           renderTabs();
@@ -201,7 +232,19 @@ export function createStoreUI({
     if (!grid) {
       return;
     }
-    const visible = products.filter((product) => product.category === category);
+
+    let visible;
+    let reasons = new Map();
+    if (category === "recommended") {
+      const recommendations = getRecommendations();
+      visible = recommendations.map((entry) => entry.product);
+      reasons = new Map(
+        recommendations.map((entry) => [entry.product.id, entry.reason]),
+      );
+    } else {
+      visible = products.filter((product) => productTab(product) === category);
+    }
+
     if (visible.length === 0) {
       grid.innerHTML = '<p class="account-note">No hay productos en esta categoría.</p>';
       return;
@@ -222,13 +265,21 @@ export function createStoreUI({
         title.textContent = product.name;
         const badge = document.createElement("span");
         badge.className = "store-badge";
-        badge.textContent = product.badge || (product.kind === "subscription" ? "Mensual" : "Pago único");
+        badge.textContent =
+          product.badge || (product.kind === "subscription" ? "Mensual" : "Pago único");
         titleWrap.append(title, badge);
         head.append(icon, titleWrap);
 
         const desc = document.createElement("p");
         desc.className = "store-product-desc";
         desc.textContent = product.description;
+
+        const reasonChip = document.createElement("span");
+        reasonChip.className = "store-reason";
+        const reason = reasons.get(product.id);
+        if (reason) {
+          reasonChip.textContent = `Para ti: ${reason}`;
+        }
 
         const preview = document.createElement("div");
         preview.className = "store-preview";
@@ -261,7 +312,11 @@ export function createStoreUI({
         });
         footer.append(price, buy);
 
-        card.append(head, desc, preview, footer);
+        if (reason) {
+          card.append(head, desc, reasonChip, preview, footer);
+        } else {
+          card.append(head, desc, preview, footer);
+        }
         return card;
       }),
     );
@@ -280,7 +335,7 @@ export function createStoreUI({
     container.replaceChildren();
     const text = document.createElement("p");
     text.className = "account-note";
-    text.textContent = `${user.displayName} · ${summary?.diamonds ?? 0} diamantes · ${summary?.slots?.used ?? 0}/${summary?.slots?.capacity ?? 1} mundos`;
+    text.textContent = `${user.displayName} Â· ${summary?.diamonds ?? 0} diamantes Â· ${summary?.slots?.used ?? 0}/${summary?.slots?.capacity ?? 1} mundos`;
     const account = document.createElement("button");
     account.type = "button";
     account.className = "menu-button";
@@ -322,19 +377,24 @@ export function createStoreUI({
       ...worlds.map((world) => {
         const option = document.createElement("option");
         option.value = world.id;
-        option.textContent = `${world.name} · ${world.seed}`;
+        option.textContent = `${world.name} Â· ${world.seed}`;
         return option;
       }),
     );
     if (worlds.length === 0) {
       const option = document.createElement("option");
       option.value = "";
-      option.textContent = "Sin mundos: se guardará como recompensa pendiente";
+      option.textContent = "Sin mundos: se guardarÃ¡ como recompensa pendiente";
       select.append(option);
     }
   }
 
   async function openProduct(product) {
+    if (!user) {
+      setStatus("Inicia sesiÃ³n o crea una cuenta para comprar.", true);
+      onOpenAccount?.();
+      return;
+    }
     activeProduct = product;
     const modal = el("store-modal");
     if (!modal) {
@@ -361,24 +421,15 @@ export function createStoreUI({
     try {
       if (!config?.configured) {
         setModalStatus(
-          "PayPal aún no está configurado en el servidor. Añade las credenciales de PayPal Business.",
+          "PayPal aÃºn no estÃ¡ configurado en el servidor. AÃ±ade las credenciales de PayPal Business.",
           true,
         );
         return;
       }
       if (product.kind === "subscription") {
-        if (!user) {
-          setModalStatus(
-            "Las suscripciones requieren una cuenta. Las compras de 5 MXN funcionan en modo invitado.",
-            true,
-          );
-          return;
-        }
         await mountSubscriptionButton(product, buttonContainer);
-      } else if (user) {
-        await mountCaptureButton(product, buttonContainer);
       } else {
-        await mountGuestCaptureButton(product, buttonContainer);
+        await mountCaptureButton(product, buttonContainer);
       }
     } catch (error) {
       setModalStatus(error.message, true);
@@ -439,64 +490,7 @@ export function createStoreUI({
       onCancel: () => setModalStatus("Pago cancelado."),
     });
     if (!buyButton.isEligible?.() && buyButton.isEligible) {
-      setModalStatus("PayPal no está disponible en este navegador.", true);
-      return;
-    }
-    await buyButton.render(container);
-  }
-
-  async function mountGuestCaptureButton(product, container) {
-    const paypal = await loadSdk(config.captureSdkUrl, NAMESPACE.capture);
-    const gid = guestId();
-    container.replaceChildren();
-    buyButton = paypal.Buttons({
-      style: { shape: "pill", color: "gold", layout: "vertical", label: "paypal" },
-      createOrder: async () => {
-        setModalStatus("Creando orden de prueba...");
-        const order = await api("/api/store/guest/orders", {
-          method: "POST",
-          body: { guestId: gid, productId: product.id },
-        });
-        setModalStatus("Completa el pago en PayPal Sandbox...");
-        return order.orderId;
-      },
-      onApprove: async (data) => {
-        setModalStatus("Confirmando pago...");
-        try {
-          const result = await api(
-            `/api/store/guest/orders/${encodeURIComponent(data.orderID)}/capture`,
-            {
-              method: "POST",
-              body: { guestId: gid },
-            },
-          );
-          const applied =
-            onGrants?.(result.grants, `Compra completada: ${product.name}`) !==
-            false;
-          if (applied) {
-            await api("/api/store/guest/grants/ack", {
-              method: "POST",
-              body: { guestId: gid, grants: result.grants },
-            });
-          }
-          setModalStatus(
-            `Pago recibido en PayPal. Orden ${result.orderId} por ${formatPrice(
-              result.amountCents,
-              result.currency,
-            )}. Los artículos se aplican al iniciar o continuar tu partida.`,
-          );
-          await refresh();
-        } catch (error) {
-          setModalStatus(error.message, true);
-        }
-      },
-      onError: (error) => {
-        setModalStatus(`PayPal: ${error?.message ?? "error desconocido"}`, true);
-      },
-      onCancel: () => setModalStatus("Pago cancelado."),
-    });
-    if (!buyButton.isEligible?.() && buyButton.isEligible) {
-      setModalStatus("PayPal no está disponible en este navegador.", true);
+      setModalStatus("PayPal no estÃ¡ disponible en este navegador.", true);
       return;
     }
     await buyButton.render(container);
@@ -508,7 +502,7 @@ export function createStoreUI({
     }
     preparing = true;
     try {
-      setModalStatus("Preparando suscripción...");
+      setModalStatus("Preparando suscripciÃ³n...");
       const intent = await api("/api/store/subscriptions/intent", {
         method: "POST",
         body: { productId: product.id },
@@ -526,14 +520,14 @@ export function createStoreUI({
             custom_id: intent.customId,
           }),
         onApprove: async (data) => {
-          setModalStatus("Activando suscripción...");
+          setModalStatus("Activando suscripciÃ³n...");
           try {
             await api("/api/store/subscriptions/confirm", {
               method: "POST",
               body: { subscriptionId: data.subscriptionID },
             });
             await refreshAfterPurchase(
-              "Suscripción activa. Recibirás recursos cada 24 horas.",
+              "SuscripciÃ³n activa. RecibirÃ¡s recursos cada 24 horas.",
             );
           } catch (error) {
             setModalStatus(error.message, true);
@@ -545,7 +539,7 @@ export function createStoreUI({
             true,
           );
         },
-        onCancel: () => setModalStatus("Suscripción cancelada."),
+        onCancel: () => setModalStatus("SuscripciÃ³n cancelada."),
       });
       await buyButton.render(container);
       setModalStatus("");
@@ -573,16 +567,8 @@ export function createStoreUI({
         } catch {
           summary = null;
         }
-        guestInfo = null;
       } else {
         summary = null;
-        try {
-          guestInfo = await api(
-            `/api/store/guest/grants?guestId=${encodeURIComponent(guestId())}`,
-          );
-        } catch {
-          guestInfo = null;
-        }
       }
 
       renderAccountBar();
@@ -590,11 +576,11 @@ export function createStoreUI({
       renderGrid();
 
       if (!config?.configured) {
-        setStatus("PayPal no está configurado todavía.");
-      } else if (user) {
-        setStatus("");
+        setStatus("PayPal no est\u00e1 configurado todav\u00eda.");
+      } else if (!user) {
+        setStatus("Inicia sesi\u00f3n para comprar. Puedes ver todo el cat\u00e1logo.");
       } else {
-        setStatus("Modo invitado: puedes comprar desde 5 MXN con PayPal Sandbox.");
+        setStatus("");
       }
     } catch (error) {
       setStatus(error.message, true);

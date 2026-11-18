@@ -1,3 +1,16 @@
+/* ---------- Un jugador / Opciones ---------- */
+.screen-singleplayer,
+.screen-options {
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 35%, rgba(108, 169, 224, 0.12), transparent 48%),
+    radial-gradient(circle at 50% 80%, rgba(224, 164, 88, 0.06), transparent 42%),
+    var(--bg);
+}
+
 /* ---------- Cuenta ---------- */
 .screen-account,
 .screen-store {
@@ -42,6 +55,52 @@
   display: flex;
   justify-content: flex-start;
   min-height: 44px;
+}
+
+.auth-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  text-align: left;
+}
+
+.auth-form h3 {
+  margin: 0 0 2px;
+  font-size: 0.92rem;
+}
+
+.auth-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.auth-form input {
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: #0b1016;
+  color: var(--text);
+  font-size: 0.84rem;
+}
+
+.auth-form .menu-button {
+  margin-top: 4px;
 }
 
 .account-note {
@@ -307,6 +366,17 @@
   font-size: 0.78rem;
   line-height: 1.45;
   flex: 1;
+}
+
+.store-reason {
+  align-self: flex-start;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(126, 198, 153, 0.35);
+  background: rgba(126, 198, 153, 0.1);
+  color: #9fdcb4;
+  font-size: 0.68rem;
+  font-weight: 700;
 }
 
 .store-preview {

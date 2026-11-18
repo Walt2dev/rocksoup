@@ -14,6 +14,14 @@ const SCHEMA = [
     created_at BIGINT NOT NULL,
     updated_at BIGINT NOT NULL
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS user_credentials (
+    user_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+    email VARCHAR(190) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    KEY idx_credentials_email (email)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
   `CREATE TABLE IF NOT EXISTS sessions (
     token_hash CHAR(64) NOT NULL PRIMARY KEY,
     user_id BIGINT UNSIGNED NOT NULL,

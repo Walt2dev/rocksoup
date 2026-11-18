@@ -182,40 +182,62 @@
             <h1 class="visually-hidden">Sopa de Piedras</h1>
             <p class="tagline">Explora un mundo infinito, generado grano a grano.</p>
 
-            <nav class="menu-actions" aria-label="Opciones de partida">
-              <button id="btn-new" class="menu-button primary" type="button">Nueva partida</button>
-              <button id="btn-continue" class="menu-button" type="button" title="Solo partidas individuales guardadas">
-                Continuar partida
-              </button>
-              <button id="btn-lan" class="menu-button" type="button">Mundo LAN</button>
-              <button id="btn-account" class="menu-button" type="button">Mi cuenta</button>
+            <nav class="menu-actions" aria-label="Menú principal">
+              <button id="btn-singleplayer" class="menu-button primary" type="button">Un jugador</button>
+              <button id="btn-multiplayer" class="menu-button" type="button">Multiplayer</button>
               <button id="btn-store" class="menu-button" type="button">Tienda</button>
-              <button id="btn-personalization" class="menu-button" type="button">Personalización y packs</button>
+              <button id="btn-options" class="menu-button" type="button">Opciones</button>
               <button id="btn-exit" class="menu-button danger" type="button">Salir</button>
             </nav>
-
-            <p id="save-info" class="save-info">Buscando partida individual guardada...</p>
-
-            <details class="seed-details">
-              <summary>Semilla avanzada</summary>
-              <label for="menu-seed">Seed</label>
-              <input
-                id="menu-seed"
-                maxlength="64"
-                spellcheck="false"
-                autocomplete="off"
-                placeholder="vacío = aleatoria"
-              />
-            </details>
-
-            <p id="menu-error" class="error" role="alert"></p>
           </div>
         </main>
 
         <footer class="menu-footer">
           <span>DracxGames</span>
-          <span>Fase 4 · supervivencia LAN</span>
+          <span>Un mundo, muchas historias</span>
         </footer>
+      </section>
+
+      <section class="screen screen-singleplayer" id="screen-singleplayer" aria-label="Un jugador">
+        <div class="lan-card">
+          <span class="lan-eyebrow">Un jugador</span>
+          <h2>Tu partida</h2>
+          <p class="lan-lead">Explora, construye y guarda tu mundo. Para la nube y compras necesitas cuenta.</p>
+          <div class="lan-actions">
+            <button id="btn-new" class="menu-button primary" type="button">Nueva partida</button>
+            <button id="btn-continue" class="menu-button" type="button" title="Solo partidas individuales guardadas">
+              Continuar partida
+            </button>
+            <button id="btn-cloud-worlds" class="menu-button" type="button">Mundos en la nube</button>
+            <button id="btn-singleplayer-back" class="menu-button" type="button">Volver</button>
+          </div>
+          <p id="save-info" class="save-info">Buscando partida individual guardada...</p>
+          <details class="seed-details">
+            <summary>Semilla avanzada</summary>
+            <label for="menu-seed">Seed</label>
+            <input
+              id="menu-seed"
+              maxlength="64"
+              spellcheck="false"
+              autocomplete="off"
+              placeholder="vacío = aleatoria"
+            />
+          </details>
+          <p id="menu-error" class="error" role="alert"></p>
+        </div>
+      </section>
+
+      <section class="screen screen-options" id="screen-options" aria-label="Opciones">
+        <div class="lan-card">
+          <span class="lan-eyebrow">Opciones</span>
+          <h2>Perfil y ajustes</h2>
+          <p class="lan-lead">Administra tu cuenta, tu personaje y los packs del juego.</p>
+          <div class="lan-actions">
+            <button id="btn-account" class="menu-button primary" type="button">Mi perfil</button>
+            <button id="btn-personalization" class="menu-button" type="button">Personalización y packs</button>
+            <button id="btn-options-back" class="menu-button" type="button">Volver</button>
+          </div>
+        </div>
       </section>
 
       <section class="screen screen-lan" id="screen-lan" aria-label="Mundo LAN">
@@ -289,15 +311,50 @@
 
           <div id="account-guest" class="account-panel">
             <p class="lan-lead">
-              Inicia sesión con Google para guardar tus mundos en la nube,
-              conservar tus compras y recibir los recursos de tu suscripción.
+              Crea tu cuenta o inicia sesión para comprar en la tienda, jugar
+              multijugador y conservar tus mundos y compras.
             </p>
+
+            <div class="auth-grid">
+              <form id="account-login-form" class="auth-form">
+                <h3>Iniciar sesión</h3>
+                <label>
+                  Correo
+                  <input id="account-login-email" type="email" autocomplete="email" required />
+                </label>
+                <label>
+                  Contraseña
+                  <input id="account-login-password" type="password" autocomplete="current-password" required />
+                </label>
+                <button class="menu-button primary" type="submit">Entrar</button>
+              </form>
+
+              <form id="account-register-form" class="auth-form">
+                <h3>Crear cuenta</h3>
+                <label>
+                  Nombre de jugador
+                  <input id="account-register-name" maxlength="24" autocomplete="nickname" placeholder="Jugador" />
+                </label>
+                <label>
+                  Correo
+                  <input id="account-register-email" type="email" autocomplete="email" required />
+                </label>
+                <label>
+                  Contraseña
+                  <input id="account-register-password" type="password" minlength="8" autocomplete="new-password" required />
+                </label>
+                <button class="menu-button primary" type="submit">Crear cuenta</button>
+              </form>
+            </div>
+
             <div id="account-google" class="account-google"></div>
             <p class="account-note">
-              En LAN local puedes seguir jugando como invitado. Tu progreso de
-              invitado se conserva en este navegador y puedes vincularlo al
-              iniciar sesión.
+              También puedes registrarte con Google cuando esté disponible. La
+              misma sesión se usa para la tienda, el menú y el multijugador.
             </p>
+            <button id="account-guest-continue" class="menu-button" type="button">
+              Continuar sin cuenta (solo un jugador)
+            </button>
           </div>
 
           <div id="account-user" class="account-panel" hidden>
@@ -327,6 +384,9 @@
 
             <h3>Mis mundos</h3>
             <div id="account-worlds" class="account-worlds"></div>
+
+            <h3>Historial de compras</h3>
+            <div id="account-purchases" class="account-worlds"></div>
           </div>
 
           <p id="account-status" class="lan-note" role="status"></p>

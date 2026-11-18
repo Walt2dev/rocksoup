@@ -53,6 +53,28 @@ export async function getCurrentUser() {
   return data?.user ?? null;
 }
 
+export async function registerWithPassword({ name, email, password }) {
+  const data = await api("/api/auth/register", {
+    method: "POST",
+    body: { name, email, password },
+  });
+  if (data?.token) {
+    setSessionToken(data.token);
+  }
+  return data?.user ?? null;
+}
+
+export async function loginWithPassword({ email, password }) {
+  const data = await api("/api/auth/login", {
+    method: "POST",
+    body: { email, password },
+  });
+  if (data?.token) {
+    setSessionToken(data.token);
+  }
+  return data?.user ?? null;
+}
+
 export async function renderGoogleButton(container, { onUser, onError } = {}) {
   if (!container) {
     return null;

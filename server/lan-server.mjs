@@ -49,7 +49,6 @@ import { createDatabase } from "./db.mjs";
 import { createAuthStore, sessionTokenFromRequest } from "./authStore.mjs";
 import { createAccountStore } from "./accountStore.mjs";
 import { createStoreStore } from "./storeStore.mjs";
-import { createGuestStore } from "./guestStore.mjs";
 import { createPayPal } from "./paypal.mjs";
 import { createApiHandler } from "./api.mjs";
 import {
@@ -423,16 +422,11 @@ const storeStore = createStoreStore({
   paypal,
 });
 await storeStore.init();
-const guestStore = createGuestStore({
-  dataDir: dirname(SAVE_PATH),
-  paypal,
-});
 const apiHandler = createApiHandler({
   db: database,
   authStore,
   accountStore,
   storeStore,
-  guestStore,
   paypal,
   readRequestBody,
 });
@@ -835,26 +829,26 @@ async function handleJoin(ws, message) {
   const accountUser = sessionToken
     ? await authStore.resolveSession(sessionToken)
     : null;
-  const profileKey = accountUser ? `u:${accountUser.id}` : `t:${token}`;
 
-  if (accountUser) {
-    for (const existing of clients.values()) {
-      if (existing.accountId === accountUser.id) {
-        send(ws, {
-          type: "error",
-          message: "Tu cuenta ya está conectada a este mundo.",
-        });
-        ws.close();
-        return;
-      }
-    }
-  } else {
-    for (const existing of clients.values()) {
-      if (existing.token === token) {
-        send(ws, { type: "error", message: "Ese jugador ya está conectado." });
-        ws.close();
-        return;
-      }
+  if (!accountUser) {
+    send(ws, {
+      type: "error",
+      message: "Inicia sesión con tu cuenta para jugar multijugador.",
+    });
+    ws.close();
+    return;
+  }
+
+  const profileKey = `u:${accountUser.id}`;
+
+  for (const existing of clients.values()) {
+    if (existing.accountId === accountUser.id) {
+      send(ws, {
+        type: "error",
+        message: "Tu cuenta ya está conectada a este mundo.",
+      });
+      ws.close();
+      return;
     }
   }
 

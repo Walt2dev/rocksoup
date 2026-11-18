@@ -3464,6 +3464,12 @@ export class Game {
         labels.push(upgrade);
       }
     }
+    for (const tool of grants.tools ?? []) {
+      if (typeof tool === "string" && !this.inventory.hasTool(tool)) {
+        this.inventory.addTool(tool);
+        labels.push(`herramienta ${tool}`);
+      }
+    }
     if (Number.isFinite(grants.energy) && grants.energy > 0) {
       const energy = this.playerEnergy;
       const before = energy.current;

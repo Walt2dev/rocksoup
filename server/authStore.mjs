@@ -2,8 +2,11 @@ import {
   createHash,
   createPublicKey,
   randomBytes,
+  scrypt as scryptCallback,
+  timingSafeEqual,
   verify as verifySignature,
 } from "node:crypto";
+import { promisify } from "node:util";
 
 import { hashToken } from "./leaderboardStore.mjs";
 
@@ -24,6 +27,71 @@ function nowMs() {
 
 function sha256(value) {
   return createHash("sha256").update(String(value)).digest("hex");
+}
+
+const scrypt = promisify(scryptCallback);
+const SCRYPT_N = 16384;
+const SCRYPT_R = 8;
+const SCRYPT_P = 1;
+const SCRYPT_KEYLEN = 64;
+const PASSWORD_MIN = 8;
+const PASSWORD_MAX = 200;
+
+function normalizeEmail(value) {
+  const email = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (email.length < 3 || email.length > 190) {
+    return "";
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return "";
+  }
+  return email;
+}
+
+function validatePassword(value) {
+  if (typeof value !== "string") {
+    return "La contraseña es obligatoria";
+  }
+  if (value.length < PASSWORD_MIN) {
+    return `La contraseña debe tener al menos ${PASSWORD_MIN} caracteres`;
+  }
+  if (value.length > PASSWORD_MAX) {
+    return "La contraseña es demasiado larga";
+  }
+  return "";
+}
+
+async function hashPassword(password) {
+  const salt = randomBytes(16).toString("hex");
+  const derived = await scrypt(password, salt, SCRYPT_KEYLEN, {
+    N: SCRYPT_N,
+    r: SCRYPT_R,
+    p: SCRYPT_P,
+  });
+  return `scrypt$${SCRYPT_N}$${SCRYPT_R}$${SCRYPT_P}$${salt}$${derived.toString("hex")}`;
+}
+
+async function verifyPassword(password, stored) {
+  if (typeof stored !== "string") {
+    return false;
+  }
+  const [scheme, n, r, p, salt, hash] = stored.split("$");
+  if (scheme !== "scrypt" || !salt || !hash) {
+    return false;
+  }
+  try {
+    const derived = await scrypt(password, salt, Buffer.from(hash, "hex").length, {
+      N: Number(n) || SCRYPT_N,
+      r: Number(r) || SCRYPT_R,
+      p: Number(p) || SCRYPT_P,
+    });
+    const expected = Buffer.from(hash, "hex");
+    return (
+      derived.length === expected.length && timingSafeEqual(derived, expected)
+    );
+  } catch {
+    return false;
+  }
 }
 
 function safeName(value, fallback = "Jugador") {
@@ -242,6 +310,7 @@ function publicUser(row) {
 
 export function createAuthStore({ db, env = process.env, logger = console } = {}) {
   const googleClientId = realEnv(env.GOOGLE_CLIENT_ID);
+  const loginAttempts = new Map();
 
   async function findUserById(id) {
     const rows = await db.query("SELECT * FROM users WHERE id = ? LIMIT 1", [
@@ -250,32 +319,185 @@ export function createAuthStore({ db, env = process.env, logger = console } = {}
     return publicUser(rows[0]);
   }
 
+  function authError(message, status = 400) {
+    const error = new Error(message);
+    error.status = status;
+    return error;
+  }
+
+  function checkLoginRate(email) {
+    const now = nowMs();
+    const entry = loginAttempts.get(email);
+    if (!entry) {
+      return;
+    }
+    if (entry.resetAt <= now) {
+      loginAttempts.delete(email);
+      return;
+    }
+    if (entry.count >= 10) {
+      throw authError(
+        "Demasiados intentos. Espera 15 minutos antes de volver a intentar.",
+        429,
+      );
+    }
+  }
+
+  function recordLoginFailure(email) {
+    const now = nowMs();
+    const entry = loginAttempts.get(email);
+    if (!entry || entry.resetAt <= now) {
+      loginAttempts.set(email, { count: 1, resetAt: now + 15 * 60 * 1000 });
+      return;
+    }
+    entry.count += 1;
+  }
+
+  function clearLoginFailures(email) {
+    loginAttempts.delete(email);
+  }
+
+  async function createUserWithEmail({ email, password, name } = {}) {
+    if (!db.isAvailable()) {
+      throw authError("La base de datos no está configurada", 503);
+    }
+    const cleanEmail = normalizeEmail(email);
+    if (!cleanEmail) {
+      throw authError("Ingresa un correo válido");
+    }
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+      throw authError(passwordError);
+    }
+    const displayName = safeName(
+      name,
+      safeName(cleanEmail.split("@")[0], "Jugador"),
+    );
+    const passwordHash = await hashPassword(password);
+    const now = nowMs();
+
+    return db.transaction(async (connection) => {
+      const [credentialRows] = await connection.execute(
+        "SELECT user_id FROM user_credentials WHERE email = ? FOR UPDATE",
+        [cleanEmail],
+      );
+      if (credentialRows.length > 0) {
+        throw authError("Ese correo ya está registrado", 409);
+      }
+
+      const [userRows] = await connection.execute(
+        "SELECT id FROM users WHERE email = ? LIMIT 1 FOR UPDATE",
+        [cleanEmail],
+      );
+
+      let userId;
+      if (userRows.length > 0) {
+        userId = Number(userRows[0].id);
+        await connection.execute(
+          "UPDATE users SET display_name = ?, updated_at = ? WHERE id = ?",
+          [displayName, now, userId],
+        );
+      } else {
+        const [result] = await connection.execute(
+          `INSERT INTO users
+             (google_sub, email, display_name, avatar_url, created_at, updated_at)
+           VALUES (NULL, ?, ?, NULL, ?, ?)`,
+          [cleanEmail, displayName, now, now],
+        );
+        userId = Number(result.insertId);
+      }
+
+      await connection.execute(
+        `INSERT INTO user_credentials
+           (user_id, email, password_hash, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)`,
+        [userId, cleanEmail, passwordHash, now, now],
+      );
+      return userId;
+    });
+  }
+
+  async function registerWithPassword({ email, password, name }, { userAgent = "" } = {}) {
+    const userId = await createUserWithEmail({ email, password, name });
+    const user = await findUserById(userId);
+    const token = await createSession(userId, userAgent);
+    return { user, token };
+  }
+
+  async function loginWithPassword(email, password, { userAgent = "" } = {}) {
+    if (!db.isAvailable()) {
+      throw authError("La base de datos no está configurada", 503);
+    }
+    const cleanEmail = normalizeEmail(email);
+    if (!cleanEmail || typeof password !== "string" || password.length === 0) {
+      throw authError("Correo o contraseña incorrectos", 401);
+    }
+    checkLoginRate(cleanEmail);
+
+    const rows = await db.query(
+      `SELECT u.*, c.password_hash
+       FROM user_credentials c
+       JOIN users u ON u.id = c.user_id
+       WHERE c.email = ?
+       LIMIT 1`,
+      [cleanEmail],
+    );
+    if (rows.length === 0) {
+      recordLoginFailure(cleanEmail);
+      throw authError("Correo o contraseña incorrectos", 401);
+    }
+    const valid = await verifyPassword(password, rows[0].password_hash);
+    if (!valid) {
+      recordLoginFailure(cleanEmail);
+      throw authError("Correo o contraseña incorrectos", 401);
+    }
+    clearLoginFailures(cleanEmail);
+    const user = publicUser(rows[0]);
+    const token = await createSession(user.id, userAgent);
+    return { user, token };
+  }
+
   async function upsertGoogleUser(profile) {
     const now = nowMs();
     const displayName = safeName(profile.name, safeName(profile.email, "Jugador"));
-    await db.execute(
+
+    const bySub = await db.query(
+      "SELECT * FROM users WHERE google_sub = ? LIMIT 1",
+      [profile.sub],
+    );
+    if (bySub.length > 0) {
+      await db.execute(
+        `UPDATE users
+         SET email = ?, display_name = ?, avatar_url = ?, updated_at = ?
+         WHERE id = ?`,
+        [profile.email, displayName, profile.picture, now, bySub[0].id],
+      );
+      return findUserById(bySub[0].id);
+    }
+
+    if (profile.email) {
+      const byEmail = await db.query(
+        "SELECT * FROM users WHERE email = ? LIMIT 1",
+        [profile.email],
+      );
+      if (byEmail.length > 0) {
+        await db.execute(
+          `UPDATE users
+           SET google_sub = ?, display_name = ?, avatar_url = ?, updated_at = ?
+           WHERE id = ?`,
+          [profile.sub, displayName, profile.picture, now, byEmail[0].id],
+        );
+        return findUserById(byEmail[0].id);
+      }
+    }
+
+    const [result] = await db.execute(
       `INSERT INTO users
          (google_sub, email, display_name, avatar_url, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE
-         id = LAST_INSERT_ID(id),
-         email = VALUES(email),
-         display_name = VALUES(display_name),
-         avatar_url = VALUES(avatar_url),
-         updated_at = VALUES(updated_at)`,
-      [
-        profile.sub,
-        profile.email,
-        displayName,
-        profile.picture,
-        now,
-        now,
-      ],
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [profile.sub, profile.email, displayName, profile.picture, now, now],
     );
-    const rows = await db.query("SELECT * FROM users WHERE google_sub = ? LIMIT 1", [
-      profile.sub,
-    ]);
-    return publicUser(rows[0]);
+    return findUserById(result.insertId);
   }
 
   async function createSession(userId, userAgent = "") {
@@ -366,7 +588,10 @@ export function createAuthStore({ db, env = process.env, logger = console } = {}
 
   return {
     googleClientId,
-    isConfigured: Boolean(googleClientId),
+    isConfigured: Boolean(googleClientId) || db.isAvailable(),
+    passwordAuthAvailable: db.isAvailable(),
+    registerWithPassword,
+    loginWithPassword,
     loginWithGoogle,
     resolveSession,
     logout,

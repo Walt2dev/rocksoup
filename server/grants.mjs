@@ -2,6 +2,7 @@ import {
   ITEM_KEYS,
   MAX_STACK,
   RESOURCE_KEYS,
+  TOOL_KEYS,
   UPGRADE_KEYS,
 } from "../js/game/inventory.js";
 
@@ -60,6 +61,13 @@ export function sanitizeGrants(value) {
     grants.upgrades = upgrades;
   }
 
+  const tools = Array.isArray(source.tools)
+    ? [...new Set(source.tools.filter((key) => TOOL_KEYS.includes(key)))]
+    : [];
+  if (tools.length > 0) {
+    grants.tools = tools;
+  }
+
   const entitlements = Array.isArray(source.entitlements)
     ? [
         ...new Set(
@@ -102,6 +110,7 @@ export function mergeGrants(first, second) {
     resources: { ...(a.resources ?? {}) },
     items: { ...(a.items ?? {}) },
     upgrades: [...new Set([...(a.upgrades ?? []), ...(b.upgrades ?? [])])],
+    tools: [...new Set([...(a.tools ?? []), ...(b.tools ?? [])])],
     entitlements: [
       ...new Set([...(a.entitlements ?? []), ...(b.entitlements ?? [])]),
     ],
@@ -131,6 +140,7 @@ export function applyGrantsToInventory(inventory, grants) {
   const items =
     result.items && typeof result.items === "object" ? { ...result.items } : {};
   const upgrades = Array.isArray(result.upgrades) ? [...result.upgrades] : [];
+  const tools = Array.isArray(result.tools) ? [...result.tools] : [];
 
   for (const [key, amount] of Object.entries(clean.resources ?? {})) {
     resources[key] = Math.min(MAX_AMOUNT, safeAmount(resources[key]) + amount);
@@ -143,12 +153,18 @@ export function applyGrantsToInventory(inventory, grants) {
       upgrades.push(upgrade);
     }
   }
+  for (const tool of clean.tools ?? []) {
+    if (!tools.includes(tool)) {
+      tools.push(tool);
+    }
+  }
 
   return {
     ...result,
     resources,
     items,
     upgrades,
+    tools,
   };
 }
 
@@ -203,6 +219,9 @@ export function describeGrants(grants) {
   }
   for (const upgrade of clean.upgrades ?? []) {
     labels.push(upgrade);
+  }
+  for (const tool of clean.tools ?? []) {
+    labels.push(`herramienta ${tool}`);
   }
   return labels;
 }

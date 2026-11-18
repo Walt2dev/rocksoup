@@ -1,6 +1,8 @@
 import { api } from "../net/api.js";
 import {
   getCurrentUser,
+  loginWithPassword,
+  registerWithPassword,
   renderGoogleButton,
   signOut,
 } from "../net/auth.js";
@@ -96,6 +98,50 @@ export function createAccountUI({
         : "";
 
     renderWorlds();
+    renderPurchases();
+  }
+
+  function renderPurchases() {
+    const container = el("account-purchases");
+    if (!container) {
+      return;
+    }
+    const purchases = Array.isArray(summary?.purchases) ? summary.purchases : [];
+    if (purchases.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "account-note";
+      empty.textContent = "Todavía no tienes compras.";
+      container.replaceChildren(empty);
+      return;
+    }
+    container.replaceChildren(
+      ...purchases.map((purchase) => {
+        const row = document.createElement("div");
+        row.className = "account-world";
+        const info = document.createElement("div");
+        info.className = "account-world-info";
+        const name = document.createElement("strong");
+        name.textContent = purchase.productName || purchase.productId;
+        const meta = document.createElement("span");
+        meta.textContent = `${formatPrice(purchase.amountCents, purchase.currency)} · ${formatDate(purchase.createdAt)}`;
+        const status = document.createElement("small");
+        status.textContent = `Estado: ${purchase.status} · Entrega: ${purchase.grantStatus}`;
+        info.append(name, meta, status);
+        row.append(info);
+        return row;
+      }),
+    );
+  }
+
+  function formatPrice(cents, currency = "MXN") {
+    try {
+      return new Intl.NumberFormat("es-MX", {
+        style: "currency",
+        currency,
+      }).format((Number(cents) || 0) / 100);
+    } catch {
+      return `$${((Number(cents) || 0) / 100).toFixed(2)} ${currency}`;
+    }
   }
 
   function renderWorlds() {
@@ -253,6 +299,54 @@ export function createAccountUI({
   function bind() {
     el("btn-account-back")?.addEventListener("click", () => {
       onBack?.();
+    });
+    el("account-guest-continue")?.addEventListener("click", () => {
+      onBack?.();
+    });
+    el("account-login-form")?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (busy) {
+        return;
+      }
+      busy = true;
+      setStatus("Iniciando sesión...");
+      try {
+        const nextUser = await loginWithPassword({
+          email: el("account-login-email")?.value ?? "",
+          password: el("account-login-password")?.value ?? "",
+        });
+        user = nextUser;
+        onUserChanged?.(nextUser);
+        await refresh();
+        setStatus("Sesión iniciada.");
+      } catch (error) {
+        setStatus(error.message, true);
+      } finally {
+        busy = false;
+      }
+    });
+    el("account-register-form")?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (busy) {
+        return;
+      }
+      busy = true;
+      setStatus("Creando cuenta...");
+      try {
+        const nextUser = await registerWithPassword({
+          name: el("account-register-name")?.value ?? "",
+          email: el("account-register-email")?.value ?? "",
+          password: el("account-register-password")?.value ?? "",
+        });
+        user = nextUser;
+        onUserChanged?.(nextUser);
+        await refresh();
+        setStatus("Cuenta creada. Sesión iniciada.");
+      } catch (error) {
+        setStatus(error.message, true);
+      } finally {
+        busy = false;
+      }
     });
     el("account-store")?.addEventListener("click", () => onOpenStore?.());
     el("account-buy-slot")?.addEventListener("click", () => {

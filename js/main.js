@@ -75,6 +75,8 @@ syncViewportHeight();
 const screens = {
   loading: byId("screen-loading"),
   menu: byId("screen-menu"),
+  singleplayer: byId("screen-singleplayer"),
+  options: byId("screen-options"),
   character: byId("screen-character"),
   dev: byId("screen-dev"),
   lan: byId("screen-lan"),
@@ -94,7 +96,12 @@ const ui = {
   saveInfo: byId("save-info"),
   btnNew: byId("btn-new"),
   btnContinue: byId("btn-continue"),
-  btnLan: byId("btn-lan"),
+  btnSingleplayer: byId("btn-singleplayer"),
+  btnMultiplayer: byId("btn-multiplayer"),
+  btnOptions: byId("btn-options"),
+  btnSingleplayerBack: byId("btn-singleplayer-back"),
+  btnOptionsBack: byId("btn-options-back"),
+  btnCloudWorlds: byId("btn-cloud-worlds"),
   btnAccount: byId("btn-account"),
   btnStore: byId("btn-store"),
   btnAccountBack: byId("btn-account-back"),
@@ -862,6 +869,10 @@ function populateSkinSelect(select, value) {
 }
 
 function openLanScreen() {
+  if (!accountUI?.user) {
+    openAccountScreen();
+    return;
+  }
   resetLanUi();
   ui.lanName.value = loadLanName();
   ui.lanTouch.checked = loadTouchControls();
@@ -1021,6 +1032,11 @@ function startLanGame(message) {
 }
 
 function connectLan() {
+  if (!accountUI?.user) {
+    setLanStatus("Inicia sesión para jugar multijugador.", true);
+    openAccountScreen();
+    return;
+  }
   const name = ui.lanName.value.trim() || "Jugador";
   const skinId = ui.lanSkin.value || "explorer";
   ui.lanName.value = name;
@@ -1460,7 +1476,11 @@ async function boot() {
     await new Promise((resolve) => window.setTimeout(resolve, 140));
     refreshSaveInfo();
     showScreen("menu");
-    void accountUI?.refresh?.();
+    accountUI?.refresh?.().then(() => {
+      if (accountUI && !accountUI.user) {
+        openAccountScreen();
+      }
+    });
   } catch (error) {
     console.error(error);
     ui.loadStatus.textContent = "No se pudo preparar el mundo. Recarga la página.";
@@ -1482,20 +1502,25 @@ accountUI.setOnBack(() => {
 storeUI = createStoreUI({
   onOpenAccount: () => openAccountScreen(),
   onPurchased: () => accountUI?.refresh?.(),
-  onGrants: (grants) => {
-    addStorePendingGrants(grants);
-    return true;
-  },
+  getPlayerState: () => saveStore.read(),
   onBack: () => {
     refreshSaveInfo();
     showScreen("menu");
   },
 });
 
+ui.btnSingleplayer.addEventListener("click", () => showScreen("singleplayer"));
+ui.btnOptions.addEventListener("click", () => showScreen("options"));
+ui.btnSingleplayerBack.addEventListener("click", () => {
+  refreshSaveInfo();
+  showScreen("menu");
+});
+ui.btnOptionsBack.addEventListener("click", () => showScreen("menu"));
+ui.btnCloudWorlds.addEventListener("click", openAccountScreen);
 ui.btnNew.addEventListener("click", startNewGame);
 ui.btnCharacterBack.addEventListener("click", () => {
   pendingNewSeed = null;
-  showScreen("menu");
+  showScreen("singleplayer");
 });
 ui.btnCharacterConfirm.addEventListener("click", () => {
   if (!pendingNewSeed || !assets?.playerSkins?.[selectedSkin]) {
@@ -1511,8 +1536,7 @@ ui.btnCharacterConfirm.addEventListener("click", () => {
 });
 ui.btnPersonalization.addEventListener("click", openDevScreen);
 ui.btnDevBack.addEventListener("click", () => {
-  refreshSaveInfo();
-  showScreen("menu");
+  showScreen("options");
 });
 ui.devPackFile.addEventListener("change", () => {
   installDevPack(ui.devPackFile.files?.[0]);
@@ -1527,13 +1551,9 @@ ui.devDefaultFiles.addEventListener("change", () => {
 ui.devDefaultApply.addEventListener("click", applyDefaultPackFiles);
 ui.devDefaultClear.addEventListener("click", clearDefaultPackFiles);
 ui.btnContinue.addEventListener("click", continueGame);
-ui.btnLan.addEventListener("click", openLanScreen);
+ui.btnMultiplayer.addEventListener("click", openLanScreen);
 ui.btnAccount.addEventListener("click", openAccountScreen);
 ui.btnStore.addEventListener("click", () => openStoreScreen());
-ui.btnAccountBack.addEventListener("click", () => {
-  refreshSaveInfo();
-  showScreen("menu");
-});
 ui.btnStoreBack.addEventListener("click", () => {
   refreshSaveInfo();
   showScreen("menu");
@@ -1580,29 +1600,25 @@ ui.seedInput.addEventListener("keydown", (event) => {
 });
 
 window.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && document.body.dataset.screen === "lan") {
+  if (event.key !== "Escape") {
+    return;
+  }
+  const screen = document.body.dataset.screen;
+  if (screen === "lan") {
     closeLanConnection();
     refreshSaveInfo();
     showScreen("menu");
-  } else if (
-    event.key === "Escape" &&
-    document.body.dataset.screen === "character"
-  ) {
+  } else if (screen === "singleplayer" || screen === "options") {
+    refreshSaveInfo();
+    showScreen("menu");
+  } else if (screen === "character") {
     pendingNewSeed = null;
-    showScreen("menu");
-  } else if (event.key === "Escape" && document.body.dataset.screen === "dev") {
-    refreshSaveInfo();
-    showScreen("menu");
-  } else if (
-    event.key === "Escape" &&
-    document.body.dataset.screen === "account"
-  ) {
-    refreshSaveInfo();
-    showScreen("menu");
-  } else if (
-    event.key === "Escape" &&
-    document.body.dataset.screen === "store"
-  ) {
+    showScreen("singleplayer");
+  } else if (screen === "dev") {
+    showScreen("options");
+  } else if (screen === "account") {
+    showScreen("options");
+  } else if (screen === "store") {
     storeUI?.closeModal?.();
     refreshSaveInfo();
     showScreen("menu");
