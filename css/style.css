@@ -4035,7 +4035,8 @@ body.touch-enabled .hud-bottom {
 }
 
 .chat-panel,
-.ranking-panel {
+.ranking-panel,
+.clans-panel {
   position: absolute;
   inset: 0;
   z-index: 10;
@@ -4047,12 +4048,14 @@ body.touch-enabled .hud-bottom {
 }
 
 .chat-panel.is-open,
-.ranking-panel.is-open {
+.ranking-panel.is-open,
+.clans-panel.is-open {
   display: flex;
 }
 
 .chat-card,
-.ranking-card {
+.ranking-card,
+.clans-card {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -6276,3 +6279,153 @@ select:focus-visible {
   font-size: 12px;
 }
 
+
+.chat-tabs {
+  display: flex;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.chat-tab {
+  flex: 1;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chat-tab.is-active {
+  color: var(--text);
+  border-color: var(--accent, #e0a458);
+  background: rgba(224, 164, 88, 0.14);
+}
+
+.dm-contacts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 120px;
+  overflow: auto;
+}
+
+.dm-contact {
+  text-align: left;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.dm-contact.is-active {
+  border-color: var(--accent, #e0a458);
+  background: rgba(224, 164, 88, 0.14);
+}
+
+.dm-empty,
+.clans-note,
+.clans-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.clans-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.clans-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.clans-form input {
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.clans-clan,
+.clans-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.clans-tag {
+  color: var(--accent, #e0a458);
+  font-family: var(--mono);
+  font-weight: 700;
+}
+
+.clans-name {
+  color: var(--text);
+}
+
+.clans-heading {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.clans-members,
+.clans-relations {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.clans-member,
+.clans-relation {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.clans-member-name {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.clans-role,
+.clans-relation-state {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.clans-relation-state.is-ally {
+  color: #7ec699;
+}
+
+.clans-relation-state.is-enemy {
+  color: #e06c75;
+}
+
+.clans-relation-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}

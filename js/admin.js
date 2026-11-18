@@ -28,6 +28,8 @@ const el = {
   purchases: document.getElementById("admin-purchases"),
   purchaseTotals: document.getElementById("admin-purchase-totals"),
   subscriptions: document.getElementById("admin-subscriptions"),
+  ranking: document.getElementById("admin-ranking"),
+  clans: document.getElementById("admin-clans"),
   rankingPoints: document.getElementById("admin-ranking-points"),
   rankingBest: document.getElementById("admin-ranking-best"),
   worldDownload: document.getElementById("admin-world-download"),
@@ -306,6 +308,32 @@ function renderStats(data) {
     ],
     Array.isArray(data?.subscriptions) ? data.subscriptions : [],
     "Sin suscripciones.",
+  );
+
+  renderTable(
+    el.ranking,
+    [
+      { label: "#", value: (row) => row.rank },
+      { label: "Jugador", value: (row) => row.name },
+      { label: "Puntos", value: (row) => row.points },
+      { label: "Aldeas", value: (row) => row.villages },
+      { label: "Unidades", value: (row) => row.units },
+      { label: "Oleadas", value: (row) => row.waves },
+    ],
+    Array.isArray(data?.ranking) ? data.ranking : [],
+    "Sin jugadores en el ranking de conquista.",
+  );
+
+  renderTable(
+    el.clans,
+    [
+      { label: "Etiqueta", value: (row) => `[${row.tag}]` },
+      { label: "Clan", value: (row) => row.name },
+      { label: "Miembros", value: (row) => row.memberCount },
+      { label: "Creado", value: (row) => formatDateTime(row.createdAt) },
+    ],
+    Array.isArray(data?.clans) ? data.clans : [],
+    "Sin clanes todavía.",
   );
 }
 

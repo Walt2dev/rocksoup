@@ -650,6 +650,11 @@ function sanitizeVillageProgress(value) {
       allied: raw.allied === true,
       lost: raw.lost === true,
       everAllied: raw.everAllied === true || raw.allied === true,
+      garrison: Number.isFinite(raw.garrison)
+        ? Math.max(0, Math.min(100, Math.floor(raw.garrison)))
+        : 100,
+      destroyed: raw.destroyed === true,
+      conquered: raw.conquered === true,
       crafted: typeof raw.crafted === "string" ? raw.crafted.slice(0, 80) : null,
       lastProduction: Number.isFinite(raw.lastProduction)
         ? Math.max(0, raw.lastProduction)

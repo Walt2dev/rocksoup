@@ -76,6 +76,8 @@ export function createApiHandler({
   storeStore,
   paypal,
   mailer = null,
+  rankingStore = null,
+  clanStore = null,
   env = process.env,
   logger = console,
   readRequestBody,
@@ -521,6 +523,111 @@ export function createApiHandler({
         const raw = await readRequestBody(req, MAX_WEBHOOK_BODY);
         const result = await storeStore.handleWebhook(raw, req.headers);
         sendJson(res, 200, result);
+        return true;
+      }
+
+      if (pathname === "/api/ranking" && req.method === "GET") {
+        const limit = Number(url.searchParams.get("limit")) || 50;
+        sendJson(res, 200, {
+          ranking: rankingStore ? await rankingStore.top(limit) : [],
+        });
+        return true;
+      }
+
+      if (pathname === "/api/ranking/me" && req.method === "GET") {
+        const { user } = await requireUser(req);
+        sendJson(
+          res,
+          200,
+          rankingStore ? await rankingStore.rankOf(user.id) : null,
+        );
+        return true;
+      }
+
+      if (pathname === "/api/clans" && req.method === "GET") {
+        sendJson(res, 200, { clans: clanStore ? await clanStore.listClans() : [] });
+        return true;
+      }
+
+      if (pathname === "/api/clans" && req.method === "POST") {
+        const { user } = await requireUser(req);
+        const body = await readJson(req);
+        const clan = await clanStore.createClan(user.id, {
+          name: body.name,
+          tag: body.tag,
+          description: body.description,
+        });
+        sendJson(res, 201, { clan });
+        return true;
+      }
+
+      if (pathname === "/api/clans/me" && req.method === "GET") {
+        const { user } = await requireUser(req);
+        sendJson(res, 200, { clan: clanStore ? await clanStore.myClan(user.id) : null });
+        return true;
+      }
+
+      if (pathname === "/api/clans/invite" && req.method === "POST") {
+        const { user } = await requireUser(req);
+        const body = await readJson(req);
+        await clanStore.invite(String(body.clanId ?? ""), user.id, Number(body.userId));
+        sendJson(res, 200, { ok: true });
+        return true;
+      }
+
+      if (pathname === "/api/clans/accept" && req.method === "POST") {
+        const { user } = await requireUser(req);
+        const body = await readJson(req);
+        const clan = await clanStore.acceptInvite(user.id, String(body.clanId ?? ""));
+        sendJson(res, 200, { clan });
+        return true;
+      }
+
+      if (pathname === "/api/clans/decline" && req.method === "POST") {
+        const { user } = await requireUser(req);
+        const body = await readJson(req);
+        await clanStore.declineInvite(user.id, String(body.clanId ?? ""));
+        sendJson(res, 200, { ok: true });
+        return true;
+      }
+
+      if (pathname === "/api/clans/leave" && req.method === "POST") {
+        const { user } = await requireUser(req);
+        await clanStore.leaveClan(user.id);
+        sendJson(res, 200, { ok: true });
+        return true;
+      }
+
+      if (pathname === "/api/clans/kick" && req.method === "POST") {
+        const { user } = await requireUser(req);
+        const body = await readJson(req);
+        await clanStore.kick(String(body.clanId ?? ""), user.id, Number(body.userId));
+        sendJson(res, 200, { ok: true });
+        return true;
+      }
+
+      if (pathname === "/api/clans/relation" && req.method === "POST") {
+        const { user } = await requireUser(req);
+        const body = await readJson(req);
+        const result = await clanStore.setRelation(
+          user.id,
+          String(body.clanId ?? ""),
+          String(body.action ?? ""),
+        );
+        sendJson(res, 200, result);
+        return true;
+      }
+
+      const clanMatch = pathname.match(/^\/api\/clans\/([^/]+)$/);
+      if (clanMatch && req.method === "GET") {
+        const clan = clanStore
+          ? await clanStore.clanDetail(decodeURIComponent(clanMatch[1]))
+          : null;
+        if (!clan) {
+          sendJson(res, 404, { error: "Clan no encontrado" });
+          return true;
+        }
+        sendJson(res, 200, { clan });
         return true;
       }
 

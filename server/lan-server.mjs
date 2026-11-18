@@ -51,6 +51,8 @@ import { createAuthStore, sessionTokenFromRequest } from "./authStore.mjs";
 import { createAccountStore } from "./accountStore.mjs";
 import { createStoreStore } from "./storeStore.mjs";
 import { createPlaySessionStore } from "./playSessionStore.mjs";
+import { createRankingStore } from "./rankingStore.mjs";
+import { createClanStore } from "./clanStore.mjs";
 import { createPayPal } from "./paypal.mjs";
 import { createMailer } from "./mailer.mjs";
 import { createApiHandler } from "./api.mjs";
@@ -416,6 +418,8 @@ leaderboardStore.init().catch(() => {});
 
 const database = createDatabase();
 const playSessionStore = createPlaySessionStore({ db: database });
+const rankingStore = createRankingStore({ db: database });
+const clanStore = createClanStore({ db: database });
 const authStore = createAuthStore({ db: database });
 const accountStore = createAccountStore({ db: database });
 const paypal = createPayPal();
@@ -432,6 +436,8 @@ const apiHandler = createApiHandler({
   storeStore,
   paypal,
   mailer,
+  rankingStore,
+  clanStore,
   readRequestBody,
 });
 
@@ -456,6 +462,7 @@ function appendWorldLore(event) {
 function publicPlayer(client) {
   return {
     id: client.id,
+    accountId: client.accountId ?? null,
     name: client.name,
     color: client.color,
     x: client.x,
@@ -479,6 +486,7 @@ function lobbyPayload() {
     started,
     players: [...clients.values()].map((client) => ({
       id: client.id,
+      accountId: client.accountId ?? null,
       name: client.name,
       color: client.color,
       health: client.health,
@@ -606,6 +614,19 @@ async function handlePvpTransition(now) {
     });
     await leaderboardStore.merge(transition.results, { winnerToken, now });
     await broadcastLeaderboard();
+
+    const tokenToAccount = new Map();
+    for (const client of clients.values()) {
+      if (client.accountId && client.token) {
+        tokenToAccount.set(client.token, client.accountId);
+      }
+    }
+    for (const result of transition.results) {
+      const accountId = tokenToAccount.get(result.token);
+      if (accountId && result.score > 0) {
+        rankingStore.addPoints(accountId, result.score).catch(() => {});
+      }
+    }
 
     if (transition.winner && transition.winner.score > 0) {
       pushSystemChat(
@@ -909,6 +930,7 @@ async function handleJoin(ws, message) {
     lastPlayTouchAt: 0,
     playSessionId: null,
     playSessionPromise: null,
+    clanId: null,
     connectedAt: Date.now(),
     chatLimiter: new ChatLimiter(),
   };
@@ -1073,6 +1095,7 @@ function handleChat(client, message) {
   pushChat({
     type: "chat",
     id: client.id,
+    accountId: client.accountId ?? null,
     name: client.name,
     color: client.color,
     text,
@@ -1090,6 +1113,114 @@ function handleLeaderboardRequest(client) {
   sendLeaderboard(client).catch((error) => {
     console.warn("[LAN] No se pudo enviar el ranking:", error.message);
   });
+}
+
+async function handleRankEvent(client, message) {
+  if (!client.accountId) {
+    return;
+  }
+  const kind = typeof message.kind === "string" ? message.kind : "";
+  if (
+    kind !== "village_conquered" &&
+    kind !== "unit_trained" &&
+    kind !== "wave_survived"
+  ) {
+    return;
+  }
+  const refId = String(message.refId ?? "").slice(0, 64);
+  if (kind === "village_conquered" && refId.length === 0) {
+    return;
+  }
+  try {
+    const result = await rankingStore.record(client.accountId, kind, refId);
+    const entry = await rankingStore.entry(client.accountId);
+    send(client.ws, { type: "rank", entry });
+    if (kind === "village_conquered" && result.added > 0) {
+      pushSystemChat(`${client.name} conquistó una aldea (+${result.added} pts).`);
+    }
+  } catch (error) {
+    console.warn("[RANK] No se pudo registrar el evento:", error.message);
+  }
+}
+
+function handleDm(client, message) {
+  const toUserId = Number(message.toUserId);
+  const text = sanitizeChatText(message?.text);
+  if (!Number.isInteger(toUserId) || toUserId <= 0 || text.length === 0) {
+    return;
+  }
+  if (!client.accountId) {
+    return;
+  }
+  if (!client.chatLimiter.allow(Date.now())) {
+    send(client.ws, {
+      type: "error",
+      message: "Espera un poco antes de enviar otro mensaje.",
+    });
+    return;
+  }
+  const payload = {
+    type: "dm",
+    fromUserId: client.accountId,
+    fromName: client.name,
+    fromColor: client.color,
+    toUserId,
+    text,
+    at: Date.now(),
+  };
+  let delivered = false;
+  for (const other of clients.values()) {
+    if (other.accountId === toUserId) {
+      send(other.ws, payload);
+      delivered = true;
+    }
+  }
+  send(client.ws, { ...payload, echo: true, delivered });
+}
+
+async function handleClanChat(client, message) {
+  const text = sanitizeChatText(message?.text);
+  if (text.length === 0) {
+    return;
+  }
+  if (!client.accountId) {
+    return;
+  }
+  if (!client.chatLimiter.allow(Date.now())) {
+    send(client.ws, {
+      type: "error",
+      message: "Espera un poco antes de enviar otro mensaje.",
+    });
+    return;
+  }
+  let clanId = client.clanId ?? null;
+  if (!clanId) {
+    clanId = await clanStore.clanIdOf(client.accountId).catch(() => null);
+    client.clanId = clanId;
+  }
+  if (!clanId) {
+    send(client.ws, { type: "error", message: "No perteneces a un clan." });
+    return;
+  }
+  const payload = {
+    type: "clanChat",
+    clanId,
+    fromUserId: client.accountId,
+    fromName: client.name,
+    fromColor: client.color,
+    text,
+    at: Date.now(),
+  };
+  for (const other of clients.values()) {
+    let otherClan = other.clanId ?? null;
+    if (!otherClan && other.accountId) {
+      otherClan = await clanStore.clanIdOf(other.accountId).catch(() => null);
+      other.clanId = otherClan;
+    }
+    if (otherClan === clanId) {
+      send(other.ws, payload);
+    }
+  }
 }
 
 function handleHarvest(client, message) {
@@ -1460,6 +1591,21 @@ async function handleMessage(ws, raw) {
     return;
   }
 
+  if (message.type === "dm") {
+    handleDm(client, message);
+    return;
+  }
+
+  if (message.type === "clanChat") {
+    handleClanChat(client, message);
+    return;
+  }
+
+  if (message.type === "rankEvent") {
+    handleRankEvent(client, message);
+    return;
+  }
+
   if (message.type === "leaderboard") {
     handleLeaderboardRequest(client);
     return;
@@ -1729,6 +1875,8 @@ const server = createServer(async (req, res) => {
           todayPurchaseRows,
           subscriptionRows,
           play,
+          ranking,
+          clans,
         ] = await Promise.all([
           database.query("SELECT COUNT(*) AS total FROM users"),
           database.query("SELECT COUNT(*) AS total FROM users WHERE created_at >= ?", [since]),
@@ -1773,6 +1921,8 @@ const server = createServer(async (req, res) => {
              ORDER BY plan_key ASC, status ASC`,
           ),
           playSessionStore.rangeStats({ days, now }),
+          rankingStore.top(50).catch(() => []),
+          clanStore.listClans().catch(() => []),
         ]);
 
         const online = [...clients.values()].map((client) => ({
@@ -1848,6 +1998,8 @@ const server = createServer(async (req, res) => {
                 count: Number(row.count) || 0,
               };
             }),
+            ranking: Array.isArray(ranking) ? ranking : [],
+            clans: Array.isArray(clans) ? clans : [],
           }),
         );
       } catch (error) {

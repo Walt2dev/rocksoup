@@ -188,6 +188,10 @@ export class HudMenu {
         this.click("btn-players");
         this.close();
         break;
+      case "clans":
+        this.click("btn-clans");
+        this.close();
+        break;
       case "workers":
         this.click("btn-idle-worker");
         this.close();
@@ -305,6 +309,8 @@ export class HudMenu {
         visible = !this.hud.btnRanking?.hidden;
       } else if (requirement === "players") {
         visible = !this.hud.btnPlayers?.hidden;
+      } else if (requirement === "clans") {
+        visible = !this.hud.btnClans?.hidden;
       } else if (requirement === "quest") {
         visible = !this.hud.btnQuest?.hidden;
       } else if (requirement === "market") {

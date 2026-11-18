@@ -796,6 +796,11 @@ export class Game {
           saved.everAllied === true ||
           saved.allied === true ||
           delivered >= 4,
+        garrison: Number.isFinite(saved.garrison)
+          ? Math.max(0, Math.min(100, Math.floor(saved.garrison)))
+          : 100,
+        destroyed: saved.destroyed === true,
+        conquered: saved.conquered === true,
         crafted: typeof saved.crafted === "string" ? saved.crafted : null,
         lastProduction: Number.isFinite(saved.lastProduction)
           ? saved.lastProduction
@@ -926,6 +931,8 @@ export class Game {
     this.openVillage = this.openVillage.bind(this);
     this.openVillageSettlements = this.openVillageSettlements.bind(this);
     this.closeVillage = this.closeVillage.bind(this);
+    this.attackVillage = this.attackVillage.bind(this);
+    this.rebuildVillage = this.rebuildVillage.bind(this);
     this.prepareVillagePotion = this.prepareVillagePotion.bind(this);
     this.deliverVillageRequest = this.deliverVillageRequest.bind(this);
     this.openTrade = this.openTrade.bind(this);
@@ -3219,6 +3226,8 @@ export class Game {
     this.hud.btnSkyAlign?.addEventListener("click", this.startSkyAlignment);
     this.hud.btnSkyObserve?.addEventListener("click", this.observeSelectedSky);
     this.hud.btnVillageClose?.addEventListener("click", this.closeVillage);
+    this.hud.btnVillageAttack?.addEventListener("click", this.attackVillage);
+    this.hud.btnVillageRebuild?.addEventListener("click", this.rebuildVillage);
     this.hud.btnVillagePrepare?.addEventListener("click", this.prepareVillagePotion);
     this.hud.btnVillageDeliver?.addEventListener("click", this.deliverVillageRequest);
     this.hud.btnVillageMarket?.addEventListener("click", this.openTrade);
@@ -3366,6 +3375,8 @@ export class Game {
     this.hud.btnSkyAlign?.removeEventListener("click", this.startSkyAlignment);
     this.hud.btnSkyObserve?.removeEventListener("click", this.observeSelectedSky);
     this.hud.btnVillageClose?.removeEventListener("click", this.closeVillage);
+    this.hud.btnVillageAttack?.removeEventListener("click", this.attackVillage);
+    this.hud.btnVillageRebuild?.removeEventListener("click", this.rebuildVillage);
     this.hud.btnVillagePrepare?.removeEventListener("click", this.prepareVillagePotion);
     this.hud.btnVillageDeliver?.removeEventListener("click", this.deliverVillageRequest);
     this.hud.btnVillageMarket?.removeEventListener("click", this.openTrade);
@@ -8497,6 +8508,63 @@ export class Game {
     if (this.hud.btnVillageMarket) {
       this.hud.btnVillageMarket.hidden = !progress.allied;
     }
+    if (this.hud.btnVillageAttack) {
+      this.hud.btnVillageAttack.hidden = progress.conquered || progress.destroyed;
+      this.hud.btnVillageAttack.disabled = progress.conquered || progress.destroyed;
+    }
+    if (this.hud.btnVillageRebuild) {
+      this.hud.btnVillageRebuild.hidden = progress.conquered || !progress.destroyed;
+      this.hud.btnVillageRebuild.disabled = progress.conquered || !progress.destroyed;
+    }
+  }
+
+  attackVillage() {
+    const village = this.activeVillage;
+    if (!village) {
+      return;
+    }
+    const progress = this.villageProgress[village.id];
+    if (!progress || progress.conquered || progress.destroyed) {
+      return;
+    }
+    progress.garrison = Math.max(0, progress.garrison - 25);
+    if (progress.garrison <= 0) {
+      progress.destroyed = true;
+      this.notify(`${village.name} ha sido destruida. Habílitala con tus recursos.`);
+    } else {
+      this.notify(`${village.name}: guarnición al ${progress.garrison}%.`);
+    }
+    this.save();
+    this.renderVillage();
+  }
+
+  rebuildVillage() {
+    const village = this.activeVillage;
+    if (!village) {
+      return;
+    }
+    const progress = this.villageProgress[village.id];
+    if (!progress || progress.conquered || !progress.destroyed) {
+      return;
+    }
+    const cost = { madera: 20, piedra: 15, oro: 5 };
+    if (!this.inventory.has(cost)) {
+      this.notify("Faltan recursos: 20 madera, 15 piedra y 5 oro.");
+      return;
+    }
+    this.inventory.spend(cost);
+    progress.destroyed = false;
+    progress.garrison = 100;
+    progress.conquered = true;
+    progress.allied = true;
+    progress.everAllied = true;
+    progress.delivered = Math.max(progress.delivered, 4);
+    this.everAllied = true;
+    this.notify(`${village.name} conquistada y habilitada con tus recursos.`);
+    this.network?.sendRankEvent?.("village_conquered", village.id);
+    this.save();
+    this.renderVillage();
+    this.updateHud();
   }
 
   prepareVillagePotion() {
@@ -8862,6 +8930,7 @@ export class Game {
     this.updateHud();
     this.renderFief();
     this.save();
+    this.network?.sendRankEvent?.("unit_trained", typeId);
     return true;
   }
 
@@ -9781,6 +9850,7 @@ export class Game {
       }
     }
     this.notify(`Horda ${this.waveIndex} superada. La colonia resiste.`);
+    this.network?.sendRankEvent?.("wave_survived", String(this.waveIndex));
     this.checkCampaignEnd();
     this.save();
   }

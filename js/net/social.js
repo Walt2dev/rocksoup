@@ -1,3 +1,5 @@
+import { api } from "./api.js";
+
 const MAX_CHAT_NODES = 100;
 const CHAT_MAX_LENGTH = 180;
 
@@ -27,10 +29,20 @@ export class SocialUI {
     this.attached = false;
     this.rosterLastRender = 0;
     this.rosterTimer = null;
+    this.chatTab = "global";
+    this.dmContactId = null;
+    this.dmContacts = [];
+    this.dmMessages = new Map();
+    this.clanMessages = [];
+    this.globalMessages = [];
+    this.conquistaRanking = [];
+    this.myRankEntry = null;
 
     this.handleKeyDown = this.handleKeyDown.bind(this);
     this.handleChatInputKeyDown = this.handleChatInputKeyDown.bind(this);
     this.handleRankingTabsClick = this.handleRankingTabsClick.bind(this);
+    this.handleChatTabsClick = this.handleChatTabsClick.bind(this);
+    this.handleDmContactsClick = this.handleDmContactsClick.bind(this);
     this.handleChatSubmit = this.handleChatSubmit.bind(this);
     this.toggleChat = this.toggleChat.bind(this);
     this.toggleRanking = this.toggleRanking.bind(this);
@@ -62,6 +74,8 @@ export class SocialUI {
     this.hud.chatForm?.addEventListener("submit", this.handleChatSubmit);
     this.hud.chatInput?.addEventListener("keydown", this.handleChatInputKeyDown);
     this.hud.rankingTabs?.addEventListener("click", this.handleRankingTabsClick);
+    this.hud.chatTabs?.addEventListener("click", this.handleChatTabsClick);
+    this.hud.dmContacts?.addEventListener("click", this.handleDmContactsClick);
     this.hud.chatInput?.setAttribute("maxlength", String(CHAT_MAX_LENGTH));
   }
 
@@ -82,6 +96,8 @@ export class SocialUI {
     this.hud.chatForm?.removeEventListener("submit", this.handleChatSubmit);
     this.hud.chatInput?.removeEventListener("keydown", this.handleChatInputKeyDown);
     this.hud.rankingTabs?.removeEventListener("click", this.handleRankingTabsClick);
+    this.hud.chatTabs?.removeEventListener("click", this.handleChatTabsClick);
+    this.hud.dmContacts?.removeEventListener("click", this.handleDmContactsClick);
     this.closeChat();
     this.closeRanking();
     this.closeRoster();
@@ -112,19 +128,20 @@ export class SocialUI {
   }
 
   setChatHistory(messages) {
-    const list = Array.isArray(messages) ? messages : [];
-    this.hud.chatLog?.replaceChildren();
+    this.globalMessages = Array.isArray(messages) ? messages : [];
     this.unread = 0;
     this.updateChatBadge();
-
-    for (const message of list) {
-      this.appendChatMessage(message, { silent: true });
-    }
-    this.scrollChatToBottom();
+    this.renderChat();
   }
 
   pushChat(message) {
-    this.appendChatMessage(message, { silent: false });
+    this.globalMessages.push(message);
+    if (this.chatTab === "global") {
+      this.appendChatMessage(message, { silent: false });
+    } else if (!this.chatOpen) {
+      this.unread += 1;
+      this.updateChatBadge();
+    }
   }
 
   pushKill(message) {
@@ -165,6 +182,19 @@ export class SocialUI {
     if (Number.isFinite(selfId)) {
       this.selfId = selfId;
     }
+
+    const selfClientId = this.lanClient?.selfId ?? this.selfId;
+    this.dmContacts = this.players
+      .filter(
+        (player) =>
+          Number.isFinite(player.accountId) && player.id !== selfClientId,
+      )
+      .map((player) => ({
+        accountId: player.accountId,
+        name: player.name,
+        color: player.color,
+      }));
+    this.renderDmContacts();
 
     if (!this.rosterOpen) {
       return;
@@ -262,6 +292,146 @@ export class SocialUI {
     }
   }
 
+  renderDmContacts() {
+    const container = this.hud.dmContacts;
+    if (!container) {
+      return;
+    }
+    container.replaceChildren();
+    for (const contact of this.dmContacts) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "dm-contact";
+      button.dataset.accountId = String(contact.accountId);
+      if (contact.accountId === this.dmContactId) {
+        button.classList.add("is-active");
+      }
+      button.textContent = contact.name ?? "Jugador";
+      container.append(button);
+    }
+    if (this.dmContacts.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "dm-empty";
+      empty.textContent = "No hay otros jugadores conectados.";
+      container.append(empty);
+    }
+  }
+
+  setChatTab(tab) {
+    this.chatTab = tab;
+    for (const button of this.hud.chatTabs?.querySelectorAll("[data-chat-tab]") ?? []) {
+      button.classList.toggle("is-active", button.dataset.chatTab === tab);
+    }
+    if (this.hud.dmContacts) {
+      this.hud.dmContacts.hidden = tab !== "dm";
+    }
+    this.renderChat();
+  }
+
+  handleChatTabsClick(event) {
+    const button = event.target.closest("[data-chat-tab]");
+    if (!button) {
+      return;
+    }
+    this.setChatTab(button.dataset.chatTab);
+  }
+
+  handleDmContactsClick(event) {
+    const button = event.target.closest("[data-account-id]");
+    if (!button) {
+      return;
+    }
+    this.dmContactId = Number(button.dataset.accountId);
+    this.renderDmContacts();
+    this.renderChat();
+    this.hud.chatInput?.focus();
+  }
+
+  messagesForTab() {
+    if (this.chatTab === "dm") {
+      return this.dmContactId ? this.dmMessages.get(this.dmContactId) ?? [] : [];
+    }
+    if (this.chatTab === "clan") {
+      return this.clanMessages;
+    }
+    return this.globalMessages;
+  }
+
+  renderChat() {
+    if (!this.hud.chatLog) {
+      return;
+    }
+    this.hud.chatLog.replaceChildren();
+    for (const message of this.messagesForTab()) {
+      this.appendChatMessage(message, { silent: true });
+    }
+    this.scrollChatToBottom();
+  }
+
+  pushDm(message) {
+    if (!message) {
+      return;
+    }
+    const key = Number(message.echo ? message.toUserId : message.fromUserId);
+    if (!Number.isFinite(key)) {
+      return;
+    }
+    if (!this.dmMessages.has(key)) {
+      this.dmMessages.set(key, []);
+    }
+    const entry = {
+      name: message.echo ? "Tú" : message.fromName,
+      color: message.fromColor,
+      text: message.text,
+      system: false,
+      at: message.at ?? Date.now(),
+    };
+    this.dmMessages.get(key).push(entry);
+    if (this.chatTab === "dm" && this.dmContactId === key) {
+      this.appendChatMessage(entry, { silent: false });
+    }
+  }
+
+  pushClanChat(message) {
+    if (!message) {
+      return;
+    }
+    const entry = {
+      name: message.fromName,
+      color: message.fromColor,
+      text: message.text,
+      system: false,
+      at: message.at ?? Date.now(),
+    };
+    this.clanMessages.push(entry);
+    if (this.chatTab === "clan") {
+      this.appendChatMessage(entry, { silent: false });
+    }
+  }
+
+  setMyRank(entry) {
+    this.myRankEntry = entry ?? null;
+    if (this.rankingSort === "conquer") {
+      this.renderRanking();
+    }
+  }
+
+  async fetchConquistaRanking() {
+    try {
+      const [data, me] = await Promise.all([
+        api("/api/ranking?limit=50"),
+        api("/api/ranking/me"),
+      ]);
+      this.conquistaRanking = Array.isArray(data?.ranking) ? data.ranking : [];
+      this.myRankEntry = me?.entry ?? null;
+    } catch {
+      this.conquistaRanking = [];
+    }
+    if (this.rankingSort === "conquer") {
+      this.renderRanking();
+    }
+  }
+
   openChat() {
     this.chatOpen = true;
     this.rankingOpen = false;
@@ -277,7 +447,7 @@ export class SocialUI {
     this.hud.btnChat?.classList.add("is-active");
     this.unread = 0;
     this.updateChatBadge();
-    this.scrollChatToBottom();
+    this.setChatTab(this.chatTab);
     window.setTimeout(() => this.hud.chatInput?.focus(), 0);
   }
 
@@ -316,7 +486,11 @@ export class SocialUI {
     this.hud.rankingPanel?.classList.add("is-open");
     this.hud.rankingPanel?.setAttribute("aria-hidden", "false");
     this.hud.btnRanking?.classList.add("is-active");
-    this.renderRanking();
+    if (this.rankingSort === "conquer") {
+      this.fetchConquistaRanking();
+    } else {
+      this.renderRanking();
+    }
     this.renderRankingNext();
     this.lanClient?.requestLeaderboard?.();
   }
@@ -492,6 +666,11 @@ export class SocialUI {
       return;
     }
 
+    if (this.rankingSort === "conquer") {
+      this.renderConquista();
+      return;
+    }
+
     const source =
       this.rankingSort === "best" ? this.bestLeaderboard : this.leaderboard;
     const entries = Array.isArray(source) ? [...source] : [];
@@ -564,6 +743,65 @@ export class SocialUI {
     this.renderRankingTabs();
   }
 
+  renderConquista() {
+    const container = this.hud.rankingList;
+    if (!container) {
+      return;
+    }
+    container.replaceChildren();
+
+    if (this.myRankEntry) {
+      const me = document.createElement("p");
+      me.className = "ranking-next";
+      me.textContent =
+        `Tu puesto: #${this.myRankEntry.rank ?? "-"} · ` +
+        `${this.myRankEntry.points ?? 0} pts · ` +
+        `${this.myRankEntry.villages ?? 0} aldeas conquistadas`;
+      container.append(me);
+    }
+
+    const entries = Array.isArray(this.conquistaRanking) ? this.conquistaRanking : [];
+    if (entries.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "ranking-empty";
+      empty.textContent =
+        "Aún no hay conquistas. Conquista aldeas y entrena tu ejército para sumar puntos.";
+      container.append(empty);
+      this.renderRankingTabs();
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    const myId = this.myRankEntry?.userId ?? null;
+    for (const entry of entries) {
+      const row = document.createElement("div");
+      row.className = "ranking-row";
+      if (entry.userId === myId) {
+        row.classList.add("is-self");
+      }
+      const rank = document.createElement("span");
+      rank.className = "ranking-rank";
+      rank.textContent = String(entry.rank ?? "");
+      const main = document.createElement("div");
+      main.className = "ranking-main";
+      const name = document.createElement("strong");
+      name.className = "ranking-name";
+      name.textContent = entry.name ?? "Jugador";
+      const meta = document.createElement("span");
+      meta.className = "ranking-meta";
+      meta.textContent =
+        `${entry.villages ?? 0} aldeas · ${entry.units ?? 0} unidades · ${entry.waves ?? 0} oleadas`;
+      main.append(name, meta);
+      const value = document.createElement("span");
+      value.className = "ranking-value";
+      value.textContent = `${entry.points ?? 0} pts`;
+      row.append(rank, main, value);
+      fragment.append(row);
+    }
+    container.append(fragment);
+    this.renderRankingTabs();
+  }
+
   renderRankingTabs() {
     const tabs = this.hud.rankingTabs;
     if (!tabs) {
@@ -582,8 +820,17 @@ export class SocialUI {
     if (!button) {
       return;
     }
-    this.rankingSort = button.dataset.rankingSort === "best" ? "best" : "points";
-    this.renderRanking();
+    this.rankingSort =
+      button.dataset.rankingSort === "best"
+        ? "best"
+        : button.dataset.rankingSort === "conquer"
+          ? "conquer"
+          : "points";
+    if (this.rankingSort === "conquer") {
+      this.fetchConquistaRanking();
+    } else {
+      this.renderRanking();
+    }
   }
 
   handleKeyDown(event) {
@@ -648,7 +895,19 @@ export class SocialUI {
       return;
     }
 
-    this.lanClient?.sendChat?.(text);
+    if (this.chatTab === "dm") {
+      if (!Number.isFinite(this.dmContactId)) {
+        this.notify("Elige a quién escribir en la pestaña DM.");
+        input.value = "";
+        return;
+      }
+      this.lanClient?.sendDm?.(this.dmContactId, text);
+    } else if (this.chatTab === "clan") {
+      this.lanClient?.sendClanChat?.(text);
+    } else {
+      this.lanClient?.sendChat?.(text);
+    }
+
     input.value = "";
     input.blur();
   }

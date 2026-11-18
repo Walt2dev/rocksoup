@@ -153,6 +153,64 @@ const SCHEMA = [
     created_at BIGINT NOT NULL,
     raw_json LONGTEXT NOT NULL
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS rank_entries (
+    user_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+    points INT UNSIGNED NOT NULL DEFAULT 0,
+    villages INT UNSIGNED NOT NULL DEFAULT 0,
+    units INT UNSIGNED NOT NULL DEFAULT 0,
+    waves INT UNSIGNED NOT NULL DEFAULT 0,
+    updated_at BIGINT NOT NULL,
+    KEY idx_rank_points (points DESC, updated_at ASC)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS rank_events (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL,
+    kind VARCHAR(24) NOT NULL,
+    ref_id VARCHAR(64) NOT NULL,
+    points INT UNSIGNED NOT NULL,
+    created_at BIGINT NOT NULL,
+    UNIQUE KEY uq_rank_event (user_id, kind, ref_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS rank_daily (
+    user_id BIGINT UNSIGNED NOT NULL,
+    kind VARCHAR(24) NOT NULL,
+    day BIGINT NOT NULL,
+    points INT UNSIGNED NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id, kind, day)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS clans (
+    id VARCHAR(12) NOT NULL PRIMARY KEY,
+    name VARCHAR(32) NOT NULL UNIQUE,
+    tag VARCHAR(4) NOT NULL UNIQUE,
+    leader_user_id BIGINT UNSIGNED NOT NULL,
+    description VARCHAR(140) NOT NULL DEFAULT '',
+    created_at BIGINT NOT NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS clan_members (
+    clan_id VARCHAR(12) NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
+    role VARCHAR(12) NOT NULL DEFAULT 'member',
+    joined_at BIGINT NOT NULL,
+    PRIMARY KEY (user_id),
+    KEY idx_clan_members_clan (clan_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS clan_invites (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    clan_id VARCHAR(12) NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
+    invited_by BIGINT UNSIGNED NOT NULL,
+    created_at BIGINT NOT NULL,
+    UNIQUE KEY uq_clan_invite (clan_id, user_id),
+    KEY idx_clan_invites_user (user_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS clan_relations (
+    clan_a VARCHAR(12) NOT NULL,
+    clan_b VARCHAR(12) NOT NULL,
+    relation VARCHAR(12) NOT NULL DEFAULT 'neutral',
+    requested_by VARCHAR(12) NULL,
+    updated_at BIGINT NOT NULL,
+    PRIMARY KEY (clan_a, clan_b)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 ];
 
 const NETWORK_ERRORS = new Set([

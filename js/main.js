@@ -35,6 +35,7 @@ import {
 import { LanClient } from "./net/lanClient.js";
 import { createCloudSaveStore } from "./net/cloudSave.js";
 import { SocialUI } from "./net/social.js";
+import { ClansUI } from "./ui/clans.js";
 import { HudMenu } from "./ui/hudMenu.js";
 import { createAccountUI } from "./ui/account.js";
 import { createStoreUI } from "./ui/store.js";
@@ -273,6 +274,8 @@ const ui = {
     btnVillageDeliver: byId("btn-village-deliver"),
     btnVillageMarket: byId("btn-village-market"),
     btnVillageSettlements: byId("btn-village-settlements"),
+    btnVillageAttack: byId("btn-village-attack"),
+    btnVillageRebuild: byId("btn-village-rebuild"),
     btnVillageClose: byId("btn-village-close"),
     tradePanel: byId("trade-panel"),
     tradeVillages: byId("trade-villages"),
@@ -312,7 +315,10 @@ const ui = {
     chatBadge: byId("chat-badge"),
     btnRanking: byId("btn-ranking"),
     btnPlayers: byId("btn-players"),
+    btnClans: byId("btn-clans"),
     chatPanel: byId("chat-panel"),
+    chatTabs: byId("chat-tabs"),
+    dmContacts: byId("dm-contacts"),
     chatLog: byId("chat-log"),
     chatForm: byId("chat-form"),
     chatInput: byId("chat-input"),
@@ -326,6 +332,9 @@ const ui = {
     playersPanel: byId("players-panel"),
     playersList: byId("players-list"),
     btnPlayersClose: byId("btn-players-close"),
+    clansPanel: byId("clans-panel"),
+    clansBody: byId("clans-body"),
+    btnClansClose: byId("btn-clans-close"),
     pvpBanner: byId("pvp-banner"),
     pvpBannerTitle: byId("pvp-banner-title"),
     pvpBannerTimer: byId("pvp-banner-timer"),
@@ -406,6 +415,12 @@ const social = new SocialUI({
   notify: (message) => game?.notify(message),
 });
 social.attach();
+
+const clans = new ClansUI({
+  hud: ui.hud,
+  notify: (message) => game?.notify(message),
+});
+clans.attach();
 
 try {
   saveStore = createSaveStore(window.localStorage);
@@ -519,7 +534,7 @@ function refreshSaveInfo() {
     timeStyle: "short",
   }).format(new Date(save.savedAt));
 
-  ui.saveInfo.textContent = `Partida individual · ${save.seed} · ${date}`;
+  ui.saveInfo.textContent = `Partida individual Â· ${save.seed} Â· ${date}`;
 }
 
 function attachHudMenu() {
@@ -539,6 +554,7 @@ function beginGame(seed, saveState, characterSkin = null, options = {}) {
   ui.menuError.textContent = "";
   social.setEnabled(false);
   social.setClient(null);
+  clans.setEnabled(false);
 
   try {
     updateUrlSeed(seed);
@@ -578,7 +594,7 @@ function beginGame(seed, saveState, characterSkin = null, options = {}) {
     console.error(error);
     game?.stop();
     game = null;
-    ui.menuError.textContent = "No se pudo iniciar la partida. Inténtalo de nuevo.";
+    ui.menuError.textContent = "No se pudo iniciar la partida. IntÃ©ntalo de nuevo.";
     refreshSaveInfo();
     showScreen("menu");
   }
@@ -631,7 +647,7 @@ function renderSkinGrid(container, current, onSelect) {
       drawSkinPreview(canvas, skin);
       name.textContent = skin.name ?? skin.id;
       description.textContent = skin.custom
-        ? `Pack · ${skin.description ?? "Skin personalizada"}`
+        ? `Pack Â· ${skin.description ?? "Skin personalizada"}`
         : skin.description ?? "Aventurero";
 
       button.append(canvas, name, description);
@@ -657,7 +673,7 @@ function renderDonkeySkinGrid(container, current, onSelect) {
       drawSkinPreview(canvas, skin);
       name.textContent = skin.name ?? skin.id;
       description.textContent = skin.custom
-        ? `Pack · ${skin.description ?? "Burro personalizado"}`
+        ? `Pack Â· ${skin.description ?? "Burro personalizado"}`
         : skin.description ?? "Burro de carga";
 
       button.append(canvas, name, description);
@@ -845,11 +861,11 @@ function resetLanUi({ clearStatus = true } = {}) {
   ui.lanLobbyCard.hidden = true;
   ui.btnLanStart.hidden = true;
   ui.lanPlayers.replaceChildren();
-  ui.lanLobbyStatus.textContent = "El host inicia la partida cuando todos estén conectados.";
+  ui.lanLobbyStatus.textContent = "El host inicia la partida cuando todos estÃ©n conectados.";
 
   if (clearStatus) {
     setLanStatus(
-      "Enciende el servidor en el PC con npm run lan y abre esta página desde la tablet usando la IP LAN del PC.",
+      "Enciende el servidor en el PC con npm run lan y abre esta pÃ¡gina desde la tablet usando la IP LAN del PC.",
     );
   }
 }
@@ -883,6 +899,7 @@ function openLanScreen() {
 function closeLanConnection() {
   social.setEnabled(false);
   social.setClient(null);
+  clans.setEnabled(false);
   if (lanClient) {
     lanClient.close();
     lanClient = null;
@@ -897,7 +914,7 @@ function updateLanLobby(message) {
   const players = Array.isArray(message.players) ? message.players : [];
   const isHost = lanClient?.selfId !== null && lanClient?.selfId === message.hostId;
 
-  ui.lanConnection.textContent = `Conectado · ${players.length} jugador${
+  ui.lanConnection.textContent = `Conectado Â· ${players.length} jugador${
     players.length === 1 ? "" : "es"
   }`;
   ui.lanPlayers.replaceChildren(
@@ -908,7 +925,7 @@ function updateLanLobby(message) {
       dot.className = "lan-player-color";
       dot.style.background = player.color ?? "#e0a458";
       name.textContent =
-        player.id === lanClient?.selfId ? `${player.name} (tú)` : player.name;
+        player.id === lanClient?.selfId ? `${player.name} (tÃº)` : player.name;
       item.append(dot, name);
 
       if (player.id === message.hostId) {
@@ -1012,6 +1029,7 @@ function startLanGame(message) {
 
     social.setClient(lanClient);
     social.setEnabled(true);
+    clans.setEnabled(true);
     social.setChatHistory(message.chat);
     social.setLeaderboard(message.leaderboard, message.leaderboardBest);
     social.setEvent(message.event);
@@ -1033,7 +1051,7 @@ function startLanGame(message) {
 
 function connectLan() {
   if (!accountUI?.user) {
-    setLanStatus("Inicia sesión para jugar multijugador.", true);
+    setLanStatus("Inicia sesiÃ³n para jugar multijugador.", true);
     openAccountScreen();
     return;
   }
@@ -1090,6 +1108,9 @@ function connectLan() {
     onAmbientHit: (message) => game?.handleNetworkAmbientHit(message),
     onAmbientKilled: (message) => game?.handleNetworkAmbientKilled(message),
     onChat: (message) => social.pushChat(message),
+    onDm: (message) => social.pushDm(message),
+    onClanChat: (message) => social.pushClanChat(message),
+    onRank: (entry) => social.setMyRank(entry),
     onLeaderboard: (message) =>
       social.setLeaderboard(message.entries, message.bestEntries),
     onEvent: (event) => social.setEvent(event),
@@ -1107,6 +1128,7 @@ function connectLan() {
       lanPlaying = false;
       social.setEnabled(false);
       social.setClient(null);
+      clans.setEnabled(false);
 
       if (game) {
         game.stop();
@@ -1115,11 +1137,11 @@ function connectLan() {
 
       resetLanUi({ clearStatus: false });
       const suffix = info?.code
-        ? ` (código ${info.code}${info.reason ? `: ${info.reason}` : ""})`
+        ? ` (cÃ³digo ${info.code}${info.reason ? `: ${info.reason}` : ""})`
         : "";
       setLanStatus(
         wasPlaying
-          ? `Se perdió la conexión con el mundo LAN.${suffix}`
+          ? `Se perdiÃ³ la conexiÃ³n con el mundo LAN.${suffix}`
           : `No se pudo conectar a ${info?.url ?? "el servidor"}.${suffix}`,
         true,
       );
@@ -1213,11 +1235,11 @@ function downloadPackTemplate() {
 
 async function downloadAnimationPack() {
   if (!assets) {
-    ui.devStatus.textContent = "Los assets aún no están cargados.";
+    ui.devStatus.textContent = "Los assets aÃºn no estÃ¡n cargados.";
     return;
   }
   try {
-    ui.devStatus.textContent = "Generando pack de animación...";
+    ui.devStatus.textContent = "Generando pack de animaciÃ³n...";
     const result = await exportAnimationPack(assets);
     const url = URL.createObjectURL(result.blob);
     const link = document.createElement("a");
@@ -1242,7 +1264,7 @@ async function refreshDevPacks() {
     ...packs.map((pack) => {
       const option = document.createElement("option");
       option.value = pack.id;
-      option.textContent = `${pack.name} · ${pack.author}`;
+      option.textContent = `${pack.name} Â· ${pack.author}`;
       return option;
     }),
   );
@@ -1254,7 +1276,7 @@ async function refreshDevPacks() {
   if (!ui.devStatus.textContent) {
     ui.devStatus.textContent = active
       ? `Pack activo: ${active.name}. Recarga para volver a aplicarlo.`
-      : "No hay ningún pack activo. Se usan los gráficos procedurales.";
+      : "No hay ningÃºn pack activo. Se usan los grÃ¡ficos procedurales.";
   }
 }
 
@@ -1264,7 +1286,7 @@ async function refreshDefaultPack() {
   ui.devDefaultStatus.textContent =
     count > 0
       ? `${count} PNG en el pack por defecto. Pulsa Aplicar y recargar para verlos.`
-      : "Todavía no hay PNG personalizados en el pack por defecto.";
+      : "TodavÃ­a no hay PNG personalizados en el pack por defecto.";
   ui.devDefaultClear.disabled = count === 0;
   ui.devDefaultList.replaceChildren(
     ...summary.fileNames.map((name) => {
@@ -1330,7 +1352,7 @@ async function uploadDefaultPngs(fileList) {
 
   if (pairs.length === 0) {
     ui.devDefaultStatus.classList.add("lan-status-error");
-    ui.devDefaultStatus.textContent = `No se reconoció ningún PNG. Revisa los nombres: ${unknown.join(", ")}`;
+    ui.devDefaultStatus.textContent = `No se reconociÃ³ ningÃºn PNG. Revisa los nombres: ${unknown.join(", ")}`;
     return;
   }
 
@@ -1349,14 +1371,14 @@ async function uploadDefaultPngs(fileList) {
 }
 
 async function clearDefaultPackFiles() {
-  if (!window.confirm("¿Vaciar todos los PNG del pack por defecto?")) {
+  if (!window.confirm("Â¿Vaciar todos los PNG del pack por defecto?")) {
     return;
   }
 
   try {
     await clearDefaultPack();
     ui.devDefaultStatus.textContent =
-      "Pack por defecto vaciado. Recarga para volver a los gráficos base.";
+      "Pack por defecto vaciado. Recarga para volver a los grÃ¡ficos base.";
     await refreshDefaultPack();
   } catch (error) {
     ui.devDefaultStatus.classList.add("lan-status-error");
@@ -1388,7 +1410,7 @@ async function installDevPack(file) {
 
   try {
     const result = await installPack(file);
-    ui.devStatus.textContent = `Pack "${result.name}" instalado. Actívalo para jugar con él.`;
+    ui.devStatus.textContent = `Pack "${result.name}" instalado. ActÃ­valo para jugar con Ã©l.`;
     ui.devPackFile.value = "";
     await refreshDevPacks();
   } catch (error) {
@@ -1409,7 +1431,7 @@ async function removeDevPack() {
     return;
   }
 
-  if (!window.confirm("¿Eliminar este pack de este navegador?")) {
+  if (!window.confirm("Â¿Eliminar este pack de este navegador?")) {
     return;
   }
 
@@ -1483,7 +1505,7 @@ async function boot() {
     });
   } catch (error) {
     console.error(error);
-    ui.loadStatus.textContent = "No se pudo preparar el mundo. Recarga la página.";
+    ui.loadStatus.textContent = "No se pudo preparar el mundo. Recarga la pÃ¡gina.";
     ui.progressFill.style.background = "var(--danger)";
   }
 }

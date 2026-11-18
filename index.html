@@ -623,6 +623,9 @@
               <button id="btn-players" class="hud-button" type="button" aria-expanded="false" aria-controls="players-panel" hidden>
                 Jugadores <kbd>P</kbd>
               </button>
+              <button id="btn-clans" class="hud-button" type="button" aria-expanded="false" aria-controls="clans-panel" hidden>
+                Clanes <kbd>C</kbd>
+              </button>
               <button id="btn-place-selected" class="hud-button" type="button" title="Colocar el objeto seleccionado">
                 Colocar
               </button>
@@ -926,6 +929,8 @@
             <p id="village-reward" class="village-reward"></p>
           </div>
           <div class="village-actions">
+            <button id="btn-village-attack" class="menu-button" type="button">Atacar aldea</button>
+            <button id="btn-village-rebuild" class="menu-button primary" type="button">Habilitar aldea (recursos)</button>
             <button id="btn-village-prepare" class="menu-button" type="button">Preparar ritual</button>
             <button id="btn-village-deliver" class="menu-button primary" type="button">Entregar brebaje</button>
             <button id="btn-village-market" class="menu-button" type="button">Mercado y caravanas</button>
@@ -1046,6 +1051,12 @@
               </div>
               <button id="btn-chat-close" class="craft-close" type="button" aria-label="Cerrar chat">&times;</button>
             </header>
+            <div id="chat-tabs" class="chat-tabs">
+              <button class="chat-tab is-active" type="button" data-chat-tab="global">Global</button>
+              <button class="chat-tab" type="button" data-chat-tab="dm">DM</button>
+              <button class="chat-tab" type="button" data-chat-tab="clan">Clan</button>
+            </div>
+            <div id="dm-contacts" class="dm-contacts" hidden></div>
             <div id="chat-log" class="chat-log" role="log" aria-live="polite"></div>
             <form id="chat-form" class="chat-form">
               <textarea id="chat-input" rows="3" maxlength="180" autocomplete="off" dir="ltr" placeholder="Escribe un mensaje..."></textarea>
@@ -1066,6 +1077,7 @@
             <div id="ranking-tabs" class="ranking-tabs">
               <button class="ranking-tab is-active" type="button" data-ranking-sort="points">Puntos</button>
               <button class="ranking-tab" type="button" data-ranking-sort="best">Mejor evento</button>
+              <button class="ranking-tab" type="button" data-ranking-sort="conquer">Conquista</button>
             </div>
             <p id="ranking-next" class="ranking-next"></p>
             <div id="ranking-list" class="ranking-list"></div>
@@ -1082,6 +1094,19 @@
               <button id="btn-players-close" class="craft-close" type="button" aria-label="Cerrar jugadores">&times;</button>
             </header>
             <div id="players-list" class="players-list"></div>
+          </div>
+        </aside>
+
+        <aside id="clans-panel" class="clans-panel" aria-hidden="true" aria-label="Clanes y alianzas">
+          <div class="clans-card">
+            <header class="chat-header">
+              <div>
+                <span class="craft-eyebrow">Alianzas</span>
+                <h2>Clanes</h2>
+              </div>
+              <button id="btn-clans-close" class="craft-close" type="button" aria-label="Cerrar clanes">&times;</button>
+            </header>
+            <div id="clans-body" class="clans-body"></div>
           </div>
         </aside>
 
@@ -1206,6 +1231,10 @@
                 <button class="hud-menu-item" type="button" data-hud-action="players" data-requires="players">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-users"></use></svg>
                   <span>Jugadores</span><kbd>P</kbd>
+                </button>
+                <button class="hud-menu-item" type="button" data-hud-action="clans" data-requires="clans">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-users"></use></svg>
+                  <span>Clanes</span><kbd>C</kbd>
                 </button>
               </div>
 

@@ -165,6 +165,21 @@ export class LanClient {
       return;
     }
 
+    if (message.type === "dm") {
+      this.callbacks.onDm?.(message);
+      return;
+    }
+
+    if (message.type === "clanChat") {
+      this.callbacks.onClanChat?.(message);
+      return;
+    }
+
+    if (message.type === "rank") {
+      this.callbacks.onRank?.(message.entry);
+      return;
+    }
+
     if (message.type === "leaderboard") {
       this.callbacks.onLeaderboard?.(message);
       return;
@@ -288,6 +303,18 @@ export class LanClient {
 
   sendChat(text) {
     this.send({ type: "chat", text });
+  }
+
+  sendDm(toUserId, text) {
+    this.send({ type: "dm", toUserId, text });
+  }
+
+  sendClanChat(text) {
+    this.send({ type: "clanChat", text });
+  }
+
+  sendRankEvent(kind, refId) {
+    this.send({ type: "rankEvent", kind, refId });
   }
 
   requestLeaderboard() {
