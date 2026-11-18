@@ -746,6 +746,7 @@ export class Game {
     this.waveTargetCoreId = null;
     this.units = [];
     this.unitSeq = 0;
+    this.unitsTrained = 0;
     this.selectedUnitId = null;
     this.fiefOpen = false;
     this.fiefSelectedVillageId = null;
@@ -3297,6 +3298,7 @@ export class Game {
     if (this.network) {
       this.sendNetworkState();
       this.sendNetworkInventory();
+      this.syncProgress();
     }
     document.addEventListener("visibilitychange", this.handleVisibility);
     window.addEventListener("pagehide", this.handlePageHide);
@@ -8536,6 +8538,7 @@ export class Game {
     }
     this.save();
     this.renderVillage();
+    this.syncProgress();
   }
 
   rebuildVillage() {
@@ -8561,10 +8564,31 @@ export class Game {
     progress.delivered = Math.max(progress.delivered, 4);
     this.everAllied = true;
     this.notify(`${village.name} conquistada y habilitada con tus recursos.`);
-    this.network?.sendRankEvent?.("village_conquered", village.id);
     this.save();
     this.renderVillage();
     this.updateHud();
+    this.syncProgress();
+  }
+
+  syncProgress() {
+    if (!this.network?.sendProgress) {
+      return;
+    }
+    const conqueredVillages = [];
+    const destroyedVillages = [];
+    for (const [id, progress] of Object.entries(this.villageProgress)) {
+      if (progress.conquered) {
+        conqueredVillages.push(id);
+      } else if (progress.destroyed) {
+        destroyedVillages.push(id);
+      }
+    }
+    this.network.sendProgress({
+      unitsTrained: this.unitsTrained,
+      wavesSurvived: this.wavesSurvived,
+      conqueredVillages,
+      destroyedVillages,
+    });
   }
 
   prepareVillagePotion() {
@@ -8905,6 +8929,7 @@ export class Game {
       return false;
     }
     this.inventory.spend(recruit.cost);
+    this.unitsTrained += 1;
     const banner = this.colonyBannerPosition();
     this.unitSeq += 1;
     this.units.push({
@@ -8930,7 +8955,7 @@ export class Game {
     this.updateHud();
     this.renderFief();
     this.save();
-    this.network?.sendRankEvent?.("unit_trained", typeId);
+    this.syncProgress();
     return true;
   }
 
@@ -9850,7 +9875,7 @@ export class Game {
       }
     }
     this.notify(`Horda ${this.waveIndex} superada. La colonia resiste.`);
-    this.network?.sendRankEvent?.("wave_survived", String(this.waveIndex));
+    this.syncProgress();
     this.checkCampaignEnd();
     this.save();
   }

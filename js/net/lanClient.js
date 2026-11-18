@@ -313,8 +313,8 @@ export class LanClient {
     this.send({ type: "clanChat", text });
   }
 
-  sendRankEvent(kind, refId) {
-    this.send({ type: "rankEvent", kind, refId });
+  sendProgress(progress) {
+    this.send({ type: "progress", ...progress });
   }
 
   requestLeaderboard() {

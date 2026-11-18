@@ -13,6 +13,8 @@ import { MINERAL_TYPES } from "../js/world/minerals.js";
 import { FISH_SPECIES } from "../js/game/fishing.js";
 import { sanitizeFarmPlot } from "../js/game/farming.js";
 import { sanitizeFeathers } from "../js/game/save.js";
+import { VILLAGE_BIOMES } from "../js/game/villages.js";
+import { BIOMES } from "../js/world/biomes.js";
 import {
   PVP_CONFIG,
   addParticipants,
@@ -1115,31 +1117,94 @@ function handleLeaderboardRequest(client) {
   });
 }
 
-async function handleRankEvent(client, message) {
+function safeProgressInt(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.floor(number)) : 0;
+}
+
+const VALID_VILLAGE_IDS = new Set(
+  VILLAGE_BIOMES.map((config) => `village:${BIOMES[config.biome]?.key}`).filter(
+    Boolean,
+  ),
+);
+
+function sanitizeVillageIds(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const result = new Set();
+  for (const raw of value) {
+    const id = String(raw).slice(0, 80);
+    if (VALID_VILLAGE_IDS.has(id)) {
+      result.add(id);
+    }
+  }
+  return [...result];
+}
+
+async function handleProgress(client, message) {
   if (!client.accountId) {
     return;
   }
-  const kind = typeof message.kind === "string" ? message.kind : "";
-  if (
-    kind !== "village_conquered" &&
-    kind !== "unit_trained" &&
-    kind !== "wave_survived"
-  ) {
-    return;
+
+  const prev = client.progress ?? {
+    unitsTrained: 0,
+    wavesSurvived: 0,
+    conquered: new Set(),
+    destroyed: new Set(),
+  };
+
+  const units = safeProgressInt(message.unitsTrained);
+  const waves = safeProgressInt(message.wavesSurvived);
+  const destroyed = new Set(sanitizeVillageIds(message.destroyedVillages));
+  const conquered = new Set(sanitizeVillageIds(message.conqueredVillages));
+
+  // Actualiza la línea base antes de las esperas para evitar doble conteo.
+  client.progress = {
+    unitsTrained: units,
+    wavesSurvived: waves,
+    conquered,
+    destroyed,
+  };
+
+  for (const villageId of conquered) {
+    if (!prev.conquered.has(villageId) && prev.destroyed.has(villageId)) {
+      try {
+        const result = await rankingStore.record(
+          client.accountId,
+          "village_conquered",
+          villageId,
+        );
+        if (result.added > 0) {
+          pushSystemChat(
+            `${client.name} conquistó una aldea (+${result.added} pts).`,
+          );
+        }
+      } catch (error) {
+        console.warn("[RANK] No se pudo registrar la aldea:", error.message);
+      }
+    }
   }
-  const refId = String(message.refId ?? "").slice(0, 64);
-  if (kind === "village_conquered" && refId.length === 0) {
-    return;
+
+  const unitDelta = Math.min(100, Math.max(0, units - prev.unitsTrained));
+  for (let i = 0; i < unitDelta; i += 1) {
+    await rankingStore
+      .record(client.accountId, "unit_trained", `u:${Date.now()}:${i}`)
+      .catch(() => null);
   }
+
+  const waveDelta = Math.min(100, Math.max(0, waves - prev.wavesSurvived));
+  for (let i = 0; i < waveDelta; i += 1) {
+    await rankingStore
+      .record(client.accountId, "wave_survived", `w:${Date.now()}:${i}`)
+      .catch(() => null);
+  }
+
   try {
-    const result = await rankingStore.record(client.accountId, kind, refId);
     const entry = await rankingStore.entry(client.accountId);
     send(client.ws, { type: "rank", entry });
-    if (kind === "village_conquered" && result.added > 0) {
-      pushSystemChat(`${client.name} conquistó una aldea (+${result.added} pts).`);
-    }
-  } catch (error) {
-    console.warn("[RANK] No se pudo registrar el evento:", error.message);
+  } catch {
+    // Sin ranking todavía.
   }
 }
 
@@ -1601,8 +1666,8 @@ async function handleMessage(ws, raw) {
     return;
   }
 
-  if (message.type === "rankEvent") {
-    handleRankEvent(client, message);
+  if (message.type === "progress") {
+    handleProgress(client, message);
     return;
   }
 
