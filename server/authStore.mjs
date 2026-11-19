@@ -422,32 +422,36 @@ export function createAuthStore({ db, env = process.env, logger = console } = {}
         [userId, STARTING_DIAMONDS, now],
       );
 
-      const referrerId = Number(ref);
-      if (
-        Number.isInteger(referrerId) &&
-        referrerId > 0 &&
-        referrerId !== userId
-      ) {
-        const [referrerRows] = await connection.execute(
-          "SELECT id FROM users WHERE id = ? LIMIT 1",
-          [referrerId],
-        );
-        if (referrerRows.length > 0) {
-          const [updated] = await connection.execute(
-            "UPDATE users SET referred_by = ? WHERE id = ? AND referred_by IS NULL",
-            [referrerId, userId],
+      try {
+        const referrerId = Number(ref);
+        if (
+          Number.isInteger(referrerId) &&
+          referrerId > 0 &&
+          referrerId !== userId
+        ) {
+          const [referrerRows] = await connection.execute(
+            "SELECT id FROM users WHERE id = ? LIMIT 1",
+            [referrerId],
           );
-          if (Number(updated.affectedRows) > 0) {
-            await connection.execute(
-              `INSERT INTO user_wallets (user_id, diamonds, updated_at)
-               VALUES (?, ?, ?)
-               ON DUPLICATE KEY UPDATE
-                 diamonds = diamonds + VALUES(diamonds),
-                 updated_at = VALUES(updated_at)`,
-              [referrerId, REFERRAL_DIAMONDS, now],
+          if (referrerRows.length > 0) {
+            const [updated] = await connection.execute(
+              "UPDATE users SET referred_by = ? WHERE id = ? AND referred_by IS NULL",
+              [referrerId, userId],
             );
+            if (Number(updated.affectedRows) > 0) {
+              await connection.execute(
+                `INSERT INTO user_wallets (user_id, diamonds, updated_at)
+                 VALUES (?, ?, ?)
+                 ON DUPLICATE KEY UPDATE
+                   diamonds = diamonds + VALUES(diamonds),
+                   updated_at = VALUES(updated_at)`,
+                [referrerId, REFERRAL_DIAMONDS, now],
+              );
+            }
           }
         }
+      } catch (error) {
+        logger.warn?.(`[AUTH] Referido no aplicado: ${error.message}`);
       }
 
       return userId;
