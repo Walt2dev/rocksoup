@@ -44,6 +44,7 @@ import {
   adminAuthorizedAny,
   bearerToken,
   buildAdminSnapshot,
+  describeAdminSecrets,
   getAdminSecrets,
 } from "./admin.mjs";
 import { createWorldStore, normalizeWorldId } from "./worldStore.mjs";
@@ -72,6 +73,13 @@ import {
 
 const ROOT = resolve(process.cwd());
 const HOST = "0.0.0.0";
+
+{
+  const info = describeAdminSecrets();
+  console.log(
+    `[ADMIN] Secretos configurados -> P2P=${info.p2pConfigured} (len ${info.p2pLength}), PASSWORD=${info.passwordConfigured} (len ${info.passwordLength}), TOKEN=${info.tokenConfigured} (len ${info.tokenLength})`,
+  );
+}
 
 function pickSavePath() {
   const candidates = [];
@@ -2151,6 +2159,7 @@ const server = createServer(async (req, res) => {
             tokenOk: paypalAuth.ok,
             tokenError: paypalAuth.error,
           },
+          admin: describeAdminSecrets(),
           probes,
         }),
       );

@@ -203,6 +203,7 @@ No se necesita Client Secret para el flujo de ID Token usado aquí.
 - `PORT`: puerto HTTP/WebSocket (por defecto `3000`).
 - `SAVE_PATH`: ruta del guardado (útil en volúmenes persistentes).
 - `SAVE_DIR`: carpeta del guardado si no usas `SAVE_PATH`.
+- `ADMIN_P2P`: clave alternativa para entrar a `/admin`.
 - `ADMIN_PASSWORD`: clave para entrar a `/admin` (recomendada).
 - `ADMIN_TOKEN`: token alternativo para `/admin` y scripts.
 - `WORLD_ID`: identificador del mundo persistente (`main` por defecto).

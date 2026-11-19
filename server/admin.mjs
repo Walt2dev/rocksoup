@@ -5,18 +5,46 @@ function realSecret(value) {
   if (typeof value !== "string") {
     return "";
   }
-  const trimmed = value.trim();
-  if (!trimmed || /^REEMPLAZA/i.test(trimmed) || /^TU_/i.test(trimmed)) {
+  let text = value
+    .replace(/^\uFEFF/, "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .trim();
+  if (text.length >= 2) {
+    const first = text[0];
+    const last = text[text.length - 1];
+    if (
+      (first === '"' && last === '"') ||
+      (first === "'" && last === "'")
+    ) {
+      text = text.slice(1, -1).trim();
+    }
+  }
+  if (!text || /^REEMPLAZA/i.test(text) || /^TU_/i.test(text)) {
     return "";
   }
-  return trimmed;
+  return text;
 }
 
 export function getAdminSecrets(env = process.env) {
-  const values = [env.ADMIN_PASSWORD, env.ADMIN_TOKEN]
+  const values = [env.ADMIN_P2P, env.ADMIN_PASSWORD, env.ADMIN_TOKEN]
     .map(realSecret)
     .filter(Boolean);
   return [...new Set(values)];
+}
+
+export function describeAdminSecrets(env = process.env) {
+  const p2p = realSecret(env.ADMIN_P2P);
+  const password = realSecret(env.ADMIN_PASSWORD);
+  const token = realSecret(env.ADMIN_TOKEN);
+  return {
+    p2pConfigured: Boolean(p2p),
+    passwordConfigured: Boolean(password),
+    tokenConfigured: Boolean(token),
+    p2pLength: p2p.length,
+    passwordLength: password.length,
+    tokenLength: token.length,
+    acceptedCount: new Set([p2p, password, token].filter(Boolean)).size,
+  };
 }
 
 export function getAdminToken(env = process.env) {
