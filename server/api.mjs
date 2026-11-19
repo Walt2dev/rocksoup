@@ -147,7 +147,7 @@ export function createApiHandler({
       ...summary,
       subscriptions: entitlements.subscriptions,
       purchases: entitlements.purchases,
-      paypal: paypal.publicConfig(),
+      paymentsEnabled: storeStore.isPaymentsEnabled?.() === true,
     });
   }
 
@@ -322,16 +322,11 @@ export function createApiHandler({
 
     try {
       if (pathname === "/api/health" && req.method === "GET") {
-        const paypalConfig = paypal.publicConfig();
         sendJson(res, 200, {
           ok: true,
           db: db.isAvailable(),
           auth: authStore.isConfigured,
-          paypal: {
-            configured: paypalConfig.configured,
-            mode: paypalConfig.mode,
-            webhookConfigured: paypalConfig.webhookConfigured,
-          },
+          payments: { enabled: storeStore.isPaymentsEnabled?.() === true },
           mail: { configured: mailer?.isConfigured === true },
         });
         return true;
@@ -343,7 +338,7 @@ export function createApiHandler({
           authConfigured: authStore.isConfigured,
           passwordAuthAvailable: authStore.passwordAuthAvailable === true,
           dbConfigured: db.isAvailable(),
-          paypal: paypal.publicConfig(),
+          payments: { enabled: storeStore.isPaymentsEnabled?.() === true },
           mail: mailer?.publicConfig?.() ?? null,
           publicBaseUrl: env.PUBLIC_BASE_URL ?? null,
         });

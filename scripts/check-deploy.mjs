@@ -61,11 +61,8 @@ try {
     );
     line(health.data?.auth === true, "Google configurado");
     line(
-      health.data?.paypal?.configured === true,
-      "PayPal configurado",
-      health.data?.paypal?.mode
-        ? `modo ${health.data.paypal.mode}`
-        : "faltan credenciales",
+      health.data?.payments?.enabled === false,
+      "Pagos deshabilitados (PayPal eliminado)",
     );
     line(
       health.data?.mail?.configured === true,
@@ -88,12 +85,8 @@ if (!failed) {
     );
     const store = await get("/api/store/config");
     line(
-      store.data?.configured === true,
-      "PAYPAL_CLIENT_ID / SECRET presentes",
-    );
-    line(
-      store.data?.webhookConfigured === true,
-      "PAYPAL_WEBHOOK_ID presente",
+      store.data?.paymentsEnabled === false,
+      "Tienda con pagos deshabilitados (PayPal eliminado)",
     );
   } catch (error) {
     line(false, "Configuración de auth/tienda", error.message);

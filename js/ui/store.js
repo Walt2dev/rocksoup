@@ -306,8 +306,13 @@ export function createStoreUI({
         const buy = document.createElement("button");
         buy.type = "button";
         buy.className = "store-buy";
-        buy.textContent =
-          product.kind === "subscription" ? "Suscribirme" : "Comprar";
+        const paymentsEnabled = config?.paymentsEnabled !== false;
+        buy.textContent = paymentsEnabled
+          ? product.kind === "subscription"
+            ? "Suscribirme"
+            : "Comprar"
+          : "No disponible";
+        buy.disabled = !paymentsEnabled;
         buy.addEventListener("click", () => {
           void openProduct(product);
         });
@@ -420,9 +425,16 @@ export function createStoreUI({
     modal.hidden = false;
 
     try {
+      if (config?.paymentsEnabled === false) {
+        setModalStatus(
+          "Los pagos están deshabilitados temporalmente. Puedes explorar la tienda.",
+          true,
+        );
+        return;
+      }
       if (!config?.configured) {
         setModalStatus(
-          "PayPal aÃºn no estÃ¡ configurado en el servidor. AÃ±ade las credenciales de PayPal Business.",
+          "PayPal aún no está configurado en el servidor. Añade las credenciales de PayPal Business.",
           true,
         );
         return;
@@ -614,10 +626,14 @@ export function createStoreUI({
       renderTabs();
       renderGrid();
 
-      if (!config?.configured) {
-        setStatus("PayPal no est\u00e1 configurado todav\u00eda.");
+      if (config?.paymentsEnabled === false) {
+        setStatus(
+          "Los pagos están deshabilitados temporalmente. Puedes explorar la tienda.",
+        );
+      } else if (!config?.configured) {
+        setStatus("PayPal no está configurado todavía.");
       } else if (!user) {
-        setStatus("Inicia sesi\u00f3n para comprar. Puedes ver todo el cat\u00e1logo.");
+        setStatus("Inicia sesión para comprar. Puedes ver todo el catálogo.");
       } else {
         setStatus("");
       }

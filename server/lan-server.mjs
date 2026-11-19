@@ -57,6 +57,7 @@ import { createPlaySessionStore } from "./playSessionStore.mjs";
 import { createRankingStore } from "./rankingStore.mjs";
 import { createClanStore } from "./clanStore.mjs";
 import { createPayPal } from "./paypal.mjs";
+import { PAYMENTS_ENABLED } from "./payments.mjs";
 import { createMailer } from "./mailer.mjs";
 import { createApiHandler } from "./api.mjs";
 import {
@@ -1831,7 +1832,6 @@ const server = createServer(async (req, res) => {
     }
 
     if (pathname === "/health" || pathname === "/healthz") {
-      const paypalConfig = paypal.publicConfig();
       res.writeHead(200, {
         "Content-Type": "application/json; charset=utf-8",
         "Cache-Control": "no-store",
@@ -1841,11 +1841,7 @@ const server = createServer(async (req, res) => {
           ok: true,
           db: database.isAvailable(),
           auth: authStore.isConfigured,
-          paypal: {
-            configured: paypalConfig.configured,
-            mode: paypalConfig.mode,
-            webhookConfigured: paypalConfig.webhookConfigured,
-          },
+          payments: { enabled: PAYMENTS_ENABLED },
           mail: { configured: mailer.isConfigured === true },
         }),
       );
@@ -2129,9 +2125,13 @@ const server = createServer(async (req, res) => {
           ),
         ),
       ];
+      const paypalCheck = PAYMENTS_ENABLED
+        ? (paypal.verifyCredentials?.() ??
+          Promise.resolve({ ok: false, error: "sin verificación" }))
+        : Promise.resolve({ ok: false, error: "Pagos deshabilitados" });
       const [egress, paypalAuth, ...probes] = await Promise.all([
         fetchEgressIp(),
-        paypal.verifyCredentials?.() ?? Promise.resolve({ ok: false, error: "sin verificación" }),
+        paypalCheck,
         ...hosts.map((host) => probeTcp(host, port)),
       ]);
 
@@ -2153,9 +2153,10 @@ const server = createServer(async (req, res) => {
             lastResult: mailer.lastResult?.() ?? null,
           },
           paypal: {
-            mode: paypal.mode,
-            configured: paypal.configured,
-            webhookConfigured: Boolean(paypal.webhookId),
+            enabled: PAYMENTS_ENABLED,
+            mode: PAYMENTS_ENABLED ? paypal.mode : null,
+            configured: PAYMENTS_ENABLED && paypal.configured,
+            webhookConfigured: PAYMENTS_ENABLED && Boolean(paypal.webhookId),
             tokenOk: paypalAuth.ok,
             tokenError: paypalAuth.error,
           },

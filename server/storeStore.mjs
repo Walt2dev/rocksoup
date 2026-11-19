@@ -7,6 +7,10 @@ import {
   publicProducts,
 } from "./storeCatalog.mjs";
 import {
+  PAYMENTS_DISABLED_MESSAGE,
+  PAYMENTS_ENABLED,
+} from "./payments.mjs";
+import {
   applyGrantsToSave,
   grantsAreEmpty,
   mergeGrants,
@@ -105,8 +109,17 @@ export function createStoreStore({
   }
 
   function config() {
+    const paypalConfig = paypal.publicConfig();
     return {
-      ...paypal.publicConfig(),
+      paymentsEnabled: PAYMENTS_ENABLED,
+      configured: PAYMENTS_ENABLED && paypalConfig.configured,
+      mode: PAYMENTS_ENABLED ? paypalConfig.mode : null,
+      webhookConfigured: PAYMENTS_ENABLED && paypalConfig.webhookConfigured,
+      clientId: PAYMENTS_ENABLED ? paypalConfig.clientId : null,
+      captureSdkUrl: PAYMENTS_ENABLED ? paypalConfig.captureSdkUrl : null,
+      subscriptionSdkUrl: PAYMENTS_ENABLED
+        ? paypalConfig.subscriptionSdkUrl
+        : null,
       currency: "MXN",
       maxCatchupDays: MAX_CATCHUP_DAYS,
     };
@@ -157,6 +170,9 @@ export function createStoreStore({
   }
 
   async function createOrder(userId, productId, { worldId = null } = {}) {
+    if (!PAYMENTS_ENABLED) {
+      throw httpError(PAYMENTS_DISABLED_MESSAGE, 503);
+    }
     if (!db.isAvailable()) {
       throw httpError("La base de datos no está configurada", 503);
     }
@@ -256,6 +272,9 @@ export function createStoreStore({
   }
 
   async function captureOrder(userId, orderId) {
+    if (!PAYMENTS_ENABLED) {
+      throw httpError(PAYMENTS_DISABLED_MESSAGE, 503);
+    }
     if (!db.isAvailable()) {
       throw httpError("La base de datos no está configurada", 503);
     }
@@ -428,6 +447,9 @@ export function createStoreStore({
   }
 
   async function createSubscriptionIntent(userId, productId) {
+    if (!PAYMENTS_ENABLED) {
+      throw httpError(PAYMENTS_DISABLED_MESSAGE, 503);
+    }
     if (!db.isAvailable()) {
       throw httpError("La base de datos no está configurada", 503);
     }
@@ -554,6 +576,9 @@ export function createStoreStore({
   }
 
   async function confirmSubscription(userId, subscriptionId) {
+    if (!PAYMENTS_ENABLED) {
+      throw httpError(PAYMENTS_DISABLED_MESSAGE, 503);
+    }
     if (!db.isAvailable()) {
       throw httpError("La base de datos no está configurada", 503);
     }
@@ -637,6 +662,9 @@ export function createStoreStore({
   }
 
   async function claimDueSubscriptionGrants(userId) {
+    if (!PAYMENTS_ENABLED) {
+      return { grants: {}, periods: 0, subscriptions: [] };
+    }
     if (!db.isAvailable()) {
       return { grants: {}, periods: 0, subscriptions: [] };
     }
@@ -698,6 +726,9 @@ export function createStoreStore({
   }
 
   async function handleWebhook(rawBody, headers) {
+    if (!PAYMENTS_ENABLED) {
+      throw httpError(PAYMENTS_DISABLED_MESSAGE, 503);
+    }
     const valid = await paypal.verifyWebhook(rawBody, headers);
     if (!valid) {
       throw httpError("Webhook de PayPal no verificado", 401);
@@ -823,6 +854,9 @@ export function createStoreStore({
   }
 
   async function cancelSubscription(userId, subscriptionId) {
+    if (!PAYMENTS_ENABLED) {
+      throw httpError(PAYMENTS_DISABLED_MESSAGE, 503);
+    }
     const rows = await db.query(
       `SELECT * FROM subscriptions
        WHERE provider_subscription_id = ? AND user_id = ?
@@ -868,6 +902,7 @@ export function createStoreStore({
     init,
     listProducts,
     config,
+    isPaymentsEnabled: () => PAYMENTS_ENABLED,
     createOrder,
     captureOrder,
     listPurchases,

@@ -128,6 +128,12 @@ MySQL: sin base de datos esas rutas responden `503`.
 
 ## Tienda y PayPal Business
 
+> **Pagos deshabilitados.** La cuenta de PayPal fue desactivada permanentemente.
+> La tienda se mantiene visible para explorar el catálogo, pero las compras y
+> suscripciones están bloqueadas desde el servidor (`server/payments.mjs`).
+> Cuando exista otro proveedor de pagos, cámbialo ahí y vuelve a habilitar los
+> endpoints correspondientes.
+
 La tienda integrada incluye recursos, diamantes, armaduras, herramientas, el
 slot de mundo de 15 MXN y las suscripciones Noble, Lord y Feudo con recursos
 cada 24 horas.
