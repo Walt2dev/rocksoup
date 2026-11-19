@@ -3,7 +3,6 @@ import {
   getCurrentUser,
   loginWithPassword,
   registerWithPassword,
-  renderGoogleButton,
   signOut,
 } from "../net/auth.js";
 import { createRng, randomSeed } from "../core/rng.js";
@@ -51,14 +50,14 @@ export function createAccountUI({
     el("account-user").hidden = true;
     setStatus("");
     const container = el("account-google");
-    void renderGoogleButton(container, {
-      onUser: (nextUser) => {
-        user = nextUser;
-        onUserChanged?.(nextUser);
-        void refresh();
-      },
-      onError: (error) => setStatus(error.message, true),
-    });
+    if (container) {
+      container.replaceChildren();
+      container.hidden = true;
+    }
+    const googleNote = el("account-google-note");
+    if (googleNote) {
+      googleNote.hidden = true;
+    }
   }
 
   function renderUser() {
@@ -84,7 +83,16 @@ export function createAccountUI({
       capacity: 1,
       used: 0,
     };
-    el("account-diamonds").textContent = String(summary?.diamonds ?? 0);
+    const diamondsNode = el("account-diamonds");
+    if (diamondsNode) {
+      const nextValue = String(summary?.diamonds ?? 0);
+      if (diamondsNode.textContent !== nextValue) {
+        diamondsNode.textContent = nextValue;
+      }
+      diamondsNode.classList.remove("is-bump");
+      void diamondsNode.offsetWidth;
+      diamondsNode.classList.add("is-bump");
+    }
     el("account-worlds-count").textContent = `${slots.used}/${slots.capacity}`;
 
     const activeSub = (summary?.subscriptions ?? []).find(

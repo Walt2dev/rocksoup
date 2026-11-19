@@ -1,9 +1,27 @@
 import { api, clearSessionToken, setSessionToken } from "./api.js";
 
 const GOOGLE_SCRIPT = "https://accounts.google.com/gsi/client";
+const REF_KEY = "rocksoup.ref";
 let scriptPromise = null;
 let configPromise = null;
 let initializedFor = "";
+
+try {
+  const ref = new URLSearchParams(window.location.search).get("ref");
+  if (ref && /^\d{1,18}$/.test(ref)) {
+    window.localStorage.setItem(REF_KEY, ref);
+  }
+} catch {
+  // Sin almacenamiento o URL inválida.
+}
+
+function getReferral() {
+  try {
+    return window.localStorage.getItem(REF_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
 
 function loadScript() {
   if (window.google?.accounts?.id) {
@@ -54,12 +72,18 @@ export async function getCurrentUser() {
 }
 
 export async function registerWithPassword({ name, email, password }) {
+  const ref = getReferral();
   const data = await api("/api/auth/register", {
     method: "POST",
-    body: { name, email, password },
+    body: { name, email, password, ...(ref ? { ref } : {}) },
   });
   if (data?.token) {
     setSessionToken(data.token);
+  }
+  try {
+    window.localStorage.removeItem(REF_KEY);
+  } catch {
+    // Almacenamiento bloqueado.
   }
   return data?.user ?? null;
 }

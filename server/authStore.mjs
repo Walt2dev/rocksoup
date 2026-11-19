@@ -12,6 +12,8 @@ import { hashToken } from "./leaderboardStore.mjs";
 
 const SESSION_COOKIE = "rs_session";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const STARTING_DIAMONDS = 5;
+const REFERRAL_DIAMONDS = 5;
 const GOOGLE_CERTS_URL = "https://www.googleapis.com/oauth2/v3/certs";
 const GOOGLE_ISSUERS = new Set([
   "accounts.google.com",
@@ -357,7 +359,7 @@ export function createAuthStore({ db, env = process.env, logger = console } = {}
     loginAttempts.delete(email);
   }
 
-  async function createUserWithEmail({ email, password, name } = {}) {
+  async function createUserWithEmail({ email, password, name, ref } = {}) {
     if (!db.isAvailable()) {
       throw authError("La base de datos no está configurada", 503);
     }
@@ -413,12 +415,50 @@ export function createAuthStore({ db, env = process.env, logger = console } = {}
          VALUES (?, ?, ?, ?, ?)`,
         [userId, cleanEmail, passwordHash, now, now],
       );
+
+      await connection.execute(
+        `INSERT IGNORE INTO user_wallets (user_id, diamonds, updated_at)
+         VALUES (?, ?, ?)`,
+        [userId, STARTING_DIAMONDS, now],
+      );
+
+      const referrerId = Number(ref);
+      if (
+        Number.isInteger(referrerId) &&
+        referrerId > 0 &&
+        referrerId !== userId
+      ) {
+        const [referrerRows] = await connection.execute(
+          "SELECT id FROM users WHERE id = ? LIMIT 1",
+          [referrerId],
+        );
+        if (referrerRows.length > 0) {
+          const [updated] = await connection.execute(
+            "UPDATE users SET referred_by = ? WHERE id = ? AND referred_by IS NULL",
+            [referrerId, userId],
+          );
+          if (Number(updated.affectedRows) > 0) {
+            await connection.execute(
+              `INSERT INTO user_wallets (user_id, diamonds, updated_at)
+               VALUES (?, ?, ?)
+               ON DUPLICATE KEY UPDATE
+                 diamonds = diamonds + VALUES(diamonds),
+                 updated_at = VALUES(updated_at)`,
+              [referrerId, REFERRAL_DIAMONDS, now],
+            );
+          }
+        }
+      }
+
       return userId;
     });
   }
 
-  async function registerWithPassword({ email, password, name }, { userAgent = "" } = {}) {
-    const userId = await createUserWithEmail({ email, password, name });
+  async function registerWithPassword(
+    { email, password, name, ref },
+    { userAgent = "" } = {},
+  ) {
+    const userId = await createUserWithEmail({ email, password, name, ref });
     const user = await findUserById(userId);
     const token = await createSession(userId, userAgent);
     return { user, token };
@@ -491,12 +531,19 @@ export function createAuthStore({ db, env = process.env, logger = console } = {}
       }
     }
 
-    const [result] = await db.execute(
+    const result = await db.execute(
       `INSERT INTO users
          (google_sub, email, display_name, avatar_url, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
       [profile.sub, profile.email, displayName, profile.picture, now, now],
     );
+    await db
+      .execute(
+        `INSERT IGNORE INTO user_wallets (user_id, diamonds, updated_at)
+         VALUES (?, ?, ?)`,
+        [Number(result.insertId), STARTING_DIAMONDS, now],
+      )
+      .catch(() => {});
     return findUserById(result.insertId);
   }
 

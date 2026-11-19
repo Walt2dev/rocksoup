@@ -6465,3 +6465,58 @@ select:focus-visible {
   gap: 6px;
   margin-left: auto;
 }
+
+.ranking-goal {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  font-size: 0.8rem;
+}
+
+.ranking-goal.is-first {
+  border-color: rgba(224, 164, 88, 0.6);
+  background: linear-gradient(135deg, rgba(224, 164, 88, 0.18), rgba(255, 255, 255, 0.03));
+  box-shadow: 0 0 24px rgba(224, 164, 88, 0.25);
+  animation: rankPulse 2.4s ease-in-out infinite;
+}
+
+.ranking-crown {
+  color: #f6d36b;
+  font-size: 1.1rem;
+}
+
+.ranking-progress {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.ranking-progress-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #e0a458, #f6d36b);
+  transition: width 0.5s ease;
+}
+
+.ranking-row.is-first {
+  border-color: rgba(224, 164, 88, 0.55);
+  background: rgba(224, 164, 88, 0.08);
+}
+
+@keyframes rankPulse {
+  0%, 100% { box-shadow: 0 0 18px rgba(224, 164, 88, 0.2); }
+  50% { box-shadow: 0 0 30px rgba(224, 164, 88, 0.42); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ranking-goal.is-first { animation: none; }
+  .ranking-progress-fill { transition: none; }
+}

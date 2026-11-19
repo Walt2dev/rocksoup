@@ -251,9 +251,10 @@ export function createStoreUI({
     }
 
     grid.replaceChildren(
-      ...visible.map((product) => {
+      ...visible.map((product, index) => {
         const card = document.createElement("article");
         card.className = `store-product store-cat-${product.category}`;
+        card.style.setProperty("--i", String(index));
 
         const head = document.createElement("div");
         head.className = "store-product-head";
@@ -444,8 +445,46 @@ export function createStoreUI({
     activeProduct = null;
   }
 
+  function celebratePurchase() {
+    const modal = el("store-modal");
+    const card = modal?.querySelector(".store-modal-card");
+    if (card) {
+      card.classList.remove("is-celebrating");
+      void card.offsetWidth;
+      card.classList.add("is-celebrating");
+      window.setTimeout(() => card.classList.remove("is-celebrating"), 700);
+    }
+
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    if (reduced) {
+      return;
+    }
+    const splash = el("store-splash");
+    if (!splash) {
+      return;
+    }
+    splash.hidden = false;
+    splash.replaceChildren();
+    const colors = ["#e0a458", "#7ec699", "#6ca9e0", "#d97b6c", "#b58ce0", "#f6d36b", "#9fc7ff"];
+    for (let index = 0; index < 48; index += 1) {
+      const piece = document.createElement("span");
+      piece.className = "store-confetti";
+      piece.style.left = `${(index * 37) % 100}%`;
+      piece.style.background = colors[index % colors.length];
+      piece.style.setProperty("--dur", `${1.2 + ((index * 7) % 9) / 10}s`);
+      piece.style.setProperty("--drift", `${((index * 53) % 220) - 110}px`);
+      piece.style.animationDelay = `${((index * 13) % 25) / 100}s`;
+      splash.append(piece);
+    }
+    window.setTimeout(() => {
+      splash.replaceChildren();
+      splash.hidden = true;
+    }, 2200);
+  }
+
   async function refreshAfterPurchase(message) {
     setModalStatus(message);
+    celebratePurchase();
     await refresh();
     onPurchased?.(message);
   }

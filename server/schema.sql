@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS users (
   email VARCHAR(190) NULL,
   display_name VARCHAR(24) NOT NULL,
   avatar_url VARCHAR(255) NULL,
+  referred_by BIGINT UNSIGNED NULL,
   created_at BIGINT NOT NULL,
   updated_at BIGINT NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -246,5 +247,14 @@ CREATE TABLE IF NOT EXISTS clan_relations (
   requested_by VARCHAR(12) NULL,
   updated_at BIGINT NOT NULL,
   PRIMARY KEY (clan_a, clan_b)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS clan_requests (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  clan_id VARCHAR(12) NOT NULL,
+  user_id BIGINT UNSIGNED NOT NULL,
+  created_at BIGINT NOT NULL,
+  UNIQUE KEY uq_clan_request (clan_id, user_id),
+  KEY idx_clan_requests_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

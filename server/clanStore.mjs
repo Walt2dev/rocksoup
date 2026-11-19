@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 
 const ROLE_WEIGHT = Object.freeze({ leader: 3, officer: 2, member: 1 });
+export const CONQUERED_REQUIRED = 3;
+export const REFERRAL_REQUIRED = 1;
 
 export class ClanError extends Error {
   constructor(message, status = 409) {
@@ -50,12 +52,81 @@ export function createClanStore({ db, logger = console } = {}) {
     return rows[0] ?? null;
   }
 
+  async function resolveUserId({ userId, email, username } = {}) {
+    const id = Number(userId);
+    if (Number.isInteger(id) && id > 0) {
+      const rows = await db.query("SELECT id FROM users WHERE id = ? LIMIT 1", [id]);
+      return rows[0] ? Number(rows[0].id) : null;
+    }
+    const cleanEmail = String(email ?? "").trim().toLowerCase();
+    if (cleanEmail) {
+      const rows = await db.query("SELECT id FROM users WHERE email = ? LIMIT 1", [
+        cleanEmail,
+      ]);
+      return rows[0] ? Number(rows[0].id) : null;
+    }
+    const name = String(username ?? "").trim();
+    if (name) {
+      const rows = await db.query(
+        "SELECT id FROM users WHERE display_name = ? ORDER BY id ASC LIMIT 1",
+        [name],
+      );
+      return rows[0] ? Number(rows[0].id) : null;
+    }
+    return null;
+  }
+
+  async function listRequestsInternal(clanId) {
+    const rows = await db.query(
+      `SELECT r.user_id, r.created_at, u.display_name, u.avatar_url
+       FROM clan_requests r
+       LEFT JOIN users u ON u.id = r.user_id
+       WHERE r.clan_id = ?
+       ORDER BY r.created_at ASC`,
+      [String(clanId)],
+    );
+    return rows.map((row) => ({
+      userId: Number(row.user_id),
+      name: row.display_name ?? "Jugador",
+      avatarUrl: row.avatar_url ?? null,
+      createdAt: Number(row.created_at) || 0,
+    }));
+  }
+
   async function myClan(userId) {
     const membership = await membershipOf(userId);
     if (!membership) {
       return null;
     }
-    return clanDetail(membership.clan_id, { forUserId: userId });
+    const detail = await clanDetail(membership.clan_id, { forUserId: userId });
+    detail.role = membership.role;
+    detail.requests =
+      ROLE_WEIGHT[membership.role] >= ROLE_WEIGHT.officer
+        ? await listRequestsInternal(membership.clan_id)
+        : [];
+    return detail;
+  }
+
+  async function eligibility(userId) {
+    requireDb();
+    const membership = await membershipOf(userId);
+    const villageRows = await db.query(
+      "SELECT villages FROM rank_entries WHERE user_id = ? LIMIT 1",
+      [Number(userId)],
+    );
+    const villages = Number(villageRows[0]?.villages) || 0;
+    const pendingRows = await db.query(
+      "SELECT clan_id FROM clan_requests WHERE user_id = ?",
+      [Number(userId)],
+    );
+    return {
+      inClan: Boolean(membership),
+      clanId: membership?.clan_id ?? null,
+      villages,
+      required: CONQUERED_REQUIRED,
+      canCreate: !membership && villages >= CONQUERED_REQUIRED,
+      pendingRequests: pendingRows.map((row) => row.clan_id),
+    };
   }
 
   async function clanDetail(clanId, { forUserId = null } = {}) {
@@ -152,6 +223,17 @@ export function createClanStore({ db, logger = console } = {}) {
     if (await membershipOf(userId)) {
       throw new ClanError("Ya perteneces a un clan.");
     }
+    const villageRows = await db.query(
+      "SELECT villages FROM rank_entries WHERE user_id = ? LIMIT 1",
+      [Number(userId)],
+    );
+    const villages = Number(villageRows[0]?.villages) || 0;
+    if (villages < CONQUERED_REQUIRED) {
+      throw new ClanError(
+        `Necesitas al menos ${CONQUERED_REQUIRED} aldeas conquistadas para crear un clan (tienes ${villages}).`,
+        403,
+      );
+    }
     const clanName = cleanName(name);
     const clanTag = cleanTag(tag);
     const desc = cleanDescription(description);
@@ -179,7 +261,7 @@ export function createClanStore({ db, logger = console } = {}) {
     return clanDetail(id);
   }
 
-  async function invite(clanId, actorUserId, targetUserId) {
+  async function invite(clanId, actorUserId, target = {}) {
     requireDb();
     const membership = await membershipOf(actorUserId);
     if (!membership || membership.clan_id !== String(clanId)) {
@@ -188,13 +270,106 @@ export function createClanStore({ db, logger = console } = {}) {
     if (ROLE_WEIGHT[membership.role] < ROLE_WEIGHT.officer) {
       throw new ClanError("Solo el líder u oficiales pueden invitar.", 403);
     }
+    const targetUserId = await resolveUserId(target);
+    if (!targetUserId) {
+      throw new ClanError(
+        "No hay una cuenta registrada con ese correo o nombre de usuario.",
+        404,
+      );
+    }
+    if (targetUserId === Number(actorUserId)) {
+      throw new ClanError("No puedes invitarte a ti mismo.");
+    }
     if (await membershipOf(targetUserId)) {
       throw new ClanError("Ese jugador ya está en un clan.");
     }
     await db.execute(
       `INSERT IGNORE INTO clan_invites (clan_id, user_id, invited_by, created_at)
        VALUES (?, ?, ?, ?)`,
-      [String(clanId), Number(targetUserId), Number(actorUserId), Date.now()],
+      [String(clanId), targetUserId, Number(actorUserId), Date.now()],
+    );
+    return { userId: targetUserId };
+  }
+
+  async function requestJoin(userId, clanId) {
+    requireDb();
+    if (await membershipOf(userId)) {
+      throw new ClanError("Ya perteneces a un clan.");
+    }
+    const clans = await db.query("SELECT id FROM clans WHERE id = ? LIMIT 1", [
+      String(clanId),
+    ]);
+    if (clans.length === 0) {
+      throw new ClanError("El clan no existe.", 404);
+    }
+    await db.execute(
+      `INSERT IGNORE INTO clan_requests (clan_id, user_id, created_at)
+       VALUES (?, ?, ?)`,
+      [String(clanId), Number(userId), Date.now()],
+    );
+    return true;
+  }
+
+  async function listRequests(actorUserId) {
+    requireDb();
+    const membership = await membershipOf(actorUserId);
+    if (!membership) {
+      throw new ClanError("No perteneces a ningún clan.", 403);
+    }
+    if (ROLE_WEIGHT[membership.role] < ROLE_WEIGHT.officer) {
+      throw new ClanError("Solo el líder u oficiales ven las solicitudes.", 403);
+    }
+    return listRequestsInternal(membership.clan_id);
+  }
+
+  async function acceptRequest(actorUserId, targetUserId) {
+    requireDb();
+    const membership = await membershipOf(actorUserId);
+    if (!membership) {
+      throw new ClanError("No perteneces a ningún clan.", 403);
+    }
+    if (ROLE_WEIGHT[membership.role] < ROLE_WEIGHT.officer) {
+      throw new ClanError("Solo el líder u oficiales aceptan solicitudes.", 403);
+    }
+    const target = await membershipOf(targetUserId);
+    if (target) {
+      throw new ClanError("Ese jugador ya está en un clan.");
+    }
+    const rows = await db.query(
+      "SELECT id FROM clan_requests WHERE clan_id = ? AND user_id = ? LIMIT 1",
+      [membership.clan_id, Number(targetUserId)],
+    );
+    if (rows.length === 0) {
+      throw new ClanError("No hay una solicitud de ese jugador.", 404);
+    }
+    await db.transaction(async (connection) => {
+      await connection.execute(
+        `INSERT INTO clan_members (clan_id, user_id, role, joined_at)
+         VALUES (?, ?, 'member', ?)`,
+        [membership.clan_id, Number(targetUserId), Date.now()],
+      );
+      await connection.execute("DELETE FROM clan_requests WHERE user_id = ?", [
+        Number(targetUserId),
+      ]);
+      await connection.execute("DELETE FROM clan_invites WHERE user_id = ?", [
+        Number(targetUserId),
+      ]);
+    });
+    return true;
+  }
+
+  async function declineRequest(actorUserId, targetUserId) {
+    requireDb();
+    const membership = await membershipOf(actorUserId);
+    if (!membership) {
+      throw new ClanError("No perteneces a ningún clan.", 403);
+    }
+    if (ROLE_WEIGHT[membership.role] < ROLE_WEIGHT.officer) {
+      throw new ClanError("Solo el líder u oficiales rechazan solicitudes.", 403);
+    }
+    await db.execute(
+      "DELETE FROM clan_requests WHERE clan_id = ? AND user_id = ?",
+      [membership.clan_id, Number(targetUserId)],
     );
     return true;
   }
@@ -371,8 +546,13 @@ export function createClanStore({ db, logger = console } = {}) {
     clanDetail,
     myClan,
     clanIdOf,
+    eligibility,
     createClan,
     invite,
+    requestJoin,
+    listRequests,
+    acceptRequest,
+    declineRequest,
     acceptInvite,
     declineInvite,
     leaveClan,

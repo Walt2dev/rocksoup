@@ -357,6 +357,7 @@ export function createApiHandler({
             email: body.email,
             password: body.password,
             name: body.name,
+            ref: body.ref,
           },
           { userAgent: req.headers["user-agent"] ?? "" },
         );
@@ -567,11 +568,58 @@ export function createApiHandler({
         return true;
       }
 
+      if (pathname === "/api/clans/eligibility" && req.method === "GET") {
+        const { user } = await requireUser(req);
+        sendJson(res, 200, await clanStore.eligibility(user.id));
+        return true;
+      }
+
+      if (pathname === "/api/clans/request" && req.method === "POST") {
+        const { user } = await requireUser(req);
+        const body = await readJson(req);
+        await clanStore.requestJoin(user.id, String(body.clanId ?? ""));
+        sendJson(res, 200, { ok: true });
+        return true;
+      }
+
+      if (pathname === "/api/clans/requests" && req.method === "GET") {
+        const { user } = await requireUser(req);
+        sendJson(res, 200, { requests: await clanStore.listRequests(user.id) });
+        return true;
+      }
+
+      if (pathname === "/api/clans/requests/accept" && req.method === "POST") {
+        const { user } = await requireUser(req);
+        const body = await readJson(req);
+        await clanStore.acceptRequest(user.id, Number(body.userId));
+        sendJson(res, 200, { ok: true });
+        return true;
+      }
+
+      if (pathname === "/api/clans/requests/decline" && req.method === "POST") {
+        const { user } = await requireUser(req);
+        const body = await readJson(req);
+        await clanStore.declineRequest(user.id, Number(body.userId));
+        sendJson(res, 200, { ok: true });
+        return true;
+      }
+
       if (pathname === "/api/clans/invite" && req.method === "POST") {
         const { user } = await requireUser(req);
         const body = await readJson(req);
-        await clanStore.invite(String(body.clanId ?? ""), user.id, Number(body.userId));
-        sendJson(res, 200, { ok: true });
+        const clanId = body.clanId
+          ? String(body.clanId)
+          : await clanStore.clanIdOf(user.id);
+        if (!clanId) {
+          sendJson(res, 403, { error: "No perteneces a ningún clan." });
+          return true;
+        }
+        const result = await clanStore.invite(clanId, user.id, {
+          userId: body.userId,
+          email: body.email,
+          username: body.username,
+        });
+        sendJson(res, 200, { ok: true, userId: result.userId });
         return true;
       }
 

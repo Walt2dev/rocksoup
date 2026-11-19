@@ -12,6 +12,7 @@ const SCHEMA = [
     email VARCHAR(190) NULL,
     display_name VARCHAR(24) NOT NULL,
     avatar_url VARCHAR(255) NULL,
+    referred_by BIGINT UNSIGNED NULL,
     created_at BIGINT NOT NULL,
     updated_at BIGINT NOT NULL
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
@@ -211,6 +212,14 @@ const SCHEMA = [
     updated_at BIGINT NOT NULL,
     PRIMARY KEY (clan_a, clan_b)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS clan_requests (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    clan_id VARCHAR(12) NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
+    created_at BIGINT NOT NULL,
+    UNIQUE KEY uq_clan_request (clan_id, user_id),
+    KEY idx_clan_requests_user (user_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 ];
 
 const NETWORK_ERRORS = new Set([
@@ -318,6 +327,20 @@ export function createDatabase({ env = process.env, logger = console } = {}) {
             for (const statement of SCHEMA) {
               await candidate.query(statement);
             }
+            await candidate.query(
+              "ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by BIGINT UNSIGNED NULL",
+            );
+            await candidate.query(
+              `INSERT IGNORE INTO user_wallets (user_id, diamonds, updated_at)
+               SELECT id, 5, ? FROM users`,
+              [Date.now()],
+            );
+            await candidate.query(
+              `UPDATE user_wallets w
+               JOIN users u ON u.id = w.user_id
+               SET w.diamonds = 5
+               WHERE u.display_name = 'walking95mx' AND w.diamonds = 0`,
+            );
             pool = candidate;
             available = true;
             activeHost = host;

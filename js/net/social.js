@@ -758,38 +758,65 @@ export class SocialUI {
     }
     container.replaceChildren();
 
-    if (this.myRankEntry) {
-      const me = document.createElement("p");
-      me.className = "ranking-next";
-      me.textContent =
-        `Tu puesto: #${this.myRankEntry.rank ?? "-"} · ` +
-        `${this.myRankEntry.points ?? 0} pts · ` +
-        `${this.myRankEntry.villages ?? 0} aldeas conquistadas`;
-      container.append(me);
-    }
-
     const entries = Array.isArray(this.conquistaRanking) ? this.conquistaRanking : [];
+    const leader = entries[0] ?? null;
+    const mine = this.myRankEntry;
+
+    const goal = document.createElement("div");
+    goal.className = "ranking-goal";
+    if (mine && mine.rank === 1) {
+      goal.classList.add("is-first");
+      const crown = document.createElement("span");
+      crown.className = "ranking-crown";
+      crown.textContent = "\u2605";
+      const text = document.createElement("span");
+      text.textContent = "\u00a1Eres el #1 del mundo! Defiende tu puesto.";
+      goal.append(crown, text);
+    } else if (mine && leader) {
+      const missing = Math.max(0, (leader.points ?? 0) - (mine.points ?? 0));
+      const text = document.createElement("span");
+      text.textContent = `Est\u00e1s #${mine.rank ?? "-"} \u00b7 te faltan ${missing} pts para el #1 (${leader.name ?? "l\u00edder"})`;
+      goal.append(text);
+      const bar = document.createElement("div");
+      bar.className = "ranking-progress";
+      const fill = document.createElement("span");
+      fill.className = "ranking-progress-fill";
+      const pct = leader.points > 0
+        ? Math.min(100, Math.round(((mine.points ?? 0) / leader.points) * 100))
+        : 0;
+      fill.style.width = `${pct}%`;
+      bar.append(fill);
+      goal.append(bar);
+    } else if (mine) {
+      goal.append(document.createTextNode(`Est\u00e1s #${mine.rank ?? "-"} \u00b7 ${mine.points ?? 0} pts`));
+    } else {
+      goal.append(document.createTextNode("A\u00fan no tienes puntos. \u00a1Conquista aldeas y entrena tu ej\u00e9rcito para ser el #1!"));
+    }
+    container.append(goal);
+
     if (entries.length === 0) {
       const empty = document.createElement("p");
       empty.className = "ranking-empty";
-      empty.textContent =
-        "Aún no hay conquistas. Conquista aldeas y entrena tu ejército para sumar puntos.";
+      empty.textContent = "A\u00fan no hay conquistas. \u00a1S\u00e9 el primero en llegar al #1!";
       container.append(empty);
       this.renderRankingTabs();
       return;
     }
 
     const fragment = document.createDocumentFragment();
-    const myId = this.myRankEntry?.userId ?? null;
-    for (const entry of entries) {
+    const myId = mine?.userId ?? null;
+    entries.forEach((entry, index) => {
       const row = document.createElement("div");
       row.className = "ranking-row";
       if (entry.userId === myId) {
         row.classList.add("is-self");
       }
+      if (index === 0) {
+        row.classList.add("is-first");
+      }
       const rank = document.createElement("span");
       rank.className = "ranking-rank";
-      rank.textContent = String(entry.rank ?? "");
+      rank.textContent = String(entry.rank ?? index + 1);
       const main = document.createElement("div");
       main.className = "ranking-main";
       const name = document.createElement("strong");
@@ -797,19 +824,17 @@ export class SocialUI {
       name.textContent = entry.name ?? "Jugador";
       const meta = document.createElement("span");
       meta.className = "ranking-meta";
-      meta.textContent =
-        `${entry.villages ?? 0} aldeas · ${entry.units ?? 0} unidades · ${entry.waves ?? 0} oleadas`;
+      meta.textContent = `${entry.villages ?? 0} aldeas \u00b7 ${entry.units ?? 0} unidades \u00b7 ${entry.waves ?? 0} oleadas`;
       main.append(name, meta);
       const value = document.createElement("span");
       value.className = "ranking-value";
       value.textContent = `${entry.points ?? 0} pts`;
       row.append(rank, main, value);
       fragment.append(row);
-    }
+    });
     container.append(fragment);
     this.renderRankingTabs();
   }
-
   renderRankingTabs() {
     const tabs = this.hud.rankingTabs;
     if (!tabs) {
