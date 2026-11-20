@@ -1,6 +1,7 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from "../vendor/fflate.js";
 import { BUILTIN_SKINS } from "./skins.js";
 import { BUILTIN_DONKEY_SKINS } from "./donkeySkins.js";
+import { LEGACY_WOOD_IDS } from "../world/woods.js";
 import {
   PACK_LIMITS,
   SPRITE_DEFS,
@@ -229,6 +230,14 @@ export function applyPackToAssets(assets, pack) {
     } else {
       writeAt(assets, def.path, frames[0]);
     }
+  }
+
+  if (assets.treeSpritesByWood) {
+    LEGACY_WOOD_IDS.forEach((woodId, index) => {
+      if (assets.treeSprites?.[index]) {
+        assets.treeSpritesByWood[woodId] = assets.treeSprites[index];
+      }
+    });
   }
 
   const characterManifest =

@@ -108,7 +108,17 @@ export class WorldRenderer {
     stonePaths = [],
     celestial = null,
   }) {
-    ctx.fillStyle = BACKGROUND;
+    if (world.realm === "sky") {
+      const sky = ctx.createLinearGradient(0, 0, 0, height);
+      sky.addColorStop(0, "#78a7d6");
+      sky.addColorStop(0.55, "#a7ccef");
+      sky.addColorStop(1, "#e5f2ff");
+      ctx.fillStyle = sky;
+    } else if (world.realm === "underground") {
+      ctx.fillStyle = "#05060a";
+    } else {
+      ctx.fillStyle = BACKGROUND;
+    }
     ctx.fillRect(0, 0, width, height);
     this.pickables = [];
     const waterPath = new Path2D();
@@ -752,7 +762,12 @@ export class WorldRenderer {
   }
 
   drawTree(ctx, prop, assets, zoom) {
-    const spriteSet = assets.treeSprites?.[prop.data.species];
+    const woodId = prop.data.woodId;
+    const legacyId = ["roble", "pino", "ceiba", "cactus"][prop.data.species] ?? "roble";
+    const spriteSet =
+      assets.treeSpritesByWood?.[woodId] ??
+      assets.treeSpritesByWood?.[legacyId] ??
+      assets.treeSprites?.[prop.data.species];
     if (!spriteSet || spriteSet.length === 0) {
       return;
     }
@@ -941,8 +956,13 @@ export class WorldRenderer {
 
   drawStump(ctx, prop, zoom) {
     const scale = (prop.data.scale ?? 1) * zoom;
+    const woodId = prop.data.woodId;
+    const isCactus =
+      prop.data.species === 3 ||
+      prop.data.shape === "cactus" ||
+      woodId === "cactus";
 
-    if (prop.data.species === 3) {
+    if (isCactus) {
       ctx.beginPath();
       ctx.ellipse(prop.screenX, prop.screenY, 8 * scale, 3 * scale, 0, 0, Math.PI * 2);
       ctx.fillStyle = "rgba(0, 0, 0, 0.22)";

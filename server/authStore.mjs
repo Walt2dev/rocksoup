@@ -9,11 +9,11 @@ import {
 import { promisify } from "node:util";
 
 import { hashToken } from "./leaderboardStore.mjs";
+import { STARTING_WALLET } from "../js/game/economy.js";
 
 const SESSION_COOKIE = "rs_session";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-const STARTING_DIAMONDS = 5;
-const REFERRAL_DIAMONDS = 5;
+const REFERRAL_DRAC_COINS = 250;
 const GOOGLE_CERTS_URL = "https://www.googleapis.com/oauth2/v3/certs";
 const GOOGLE_ISSUERS = new Set([
   "accounts.google.com",
@@ -417,9 +417,10 @@ export function createAuthStore({ db, env = process.env, logger = console } = {}
       );
 
       await connection.execute(
-        `INSERT IGNORE INTO user_wallets (user_id, diamonds, updated_at)
-         VALUES (?, ?, ?)`,
-        [userId, STARTING_DIAMONDS, now],
+        `INSERT IGNORE INTO economy_wallets
+           (user_id, drac_coins, prestige, updated_at)
+         VALUES (?, ?, ?, ?)`,
+        [userId, STARTING_WALLET.dracCoins, STARTING_WALLET.prestige, now],
       );
 
       try {
@@ -440,12 +441,13 @@ export function createAuthStore({ db, env = process.env, logger = console } = {}
             );
             if (Number(updated.affectedRows) > 0) {
               await connection.execute(
-                `INSERT INTO user_wallets (user_id, diamonds, updated_at)
-                 VALUES (?, ?, ?)
+                `INSERT INTO economy_wallets
+                   (user_id, drac_coins, prestige, updated_at)
+                 VALUES (?, ?, 0, ?)
                  ON DUPLICATE KEY UPDATE
-                   diamonds = diamonds + VALUES(diamonds),
+                   drac_coins = drac_coins + VALUES(drac_coins),
                    updated_at = VALUES(updated_at)`,
-                [referrerId, REFERRAL_DIAMONDS, now],
+                [referrerId, REFERRAL_DRAC_COINS, now],
               );
             }
           }
@@ -543,9 +545,15 @@ export function createAuthStore({ db, env = process.env, logger = console } = {}
     );
     await db
       .execute(
-        `INSERT IGNORE INTO user_wallets (user_id, diamonds, updated_at)
-         VALUES (?, ?, ?)`,
-        [Number(result.insertId), STARTING_DIAMONDS, now],
+        `INSERT IGNORE INTO economy_wallets
+           (user_id, drac_coins, prestige, updated_at)
+         VALUES (?, ?, ?, ?)`,
+        [
+          Number(result.insertId),
+          STARTING_WALLET.dracCoins,
+          STARTING_WALLET.prestige,
+          now,
+        ],
       )
       .catch(() => {});
     return findUserById(result.insertId);

@@ -1,72 +1,18 @@
 import { createRng } from "../core/rng.js";
 import { generateTree } from "../world/lsystem.js";
 import { TREE_VARIANTS } from "../world/vegetation.js";
+import {
+  BUILTIN_WOODS,
+  legacyWoodIdForSpecies,
+  normalizeWoodStyle,
+} from "../world/woods.js";
 
 const RESOLUTION = 2;
 const PADDING = 9;
 
-export const TREE_STYLES = Object.freeze([
-  Object.freeze({
-    key: "roble",
-    trunk: "#5a3e2a",
-    branch: "#6d4d33",
-    leaves: ["#3d7138", "#4d8644", "#619d56"],
-    highlight: "#7db56a",
-    angle: 25,
-    branchScale: 0.72,
-    trunkLength: 7.5,
-    iterations: 3,
-    leafScale: 1.18,
-    leafAspectX: 1,
-    leafAspectY: 0.9,
-    clusters: 4,
-  }),
-  Object.freeze({
-    key: "pino",
-    trunk: "#4a3628",
-    branch: "#5c4432",
-    leaves: ["#2a5a3c", "#356e49", "#438156"],
-    highlight: "#5d9e6e",
-    angle: 17,
-    branchScale: 0.79,
-    trunkLength: 9,
-    iterations: 3,
-    leafScale: 0.95,
-    leafAspectX: 0.72,
-    leafAspectY: 1.35,
-    clusters: 3,
-  }),
-  Object.freeze({
-    key: "ceiba",
-    trunk: "#59452d",
-    branch: "#725a3a",
-    leaves: ["#1f5a31", "#2b7040", "#3b8a4d"],
-    highlight: "#69b86f",
-    angle: 32,
-    branchScale: 0.78,
-    trunkLength: 8.5,
-    iterations: 3,
-    leafScale: 1.4,
-    leafAspectX: 1.15,
-    leafAspectY: 0.95,
-    clusters: 5,
-  }),
-  Object.freeze({
-    key: "cactus",
-    trunk: "#3d7445",
-    branch: "#4f8a52",
-    leaves: ["#3d7445", "#4f8a52", "#65a563"],
-    highlight: "#8cc47f",
-    angle: 20,
-    branchScale: 0.7,
-    trunkLength: 8,
-    iterations: 2,
-    leafScale: 1,
-    leafAspectX: 1,
-    leafAspectY: 1,
-    clusters: 2,
-  }),
-]);
+export const TREE_STYLES = Object.freeze(
+  BUILTIN_WOODS.map((entry) => Object.freeze({ key: entry.id, ...entry.style })),
+);
 
 function createCactusSprite(variantIndex) {
   const width = 38;
@@ -144,6 +90,63 @@ function createCactusSprite(variantIndex) {
     ctx.moveTo(cx + side * 5.8, y);
     ctx.lineTo(cx + side * 8.2, y - 0.8);
     ctx.stroke();
+  }
+
+  return {
+    canvas,
+    width,
+    height,
+    anchorX: cx,
+    anchorY: baseY,
+  };
+}
+
+function createMushroomSprite(style, variantIndex) {
+  const width = 54;
+  const height = 66;
+  const canvas = document.createElement("canvas");
+  canvas.width = width * RESOLUTION;
+  canvas.height = height * RESOLUTION;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(RESOLUTION, RESOLUTION);
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+
+  const cx = width / 2;
+  const baseY = height - 5;
+  const capColor = style.leaves[variantIndex % style.leaves.length];
+  const capDark = style.branch;
+  const stem = style.trunk;
+
+  ctx.beginPath();
+  ctx.ellipse(cx, baseY, 13, 4, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(18, 12, 24, 0.4)";
+  ctx.fill();
+
+  roundedRectPath(ctx, cx - 4.5, baseY - 28, 9, 28, 4);
+  ctx.fillStyle = stem;
+  ctx.fill();
+  ctx.strokeStyle = "rgba(40, 28, 46, 0.6)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.ellipse(cx, baseY - 30, 19 + (variantIndex % 3) * 2, 11, 0, Math.PI, 0);
+  ctx.lineTo(cx + 19, baseY - 29);
+  ctx.quadraticCurveTo(cx, baseY - 22, cx - 19, baseY - 29);
+  ctx.closePath();
+  ctx.fillStyle = capColor;
+  ctx.fill();
+  ctx.strokeStyle = capDark;
+  ctx.stroke();
+
+  for (let index = 0; index < 4; index += 1) {
+    const x = cx - 12 + index * 7;
+    const y = baseY - 33 - (index % 2) * 3;
+    ctx.beginPath();
+    ctx.arc(x, y, 1.6 + (index % 2) * 0.6, 0, Math.PI * 2);
+    ctx.fillStyle = style.highlight;
+    ctx.fill();
   }
 
   return {
@@ -244,14 +247,22 @@ function rasterizeTree(tree, style, seed) {
   };
 }
 
-export function createTreeSprite(speciesIndex, variantIndex, bootSeed) {
-  const style = TREE_STYLES[speciesIndex % TREE_STYLES.length];
+export function createTreeSpriteFromStyle(
+  styleValue,
+  variantIndex,
+  bootSeed,
+  key = "custom",
+) {
+  const style = normalizeWoodStyle(styleValue);
 
-  if (style.key === "cactus") {
+  if (style.shape === "cactus") {
     return createCactusSprite(variantIndex);
   }
+  if (style.shape === "mushroom") {
+    return createMushroomSprite(style, variantIndex);
+  }
 
-  const seed = `${bootSeed}:tree:${style.key}:${variantIndex}`;
+  const seed = `${bootSeed}:tree:${key}:${variantIndex}`;
   const tree = generateTree({
     seed,
     iterations: style.iterations,
@@ -261,6 +272,17 @@ export function createTreeSprite(speciesIndex, variantIndex, bootSeed) {
   });
 
   return rasterizeTree(tree, style, seed);
+}
+
+export function createTreeSprite(woodOrIndex, variantIndex, bootSeed) {
+  const wood =
+    woodOrIndex && typeof woodOrIndex === "object"
+      ? woodOrIndex
+      : BUILTIN_WOODS[
+          Math.abs(Math.floor(Number(woodOrIndex) || 0)) % BUILTIN_WOODS.length
+        ];
+  const id = wood?.id ?? legacyWoodIdForSpecies(woodOrIndex);
+  return createTreeSpriteFromStyle(wood?.style, variantIndex, bootSeed, id);
 }
 
 export function treeVariantCount() {

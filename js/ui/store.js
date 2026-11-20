@@ -1,34 +1,40 @@
 ﻿import { api } from "../net/api.js";
 import { getCurrentUser } from "../net/auth.js";
+import {
+  ECONOMY_PRODUCTS,
+  createLocalEconomy,
+  economyProductGrants,
+  formatEconomyPrice,
+} from "../game/economy.js";
+import {
+  ITEM_INFO,
+  RESOURCE_INFO,
+  TOOL_INFO,
+  UPGRADE_INFO,
+} from "../game/inventory.js";
 
 const TAB_LABELS = {
-  exclusive: "Exclusivo",
-  recommended: "Para Mi",
+  recommended: "Para mí",
   resources: "Recursos",
-  packs: "Packs",
+  essences: "Esencias",
+  equipment: "Equipo",
+  contracts: "Contratos",
+  prestige: "Prestigio",
 };
 
-const TAB_ORDER = ["exclusive", "recommended", "resources", "packs"];
+const TAB_ORDER = [
+  "recommended",
+  "resources",
+  "essences",
+  "equipment",
+  "contracts",
+  "prestige",
+];
+
 const PACK_IDS = new Set(["feudo_chest", "adventurer_pack"]);
-const NAMESPACE = {
-  capture: "paypalCapture",
-  subscription: "paypalSubscription",
-};
 
 function el(id) {
   return document.getElementById(id);
-}
-
-function formatPrice(cents, currency = "MXN") {
-  try {
-    return new Intl.NumberFormat("es-MX", {
-      style: "currency",
-      currency,
-      maximumFractionDigits: 2,
-    }).format((Number(cents) || 0) / 100);
-  } catch {
-    return `$${((Number(cents) || 0) / 100).toFixed(2)} ${currency}`;
-  }
 }
 
 function setStatus(message, isError = false) {
@@ -49,105 +55,241 @@ function setModalStatus(message, isError = false) {
   node.classList.toggle("is-error", Boolean(isError));
 }
 
-function loadSdk(url, namespace) {
-  if (!url) {
-    return Promise.reject(new Error("PayPal no estÃ¡ configurado"));
+function describeGrantsLocal(grants) {
+  const labels = [];
+  for (const [key, amount] of Object.entries(grants?.resources ?? {})) {
+    const info = RESOURCE_INFO[key];
+    labels.push(`${amount} ${info?.label ?? key}`);
   }
-  if (window[namespace]) {
-    return Promise.resolve(window[namespace]);
+  for (const [key, amount] of Object.entries(grants?.items ?? {})) {
+    const info = ITEM_INFO[key];
+    labels.push(`${amount} ${info?.label ?? key}`);
   }
-  const existing = document.querySelector(
-    `script[data-namespace="${namespace}"]`,
-  );
-  if (existing) {
-    return new Promise((resolve, reject) => {
-      if (window[namespace]) {
-        resolve(window[namespace]);
-        return;
-      }
-      existing.addEventListener(
-        "load",
-        () => resolve(window[namespace]),
-        { once: true },
-      );
-      existing.addEventListener(
-        "error",
-        () => reject(new Error("No se pudo cargar PayPal")),
-        { once: true },
-      );
-    });
+  if (Number.isFinite(grants?.energy) && grants.energy > 0) {
+    labels.push(`+${grants.energy} energía`);
   }
+  for (const upgrade of grants?.upgrades ?? []) {
+    labels.push(UPGRADE_INFO[upgrade]?.label ?? upgrade);
+  }
+  for (const tool of grants?.tools ?? []) {
+    labels.push(TOOL_INFO[tool]?.label ?? tool);
+  }
+  if (Number.isFinite(grants?.worldSlots) && grants.worldSlots > 0) {
+    labels.push(`+${grants.worldSlots} slot de mundo`);
+  }
+  return labels;
+}
 
-  return new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = url;
-    script.async = true;
-    script.setAttribute("data-namespace", namespace);
-    script.setAttribute("data-sdk-integration-source", "button-factory");
-    script.addEventListener(
-      "load",
-      () => {
-        if (window[namespace]) {
-          resolve(window[namespace]);
-        } else {
-          reject(new Error("PayPal no expuso su API"));
-        }
-      },
-      { once: true },
-    );
-    script.addEventListener(
-      "error",
-      () => reject(new Error("No se pudo cargar PayPal")),
-      { once: true },
-    );
-    document.head.appendChild(script);
-  });
+function normalizeLocalProduct(entry) {
+  return {
+    id: entry.id,
+    name: entry.name,
+    description: entry.description,
+    category: entry.category,
+    kind: entry.kind,
+    price: entry.price,
+    currency: entry.price.currency,
+    contractDays: entry.contractDays ?? null,
+    needsWorld: localNeedsWorld(entry),
+    icon: entry.icon,
+    badge: entry.badge ?? null,
+    highlights: Array.isArray(entry.highlights) ? [...entry.highlights] : [],
+    preview: describeGrantsLocal(economyProductGrants(entry)),
+    active: true,
+  };
+}
+
+function localNeedsWorld(entry) {
+  if (
+    entry.kind !== "one_time" ||
+    entry.category === "world" ||
+    entry.category === "prestige"
+  ) {
+    return false;
+  }
+  const grants = economyProductGrants(entry);
+  return Boolean(
+    Object.keys(grants.resources ?? {}).length ||
+      Object.keys(grants.items ?? {}).length ||
+      grants.energy ||
+      (grants.upgrades ?? []).length ||
+      (grants.tools ?? []).length,
+  );
+}
+
+function localProducts() {
+  return ECONOMY_PRODUCTS.map(normalizeLocalProduct);
+}
+
+function formatNumber(value) {
+  return Math.max(0, Math.floor(Number(value) || 0)).toLocaleString("es-MX");
+}
+
+function productNeedsWorld(product) {
+  return Boolean(product?.needsWorld);
 }
 
 export function createStoreUI({
   onOpenAccount,
   onPurchased,
-  onGrants,
+  onLocalPurchase,
   getPlayerState,
   onBack,
 } = {}) {
+  let localEconomy;
+  try {
+    localEconomy = createLocalEconomy(window.localStorage);
+  } catch {
+    localEconomy = createLocalEconomy(null);
+  }
   let user = null;
   let products = [];
   let config = null;
   let summary = null;
-  let category = "exclusive";
+  let category = "recommended";
   let activeProduct = null;
-  let buyButton = null;
   let preparing = false;
 
-  function openAccountPrompt() {
+  function currentWallet() {
+    if (user) {
+      return summary?.wallet ?? { dracCoins: 0, prestige: 0 };
+    }
+    return localEconomy.readWallet();
+  }
+
+  function canAfford(product) {
+    const wallet = currentWallet();
+    if (product.price.currency === "prestige") {
+      return wallet.prestige >= product.price.amount;
+    }
+    return wallet.dracCoins >= product.price.amount;
+  }
+
+  function renderGuestBar() {
     const container = el("store-account");
     if (!container) {
       return;
     }
     container.hidden = false;
     container.replaceChildren();
+    const wallet = currentWallet();
     const text = document.createElement("p");
     text.className = "account-note";
     text.textContent =
-      "Inicia sesiÃ³n o crea tu cuenta para comprar. La compra queda registrada en tu perfil.";
+      "Modo local: gana DracCoins y Prestigio jugando. Inicia sesión para guardarlos en la nube.";
+    const balance = document.createElement("span");
+    balance.className = "store-guest-balance";
+    balance.textContent = `🪙 ${formatNumber(wallet.dracCoins)} · ★ ${formatNumber(wallet.prestige)}`;
     const actions = document.createElement("div");
     actions.className = "store-login-actions";
+    const daily = document.createElement("button");
+    daily.type = "button";
+    daily.className = "menu-button";
+    daily.textContent = localEconomy.dailyStatus().available
+      ? "Reclamar diario"
+      : "Diario reclamado";
+    daily.disabled = !localEconomy.dailyStatus().available;
+    daily.addEventListener("click", () => {
+      const result = localEconomy.claimDaily();
+      if (!result.awarded) {
+        setStatus("El objetivo diario ya fue reclamado hoy.", true);
+        return;
+      }
+      onLocalPurchase?.({ grants: { resources: { esencia: result.essences } } });
+      setStatus(
+        `Objetivo diario: +${result.dracCoins} DracCoins, +${result.prestige} Prestigio, +${result.essences} Esencias.`,
+      );
+      renderAccountBar();
+      renderGrid();
+      onPurchased?.();
+    });
     const account = document.createElement("button");
     account.type = "button";
     account.className = "menu-button primary";
-    account.textContent = "Iniciar sesiÃ³n / Crear cuenta";
+    account.textContent = "Iniciar sesión / Crear cuenta";
     account.addEventListener("click", () => onOpenAccount?.());
-    actions.append(account);
-    container.append(text, actions);
+    actions.append(daily, account);
+    container.append(text, balance, actions);
+  }
+
+  function renderAccountBar() {
+    if (!user) {
+      renderGuestBar();
+      return;
+    }
+    const container = el("store-account");
+    if (!container) {
+      return;
+    }
+    container.hidden = false;
+    container.replaceChildren();
+    const wallet = currentWallet();
+    const text = document.createElement("p");
+    text.className = "account-note";
+    text.textContent = `${user.displayName} · ${summary?.slots?.used ?? 0}/${summary?.slots?.capacity ?? 1} mundos`;
+    const balance = document.createElement("span");
+    balance.className = "store-guest-balance";
+    balance.textContent = `🪙 ${formatNumber(wallet.dracCoins)} · ★ ${formatNumber(wallet.prestige)}`;
+    const actions = document.createElement("div");
+    actions.className = "store-login-actions";
+    const daily = document.createElement("button");
+    daily.type = "button";
+    daily.className = "menu-button";
+    daily.textContent = "Reclamar diario";
+    daily.addEventListener("click", () => {
+      void claimDaily();
+    });
+    const account = document.createElement("button");
+    account.type = "button";
+    account.className = "menu-button";
+    account.textContent = "Mi cuenta";
+    account.addEventListener("click", () => onOpenAccount?.());
+    actions.append(daily, account);
+    container.append(text, balance, actions);
+  }
+
+  async function claimDaily() {
+    if (preparing) {
+      return;
+    }
+    preparing = true;
+    try {
+      const result = await api("/api/economy/daily", {
+        method: "POST",
+        body: {},
+      });
+      if (!result?.awarded) {
+        setStatus("El objetivo diario ya fue reclamado hoy.", true);
+        return;
+      }
+      await refreshAfterPurchase(
+        `Objetivo diario: +${result.dracCoins} DracCoins, +${result.prestige} Prestigio, +${result.essences} Esencias.`,
+      );
+    } catch (error) {
+      setStatus(error.message, true);
+    } finally {
+      preparing = false;
+    }
   }
 
   function productTab(product) {
-    if (product.category === "armor" || product.category === "world") {
-      return "exclusive";
+    if (product.category === "world") {
+      return "equipment";
     }
-    if (product.category === "subscription" || PACK_IDS.has(product.id)) {
-      return "packs";
+    if (
+      product.category === "resources" ||
+      product.category === "essences" ||
+      product.category === "equipment" ||
+      product.category === "contracts" ||
+      product.category === "prestige"
+    ) {
+      return product.category;
+    }
+    if (product.kind === "contract") {
+      return "contracts";
+    }
+    if (product.kind === "prestige" || product.category === "armor") {
+      return "prestige";
     }
     return "resources";
   }
@@ -163,9 +305,9 @@ export function createStoreUI({
     };
 
     if (!save) {
-      add("energy_small", "Prueba desde 5 MXN");
+      add("energy_small", "Prueba desde 120 DracCoins");
       add("adventurer_pack", "Ideal para empezar");
-      add("diamonds_20", "Popular");
+      add("essence_small", "Recetas especiales");
       return recommendations.slice(0, 6);
     }
 
@@ -267,7 +409,12 @@ export function createStoreUI({
         const badge = document.createElement("span");
         badge.className = "store-badge";
         badge.textContent =
-          product.badge || (product.kind === "subscription" ? "Mensual" : "Pago único");
+          product.badge ||
+          (product.kind === "contract"
+            ? "Contrato"
+            : product.kind === "prestige"
+              ? "Prestigio"
+              : "Pago único");
         titleWrap.append(title, badge);
         head.append(icon, titleWrap);
 
@@ -289,7 +436,7 @@ export function createStoreUI({
           chip.textContent = item;
           preview.append(chip);
         }
-        if (product.kind === "subscription") {
+        if (product.kind === "contract") {
           for (const item of product.highlights ?? []) {
             const chip = document.createElement("span");
             chip.className = "store-chip-alt";
@@ -302,17 +449,16 @@ export function createStoreUI({
         footer.className = "store-product-footer";
         const price = document.createElement("strong");
         price.className = "store-price";
-        price.textContent = formatPrice(product.priceCents, product.currency);
+        price.textContent = formatEconomyPrice(product.price);
         const buy = document.createElement("button");
         buy.type = "button";
         buy.className = "store-buy";
-        const paymentsEnabled = config?.paymentsEnabled !== false;
-        buy.textContent = paymentsEnabled
-          ? product.kind === "subscription"
-            ? "Suscribirme"
-            : "Comprar"
-          : "No disponible";
-        buy.disabled = !paymentsEnabled;
+        buy.textContent =
+          product.kind === "contract"
+            ? "Contratar"
+            : product.kind === "prestige"
+              ? "Desbloquear"
+              : "Comprar";
         buy.addEventListener("click", () => {
           void openProduct(product);
         });
@@ -328,36 +474,8 @@ export function createStoreUI({
     );
   }
 
-  function renderAccountBar() {
-    const container = el("store-account");
-    if (!container) {
-      return;
-    }
-    if (!user) {
-      openAccountPrompt();
-      return;
-    }
-    container.hidden = false;
-    container.replaceChildren();
-    const text = document.createElement("p");
-    text.className = "account-note";
-    text.textContent = `${user.displayName} Â· ${summary?.diamonds ?? 0} diamantes Â· ${summary?.slots?.used ?? 0}/${summary?.slots?.capacity ?? 1} mundos`;
-    const account = document.createElement("button");
-    account.type = "button";
-    account.className = "menu-button";
-    account.textContent = "Mi cuenta";
-    account.addEventListener("click", () => onOpenAccount?.());
-    container.append(text, account);
-  }
-
   function selectedWorldId(product) {
-    if (
-      !user ||
-      !product ||
-      product.category === "diamonds" ||
-      product.category === "world" ||
-      product.kind === "subscription"
-    ) {
+    if (!user || !productNeedsWorld(product)) {
       return null;
     }
     const select = el("store-world-select");
@@ -370,10 +488,7 @@ export function createStoreUI({
     if (!field || !select) {
       return;
     }
-    const needsWorld =
-      product.kind === "one_time" &&
-      product.category !== "diamonds" &&
-      product.category !== "world";
+    const needsWorld = productNeedsWorld(product);
     field.hidden = !needsWorld || !user;
     if (!needsWorld || !user) {
       return;
@@ -383,24 +498,36 @@ export function createStoreUI({
       ...worlds.map((world) => {
         const option = document.createElement("option");
         option.value = world.id;
-        option.textContent = `${world.name} Â· ${world.seed}`;
+        option.textContent = `${world.name} · ${world.seed}`;
         return option;
       }),
     );
     if (worlds.length === 0) {
       const option = document.createElement("option");
       option.value = "";
-      option.textContent = "Sin mundos: se guardarÃ¡ como recompensa pendiente";
+      option.textContent = "Sin mundos: se guardará como recompensa pendiente";
       select.append(option);
     }
   }
 
+  function renderPurchaseButton(product, container) {
+    container.replaceChildren();
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "store-buy store-buy-wide";
+    button.textContent = canAfford(product)
+      ? product.kind === "contract"
+        ? "Contratar ahora"
+        : "Comprar ahora"
+      : "Saldo insuficiente";
+    button.disabled = preparing;
+    button.addEventListener("click", () => {
+      void purchaseActive(product);
+    });
+    container.append(button);
+  }
+
   async function openProduct(product) {
-    if (!user) {
-      setStatus("Inicia sesiÃ³n o crea una cuenta para comprar.", true);
-      onOpenAccount?.();
-      return;
-    }
     activeProduct = product;
     const modal = el("store-modal");
     if (!modal) {
@@ -408,7 +535,9 @@ export function createStoreUI({
     }
     el("store-modal-icon").textContent = product.icon;
     el("store-modal-title").textContent = product.name;
-    el("store-modal-price").textContent = `${formatPrice(product.priceCents, product.currency)}${product.kind === "subscription" ? " / mes" : ""}`;
+    el("store-modal-price").textContent = `${formatEconomyPrice(product.price)}${
+      product.kind === "contract" ? ` / ${product.contractDays ?? 30} días` : ""
+    }`;
     el("store-modal-desc").textContent = product.description;
     const preview = el("store-modal-preview");
     preview.replaceChildren(
@@ -420,33 +549,10 @@ export function createStoreUI({
     );
     renderWorldSelect(product);
     setModalStatus("");
-    const buttonContainer = el("paypal-button-container");
+    const buttonContainer = el("store-purchase-container");
     buttonContainer.replaceChildren();
     modal.hidden = false;
-
-    try {
-      if (config?.paymentsEnabled === false) {
-        setModalStatus(
-          "Los pagos están deshabilitados temporalmente. Puedes explorar la tienda.",
-          true,
-        );
-        return;
-      }
-      if (!config?.configured) {
-        setModalStatus(
-          "PayPal aún no está configurado en el servidor. Añade las credenciales de PayPal Business.",
-          true,
-        );
-        return;
-      }
-      if (product.kind === "subscription") {
-        await mountSubscriptionButton(product, buttonContainer);
-      } else {
-        await mountCaptureButton(product, buttonContainer);
-      }
-    } catch (error) {
-      setModalStatus(error.message, true);
-    }
+    renderPurchaseButton(product, buttonContainer);
   }
 
   function closeModal() {
@@ -501,110 +607,86 @@ export function createStoreUI({
     onPurchased?.(message);
   }
 
-  async function mountCaptureButton(product, container) {
-    const paypal = await loadSdk(config.captureSdkUrl, NAMESPACE.capture);
-    container.replaceChildren();
-    buyButton = paypal.Buttons({
-      style: { shape: "pill", color: "gold", layout: "vertical", label: "paypal" },
-      createOrder: async () => {
-        setModalStatus("Creando orden segura...");
-        const order = await api("/api/store/orders", {
+  async function purchaseActive(product) {
+    if (preparing) {
+      return;
+    }
+    if (!canAfford(product)) {
+      setModalStatus("No tienes saldo suficiente para esta compra.", true);
+      return;
+    }
+    preparing = true;
+    const buttonContainer = el("store-purchase-container");
+    if (buttonContainer) {
+      renderPurchaseButton(product, buttonContainer);
+    }
+    try {
+      if (user) {
+        setModalStatus("Procesando compra...");
+        const result = await api("/api/store/purchase", {
           method: "POST",
           body: {
             productId: product.id,
             worldId: selectedWorldId(product),
           },
         });
-        setModalStatus("Completa el pago en PayPal...");
-        return order.orderId;
-      },
-      onApprove: async (data) => {
-        setModalStatus("Confirmando pago con PayPal...");
-        try {
-          const result = await api(
-            `/api/store/orders/${encodeURIComponent(data.orderID)}/capture`,
-            { method: "POST", body: {} },
-          );
-          const pending = result?.grant?.pending;
-          await refreshAfterPurchase(
-            pending
+        const pending = result?.grant?.pending || result?.grantError;
+        await refreshAfterPurchase(
+          result?.grantError
+            ? "Compra registrada. La entrega quedó pendiente; revisa tu inventario al cargar el mundo."
+            : pending
               ? "Compra completada. Los recursos te esperan al cargar un mundo."
-              : "Compra completada y entregada.",
-          );
-        } catch (error) {
-          setModalStatus(error.message, true);
-        }
-      },
-      onError: (error) => {
-        setModalStatus(`PayPal: ${error?.message ?? "error desconocido"}`, true);
-      },
-      onCancel: () => setModalStatus("Pago cancelado."),
-    });
-    if (!buyButton.isEligible?.() && buyButton.isEligible) {
-      setModalStatus("PayPal no estÃ¡ disponible en este navegador.", true);
-      return;
-    }
-    await buyButton.render(container);
-  }
-
-  async function mountSubscriptionButton(product, container) {
-    if (preparing) {
-      return;
-    }
-    preparing = true;
-    try {
-      setModalStatus("Preparando suscripciÃ³n...");
-      const intent = await api("/api/store/subscriptions/intent", {
-        method: "POST",
-        body: { productId: product.id },
-      });
-      const paypal = await loadSdk(
-        config.subscriptionSdkUrl,
-        NAMESPACE.subscription,
-      );
-      container.replaceChildren();
-      buyButton = paypal.Buttons({
-        style: { shape: "pill", color: "gold", layout: "vertical", label: "subscribe" },
-        createSubscription: (_data, actions) =>
-          actions.subscription.create({
-            plan_id: intent.planId,
-            custom_id: intent.customId,
-          }),
-        onApprove: async (data) => {
-          setModalStatus("Activando suscripciÃ³n...");
-          try {
-            await api("/api/store/subscriptions/confirm", {
-              method: "POST",
-              body: { subscriptionId: data.subscriptionID },
-            });
-            await refreshAfterPurchase(
-              "SuscripciÃ³n activa. RecibirÃ¡s recursos cada 24 horas.",
-            );
-          } catch (error) {
-            setModalStatus(error.message, true);
-          }
-        },
-        onError: (error) => {
+              : product.kind === "contract"
+                ? "Contrato activo. Recibirás recursos cada 24 horas."
+                : "Compra completada y entregada.",
+        );
+      } else {
+        const result = localEconomy.purchase(product.id);
+        if (!result.ok) {
           setModalStatus(
-            `PayPal: ${error?.message ?? "error desconocido"}`,
+            result.message ??
+              (result.reason === "insufficient_funds"
+                ? "No tienes saldo suficiente."
+                : "No se pudo completar la compra local."),
             true,
           );
-        },
-        onCancel: () => setModalStatus("SuscripciÃ³n cancelada."),
-      });
-      await buyButton.render(container);
-      setModalStatus("");
+          return;
+        }
+        onLocalPurchase?.({
+          grants: result.grants,
+          worldId: selectedWorldId(product),
+          product,
+        });
+        await refreshAfterPurchase("Compra local completada. Se entregará al cargar tu mundo.");
+      }
+    } catch (error) {
+      setModalStatus(error.message, true);
     } finally {
       preparing = false;
+      if (activeProduct) {
+        const container = el("store-purchase-container");
+        if (container) {
+          renderPurchaseButton(activeProduct, container);
+        }
+      }
+    }
+  }
+
+  async function loadProducts() {
+    try {
+      const storeData = await api("/api/store/products");
+      products = storeData.products ?? localProducts();
+      config = storeData.config ?? null;
+    } catch {
+      products = localProducts();
+      config = { economyEnabled: true, local: true };
     }
   }
 
   async function refresh() {
     setStatus("Cargando tienda...");
     try {
-      const storeData = await api("/api/store/products");
-      products = storeData.products ?? [];
-      config = storeData.config ?? null;
+      await loadProducts();
 
       try {
         user = await getCurrentUser();
@@ -626,16 +708,18 @@ export function createStoreUI({
       renderTabs();
       renderGrid();
 
-      if (config?.paymentsEnabled === false) {
+      if (!user) {
         setStatus(
-          "Los pagos están deshabilitados temporalmente. Puedes explorar la tienda.",
+          "Modo local: gana DracCoins jugando y canjéalos aquí. Inicia sesión para la nube y los contratos.",
         );
-      } else if (!config?.configured) {
-        setStatus("PayPal no está configurado todavía.");
-      } else if (!user) {
-        setStatus("Inicia sesión para comprar. Puedes ver todo el catálogo.");
       } else {
         setStatus("");
+      }
+      if (activeProduct) {
+        const container = el("store-purchase-container");
+        if (container) {
+          renderPurchaseButton(activeProduct, container);
+        }
       }
     } catch (error) {
       setStatus(error.message, true);
@@ -660,7 +744,7 @@ export function createStoreUI({
         if (productId) {
           const product = products.find((entry) => entry.id === productId);
           if (product) {
-            category = product.category;
+            category = productTab(product);
             renderTabs();
             renderGrid();
             void openProduct(product);
@@ -673,5 +757,6 @@ export function createStoreUI({
     get user() {
       return user;
     },
+    localEconomy,
   };
 }

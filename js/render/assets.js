@@ -36,7 +36,14 @@ import {
   createWolfTotemSprites,
 } from "./entitySprites.js";
 import { createMineralSprite } from "./mineralSprites.js";
-import { createTreeSprite, TREE_STYLES } from "./treeSprites.js";
+import { createPortalSprites } from "./portalSprites.js";
+import { createTreeSprite } from "./treeSprites.js";
+import { apiUrl } from "../net/api.js";
+import {
+  LEGACY_WOOD_IDS,
+  createWoodCatalog,
+  defaultWoodCatalog,
+} from "../world/woods.js";
 
 const BOOT_SEED = "DracxGames:rocksoup:v1";
 const MIN_LOAD_MS = 1750;
@@ -66,6 +73,31 @@ function loadImage(url) {
     image.onerror = () => reject(new Error(`No se pudo cargar ${url}`));
     image.src = url;
   });
+}
+
+async function loadWoodCatalog() {
+  if (typeof fetch !== "function") {
+    return defaultWoodCatalog();
+  }
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 1800);
+  try {
+    const response = await fetch(apiUrl("/api/woods"), {
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      return defaultWoodCatalog();
+    }
+    const data = await response.json();
+    const catalog = createWoodCatalog(data?.woods);
+    return catalog.woods.length > 0 ? catalog : defaultWoodCatalog();
+  } catch {
+    return defaultWoodCatalog();
+  } finally {
+    window.clearTimeout(timer);
+  }
 }
 
 function createIllustratedSprite(image, reference) {
@@ -102,20 +134,41 @@ export async function loadAssets(onProgress = () => {}) {
   report(0.02, "Encendiendo la fogata...");
   await nextFrame();
 
+  const woodCatalog = await loadWoodCatalog();
+  const treeSpritesByWood = {};
   const treeSprites = [];
-  const totalTrees = TREE_STYLES.length * TREE_VARIANTS;
+  const totalTrees = Math.max(1, woodCatalog.woods.length * TREE_VARIANTS);
   let treesDone = 0;
 
-  for (let species = 0; species < TREE_STYLES.length; species += 1) {
+  for (const wood of woodCatalog.woods) {
     const variants = [];
     for (let variant = 0; variant < TREE_VARIANTS; variant += 1) {
-      variants.push(createTreeSprite(species, variant, BOOT_SEED));
+      const procedural = createTreeSprite(wood, variant, BOOT_SEED);
+      let sprite = procedural;
+      const spriteUrl =
+        wood.renderMode === "sprite" ? wood.spriteUrls?.[variant] : null;
+      if (spriteUrl) {
+        try {
+          const image = await loadImage(spriteUrl);
+          sprite = createIllustratedSprite(image, procedural);
+        } catch {
+          sprite = procedural;
+        }
+      }
+      variants.push(sprite);
       treesDone += 1;
-      report(0.04 + (treesDone / totalTrees) * 0.56, `Plantando árboles... ${treesDone}/${totalTrees}`);
+      report(
+        0.04 + (treesDone / totalTrees) * 0.56,
+        `Plantando árboles... ${treesDone}/${totalTrees}`,
+      );
       await nextFrame();
     }
-    treeSprites.push(variants);
+    treeSpritesByWood[wood.id] = variants;
   }
+
+  LEGACY_WOOD_IDS.forEach((id, index) => {
+    treeSprites[index] = treeSpritesByWood[id] ?? [];
+  });
 
   report(0.61, "Cultivando arbustos...");
   const bushSprites = createBushSprites();
@@ -227,6 +280,7 @@ export async function loadAssets(onProgress = () => {}) {
   const fiefSprites = createFiefSprites();
   const wolfDenSprites = createWolfDenSprites();
   const wolfTotemSprites = createWolfTotemSprites();
+  const portalSprites = createPortalSprites();
   await nextFrame();
 
   report(0.98, "Sirviendo el caldo...");
@@ -238,6 +292,8 @@ export async function loadAssets(onProgress = () => {}) {
 
   return {
     treeSprites,
+    treeSpritesByWood,
+    woodCatalog,
     bushSprites,
     pickedBushSprites,
     grassSprites,
@@ -272,6 +328,7 @@ export async function loadAssets(onProgress = () => {}) {
     fiefSprites,
     wolfDenSprites,
     wolfTotemSprites,
+    portalSprites,
     bootSeed: BOOT_SEED,
   };
 }

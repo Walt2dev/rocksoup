@@ -4,6 +4,7 @@ export const RESOURCE_INFO = Object.freeze({
   piedra: Object.freeze({ label: "Piedra", color: "#8b929b", symbol: "P" }),
   bayas: Object.freeze({ label: "Bayas", color: "#9b5f92", symbol: "B" }),
   agua: Object.freeze({ label: "Agua", color: "#5aa6c9", symbol: "A" }),
+  esencia: Object.freeze({ label: "Esencias", color: "#b58ce0", symbol: "Es" }),
   fibra: Object.freeze({ label: "Fibra", color: "#c9b37a", symbol: "F" }),
   semillaHierba: Object.freeze({ label: "Semilla de hierba", color: "#8fbd69", symbol: "SH" }),
   semillaArbol: Object.freeze({ label: "Semilla de árbol", color: "#7c9f55", symbol: "SA" }),
@@ -78,6 +79,8 @@ export const ITEM_INFO = Object.freeze({
   moonPoisonPotion: Object.freeze({ label: "Brebaje lunar de sombra", symbol: "LS" }),
   arrow: Object.freeze({ label: "Flecha", symbol: "Fl" }),
   wolfTotem: Object.freeze({ label: "Tótem de lobo", symbol: "Tl" }),
+  portalSubsuelo: Object.freeze({ label: "Portal al Subsuelo", symbol: "PS" }),
+  portalCielo: Object.freeze({ label: "Escalera al Cielo", symbol: "EC" }),
   carnePollo: Object.freeze({ label: "Carne de pollo", symbol: "CP" }),
   polvoHueso: Object.freeze({ label: "Polvo de hueso", symbol: "PH" }),
 });

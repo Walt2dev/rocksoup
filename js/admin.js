@@ -1,3 +1,5 @@
+import { initWoodsAdmin } from "./adminWoods.js";
+
 const TOKEN_KEY = "rocksoup-admin-token";
 const RANGE_KEY = "rocksoup-admin-range";
 const TAB_KEY = "rocksoup-admin-tab";
@@ -52,6 +54,7 @@ let timer = null;
 let statsTimer = null;
 let fetching = false;
 let fetchingStats = false;
+const woodsAdmin = initWoodsAdmin({ getToken: () => token });
 
 function formatDuration(ms) {
   const total = Math.max(0, Math.floor((Number.isFinite(ms) ? ms : 0) / 1000));
@@ -85,6 +88,12 @@ function formatMoney(cents, currency = "MXN") {
   } catch {
     return `$${value.toFixed(2)} ${currency}`;
   }
+}
+
+function formatEconomyAmount(amount, currency = "drac") {
+  const labels = { drac: "DracCoins", prestige: "Prestigio", essence: "Esencias" };
+  const value = Number(amount) || 0;
+  return `${value.toLocaleString("es-MX")} ${labels[currency] ?? currency}`;
 }
 
 function formatDateTime(timestamp) {
@@ -244,7 +253,7 @@ function renderStats(data) {
   el.uniqueToday.textContent = today ? String(today.uniquePlayers) : "0";
   el.avgToday.textContent = today ? formatDuration(today.avgMs) : "-";
   el.purchasesToday.textContent = String(purchasesToday.count ?? 0);
-  el.revenueToday.textContent = formatMoney(purchasesToday.totalCents ?? 0);
+  el.revenueToday.textContent = formatEconomyAmount(purchasesToday.totalCents ?? 0);
 
   renderTable(
     el.activity,
@@ -279,12 +288,12 @@ function renderStats(data) {
         value: (row) => row.email || row.displayName || "â€”",
       },
       { label: "Producto", value: (row) => row.productName },
-      { label: "Monto", value: (row) => formatMoney(row.amountCents, row.currency) },
+      { label: "Monto", value: (row) => formatEconomyAmount(row.amountCents, row.currency) },
       { label: "Estado", value: (row) => row.status },
       { label: "Entrega", value: (row) => row.grantStatus },
     ],
     Array.isArray(data?.purchases?.recent) ? data.purchases.recent : [],
-    "Sin compras en el rango.",
+    "Sin compras con DracCoins en el rango.",
   );
 
   const totals = Array.isArray(data?.purchases?.totals)
@@ -296,7 +305,7 @@ function renderStats(data) {
       { label: "Moneda", value: (row) => row.currency },
       { label: "Estado", value: (row) => row.status },
       { label: "Compras", value: (row) => row.count },
-      { label: "Total", value: (row) => formatMoney(row.totalCents, row.currency) },
+      { label: "Total", value: (row) => formatEconomyAmount(row.totalCents, row.currency) },
     ],
     totals,
     "Sin totales en el rango.",
@@ -310,7 +319,7 @@ function renderStats(data) {
       { label: "Cantidad", value: (row) => row.count },
     ],
     Array.isArray(data?.subscriptions) ? data.subscriptions : [],
-    "Sin suscripciones.",
+    "Sin contratos.",
   );
 
   renderTable(
@@ -465,6 +474,7 @@ el.loginForm.addEventListener("submit", (event) => {
   showDashboard();
   void fetchAdmin();
   void fetchStats();
+  void woodsAdmin.refresh();
 });
 
 el.range?.addEventListener("change", () => {
@@ -605,6 +615,7 @@ if (token) {
   showDashboard();
   void fetchAdmin();
   void fetchStats();
+  void woodsAdmin.refresh();
 } else {
   showLogin();
 }

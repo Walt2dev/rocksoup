@@ -11,6 +11,8 @@ const PLACEABLE_ITEMS = new Set([
   "oven",
   "brewingTable",
   "wolfTotem",
+  "portalSubsuelo",
+  "portalCielo",
 ]);
 
 const CONSUMABLE_ITEMS = new Set([
@@ -57,6 +59,7 @@ export function resolveContextAction({
   placing = false,
   mounted = false,
   nearDonkey = false,
+  nearPortal = null,
   fishing = null,
   birdWatch = null,
 } = {}) {
@@ -78,6 +81,14 @@ export function resolveContextAction({
 
   if (nearDonkey) {
     return { id: "mount", label: "Burro", icon: "jump" };
+  }
+
+  if (nearPortal) {
+    return {
+      id: "portal",
+      label: nearPortal.realm === "surface" ? "Salir" : "Entrar",
+      icon: "place",
+    };
   }
 
   if (placing) {

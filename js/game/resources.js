@@ -56,7 +56,11 @@ export function harvestEnergyCost(kind) {
 
 export function harvestYields(kind, node, tools = new Set()) {
   if (kind === NODE_KIND.TREE) {
-    if (node?.species === 3) {
+    if (
+      node?.species === 3 ||
+      node?.woodId === "cactus" ||
+      node?.shape === "cactus"
+    ) {
       return {
         fibra: 2 + (tools.has("axe") ? 1 : 0),
         bayas: 1,

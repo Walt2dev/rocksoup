@@ -4,6 +4,7 @@ export const RESOURCE_SOURCES = Object.freeze({
   piedra: "Se obtiene minando nodos de piedra o excavando roca.",
   bayas: "Se recogen de arbustos de pradera, bosque y selva.",
   agua: "Se recoge haciendo clic en agua cercana.",
+  esencia: "Se obtiene explorando, descubriendo constelaciones y aves, completando misiones y fabricando objetos.",
   fibra: "Se obtiene de arbustos, arbustos secos y cactus. El cuchillo da +1.",
   semillaHierba: "Se recoge de la hierba alta y de los cultivos de trigo.",
   semillaArbol: "La sueltan los árboles al talarlos.",
@@ -72,6 +73,8 @@ export const ITEM_SOURCES = Object.freeze({
   moonPoisonPotion: "Se prepara en el caldero en luna nueva con un apunte de constelación.",
   arrow: "Se fabrican en Crafteo > Objetos con madera, piedra y plumas.",
   wolfTotem: "Se fabrica tras completar la Cueva de lobos, en Crafteo > Construcción.",
+  portalSubsuelo: "Se fabrica en Crafteo > Construcción para abrir otro acceso al Subsuelo.",
+  portalCielo: "Se fabrica en Crafteo > Construcción para abrir otro acceso al Cielo.",
   carnePollo: "La sueltan los pollos al derrotarlos. Se puede usar como comida.",
   polvoHueso: "Se muele hueso de pollo con el mortero de piedra. Hace crecer bayas en arbustos recogidos.",
 });

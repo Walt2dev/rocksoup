@@ -7,7 +7,6 @@ import { grantsAreEmpty, mergeGrants } from "./grants.mjs";
 import { isPrivateHostname } from "../js/net/wsUrl.js";
 
 const MAX_LOGIN_BODY = 16 * 1024;
-const MAX_WEBHOOK_BODY = 512 * 1024;
 
 function sendJson(res, status, data, headers = {}) {
   res.writeHead(status, {
@@ -73,8 +72,7 @@ export function createApiHandler({
   db,
   authStore,
   accountStore,
-  storeStore,
-  paypal,
+  economyStore,
   mailer = null,
   rankingStore = null,
   clanStore = null,
@@ -132,22 +130,23 @@ export function createApiHandler({
       sendJson(res, 200, { user: null });
       return;
     }
-    await storeStore.replayPendingPurchases(user.id).catch(() => {});
+    await economyStore.ensureWallet(user.id).catch(() => {});
     sendJson(res, 200, { user });
   }
 
   async function accountSummary(req, res) {
     const { user } = await requireUser(req);
-    const [summary, entitlements] = await Promise.all([
+    const [summary, economy] = await Promise.all([
       accountStore.summary(user.id),
-      storeStore.entitlements(user.id),
+      economyStore.summary(user.id),
     ]);
     sendJson(res, 200, {
       user,
       ...summary,
-      subscriptions: entitlements.subscriptions,
-      purchases: entitlements.purchases,
-      paymentsEnabled: storeStore.isPaymentsEnabled?.() === true,
+      wallet: economy.wallet,
+      contracts: economy.contracts,
+      transactions: economy.transactions,
+      economyEnabled: true,
     });
   }
 
@@ -172,14 +171,14 @@ export function createApiHandler({
 
   async function loadWorld(req, res, worldId) {
     const { user } = await requireUser(req);
-    await storeStore.replayPendingPurchases(user.id).catch(() => {});
+    await economyStore.ensureWallet(user.id).catch(() => {});
 
-    const claim = await storeStore.claimDueSubscriptionGrants(user.id);
+    const claim = await economyStore.claimDueContractGrants(user.id);
     const pending = await accountStore.takePendingGrants(user.id, { worldId });
     const grants = mergeGrants(claim.grants, pending);
 
     if (!grantsAreEmpty(grants)) {
-      await storeStore.applyGrantBundle(user.id, grants, { worldId });
+      await economyStore.applyGrantBundle(user.id, grants, { worldId });
     }
 
     const world = await accountStore.getWorld(user.id, worldId);
@@ -217,94 +216,68 @@ export function createApiHandler({
     sendJson(res, 200, { ok: true });
   }
 
-  async function createOrder(req, res) {
-    const { user } = await requireUser(req);
-    const body = await readJson(req);
-    const worldId = body.worldId ? String(body.worldId) : null;
-    if (worldId) {
-      const world = await accountStore.getWorld(user.id, worldId);
-      if (!world) {
-        sendJson(res, 404, { error: "Mundo no encontrado" });
-        return;
-      }
+  async function resolvedWorldId(res, user, value) {
+    const worldId = value ? String(value) : null;
+    if (!worldId) {
+      return null;
     }
-    const order = await storeStore.createOrder(user.id, body.productId, {
-      worldId,
-    });
-    sendJson(res, 201, order);
-  }
-
-  async function captureOrder(req, res, orderId) {
-    const { user } = await requireUser(req);
-    const result = await storeStore.captureOrder(user.id, orderId);
-    const entitlements = await storeStore.entitlements(user.id);
-    sendJson(res, 200, { ...result, entitlements });
+    const world = await accountStore.getWorld(user.id, worldId);
+    if (!world) {
+      sendJson(res, 404, { error: "Mundo no encontrado" });
+      return undefined;
+    }
+    return worldId;
   }
 
   async function storeProducts(req, res) {
     sendJson(res, 200, {
-      products: storeStore.listProducts(),
-      config: storeStore.config(),
+      products: economyStore.listProducts(),
+      config: economyStore.config(),
     });
   }
 
-  async function subscriptionIntent(req, res) {
+  async function storePurchase(req, res) {
     const { user } = await requireUser(req);
     const body = await readJson(req);
-    const result = await storeStore.createSubscriptionIntent(user.id, body.productId);
+    const worldId = await resolvedWorldId(res, user, body.worldId);
+    if (worldId === undefined) {
+      return;
+    }
+    const result = await economyStore.purchase(user.id, body.productId, {
+      worldId,
+    });
     sendJson(res, 201, result);
   }
 
-  async function subscriptionConfirm(req, res) {
+  async function economySummary(req, res) {
     const { user } = await requireUser(req);
-    const body = await readJson(req);
-    const subscription = await storeStore.confirmSubscription(
-      user.id,
-      String(body.subscriptionId ?? ""),
-    );
-    const entitlements = await storeStore.entitlements(user.id);
-    sendJson(res, 200, { subscription, entitlements });
+    const summary = await economyStore.summary(user.id);
+    sendJson(res, 200, { ...summary, economyEnabled: true });
   }
 
-  async function subscriptionCancel(req, res) {
+  async function economyEarn(req, res) {
     const { user } = await requireUser(req);
     const body = await readJson(req);
-    const result = await storeStore.cancelSubscription(
-      user.id,
-      String(body.subscriptionId ?? ""),
-    );
+    const worldId = await resolvedWorldId(res, user, body.worldId);
+    if (worldId === undefined) {
+      return;
+    }
+    const result = await economyStore.award(user.id, body.kind, {
+      refId: body.refId ? String(body.refId).slice(0, 96) : "",
+      worldId,
+    });
     sendJson(res, 200, result);
   }
 
-  async function applyGrants(req, res) {
+  async function economyDaily(req, res) {
     const { user } = await requireUser(req);
     const body = await readJson(req);
-    const worldId = body.worldId ? String(body.worldId) : null;
-    if (worldId) {
-      const world = await accountStore.getWorld(user.id, worldId);
-      if (!world) {
-        sendJson(res, 404, { error: "Mundo no encontrado" });
-        return;
-      }
+    const worldId = await resolvedWorldId(res, user, body.worldId);
+    if (worldId === undefined) {
+      return;
     }
-    const claim = await storeStore.claimDueSubscriptionGrants(user.id);
-    const pending = await accountStore.takePendingGrants(user.id, { worldId });
-    const grants = mergeGrants(claim.grants, pending);
-    const applied = await storeStore.applyGrantBundle(user.id, grants, { worldId });
-    const summary = await accountStore.summary(user.id);
-    sendJson(res, 200, {
-      ok: true,
-      grants,
-      subscriptionPeriods: claim.periods,
-      applied,
-      summary,
-    });
-  }
-
-  async function storeEntitlements(req, res) {
-    const { user } = await requireUser(req);
-    const entitlements = await storeStore.entitlements(user.id);
-    sendJson(res, 200, entitlements);
+    const result = await economyStore.claimDaily(user.id, { worldId });
+    sendJson(res, 200, result);
   }
 
   return async function handleApi(req, res, url, pathname) {
@@ -326,7 +299,7 @@ export function createApiHandler({
           ok: true,
           db: db.isAvailable(),
           auth: authStore.isConfigured,
-          payments: { enabled: storeStore.isPaymentsEnabled?.() === true },
+          economy: { enabled: true, db: db.isAvailable() },
           mail: { configured: mailer?.isConfigured === true },
         });
         return true;
@@ -338,7 +311,7 @@ export function createApiHandler({
           authConfigured: authStore.isConfigured,
           passwordAuthAvailable: authStore.passwordAuthAvailable === true,
           dbConfigured: db.isAvailable(),
-          payments: { enabled: storeStore.isPaymentsEnabled?.() === true },
+          economy: { enabled: true, db: db.isAvailable() },
           mail: mailer?.publicConfig?.() ?? null,
           publicBaseUrl: env.PUBLIC_BASE_URL ?? null,
         });
@@ -402,7 +375,7 @@ export function createApiHandler({
         const { user, token } = await authStore.loginWithGoogle(body.credential, {
           userAgent: req.headers["user-agent"] ?? "",
         });
-        await storeStore.replayPendingPurchases(user.id).catch(() => {});
+        await economyStore.ensureWallet(user.id).catch(() => {});
         res.setHeader(
           "Set-Cookie",
           sessionCookie(token, { secure: requestIsSecure(req, env) }),
@@ -475,50 +448,32 @@ export function createApiHandler({
       }
 
       if (pathname === "/api/store/config" && req.method === "GET") {
-        sendJson(res, 200, storeStore.config());
+        sendJson(res, 200, economyStore.config());
         return true;
       }
 
-      if (pathname === "/api/store/orders" && req.method === "POST") {
-        await createOrder(req, res);
+      if (pathname === "/api/store/purchase" && req.method === "POST") {
+        await storePurchase(req, res);
         return true;
       }
 
-      const captureMatch = pathname.match(/^\/api\/store\/orders\/([^/]+)\/capture$/);
-      if (captureMatch && req.method === "POST") {
-        await captureOrder(req, res, decodeURIComponent(captureMatch[1]));
+      if (pathname === "/api/economy/wallet" && req.method === "GET") {
+        await economySummary(req, res);
         return true;
       }
 
-      if (pathname === "/api/store/subscriptions/intent" && req.method === "POST") {
-        await subscriptionIntent(req, res);
+      if (pathname === "/api/economy/summary" && req.method === "GET") {
+        await economySummary(req, res);
         return true;
       }
 
-      if (pathname === "/api/store/subscriptions/confirm" && req.method === "POST") {
-        await subscriptionConfirm(req, res);
+      if (pathname === "/api/economy/earn" && req.method === "POST") {
+        await economyEarn(req, res);
         return true;
       }
 
-      if (pathname === "/api/store/subscriptions/cancel" && req.method === "POST") {
-        await subscriptionCancel(req, res);
-        return true;
-      }
-
-      if (pathname === "/api/store/entitlements" && req.method === "GET") {
-        await storeEntitlements(req, res);
-        return true;
-      }
-
-      if (pathname === "/api/store/grants/apply" && req.method === "POST") {
-        await applyGrants(req, res);
-        return true;
-      }
-
-      if (pathname === "/api/paypal/webhook" && req.method === "POST") {
-        const raw = await readRequestBody(req, MAX_WEBHOOK_BODY);
-        const result = await storeStore.handleWebhook(raw, req.headers);
-        sendJson(res, 200, result);
+      if (pathname === "/api/economy/daily" && req.method === "POST") {
+        await economyDaily(req, res);
         return true;
       }
 

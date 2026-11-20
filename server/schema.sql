@@ -83,6 +83,86 @@ CREATE TABLE IF NOT EXISTS user_wallets (
   updated_at BIGINT NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS wood_types (
+  id VARCHAR(48) NOT NULL PRIMARY KEY,
+  name VARCHAR(80) NOT NULL,
+  biome_id TINYINT UNSIGNED NULL,
+  realm VARCHAR(16) NOT NULL DEFAULT 'surface',
+  active TINYINT(1) NOT NULL DEFAULT 1,
+  render_mode VARCHAR(16) NOT NULL DEFAULT 'procedural',
+  density DECIMAL(4,2) NOT NULL DEFAULT 1.00,
+  style_json LONGTEXT NOT NULL,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  UNIQUE KEY uq_wood_biome (realm, biome_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS wood_sprites (
+  wood_id VARCHAR(48) NOT NULL,
+  variant TINYINT UNSIGNED NOT NULL,
+  mime VARCHAR(32) NOT NULL,
+  width INT UNSIGNED NOT NULL,
+  height INT UNSIGNED NOT NULL,
+  data LONGBLOB NOT NULL,
+  updated_at BIGINT NOT NULL,
+  PRIMARY KEY (wood_id, variant)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS economy_wallets (
+  user_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+  drac_coins BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  prestige BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  updated_at BIGINT NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS economy_transactions (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED NOT NULL,
+  currency VARCHAR(16) NOT NULL,
+  amount BIGINT NOT NULL,
+  balance_after BIGINT UNSIGNED NOT NULL,
+  reason VARCHAR(48) NOT NULL,
+  ref_type VARCHAR(32) NULL,
+  ref_id VARCHAR(96) NULL,
+  world_id CHAR(36) NULL,
+  created_at BIGINT NOT NULL,
+  KEY idx_economy_user (user_id, created_at DESC),
+  KEY idx_economy_reason (user_id, reason, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS economy_claims (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED NOT NULL,
+  kind VARCHAR(48) NOT NULL,
+  ref_id VARCHAR(96) NOT NULL,
+  created_at BIGINT NOT NULL,
+  UNIQUE KEY uq_economy_claim (user_id, kind, ref_id),
+  KEY idx_economy_claims_user (user_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS economy_products (
+  id VARCHAR(48) NOT NULL PRIMARY KEY,
+  name VARCHAR(80) NOT NULL,
+  description VARCHAR(255) NOT NULL,
+  category VARCHAR(24) NOT NULL,
+  kind VARCHAR(16) NOT NULL,
+  price_currency VARCHAR(16) NOT NULL,
+  price_amount INT UNSIGNED NOT NULL,
+  icon VARCHAR(16) NULL,
+  badge VARCHAR(32) NULL,
+  grants_json LONGTEXT NULL,
+  daily_grants_json LONGTEXT NULL,
+  contract_days INT UNSIGNED NULL,
+  highlights_json LONGTEXT NULL,
+  active TINYINT(1) NOT NULL DEFAULT 1,
+  updated_at BIGINT NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS economy_migrations (
+  id VARCHAR(64) NOT NULL PRIMARY KEY,
+  applied_at BIGINT NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS user_entitlements (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   user_id BIGINT UNSIGNED NOT NULL,
@@ -104,47 +184,11 @@ CREATE TABLE IF NOT EXISTS user_pending_grants (
   KEY idx_grants_user (user_id, applied_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS store_products (
-  id VARCHAR(48) NOT NULL PRIMARY KEY,
-  name VARCHAR(80) NOT NULL,
-  description VARCHAR(255) NOT NULL,
-  category VARCHAR(24) NOT NULL,
-  kind VARCHAR(16) NOT NULL,
-  price_cents INT UNSIGNED NOT NULL,
-  currency CHAR(3) NOT NULL,
-  active TINYINT(1) NOT NULL DEFAULT 1,
-  updated_at BIGINT NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS store_plans (
-  plan_key VARCHAR(48) NOT NULL PRIMARY KEY,
-  provider_product_id VARCHAR(64) NOT NULL,
-  provider_plan_id VARCHAR(64) NOT NULL,
-  updated_at BIGINT NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS purchases (
-  id CHAR(36) NOT NULL PRIMARY KEY,
-  user_id BIGINT UNSIGNED NOT NULL,
-  product_id VARCHAR(48) NOT NULL,
-  provider VARCHAR(16) NOT NULL DEFAULT 'paypal',
-  provider_order_id VARCHAR(64) NULL UNIQUE,
-  amount_cents INT UNSIGNED NOT NULL,
-  currency CHAR(3) NOT NULL,
-  status VARCHAR(24) NOT NULL,
-  world_id CHAR(36) NULL,
-  grant_status VARCHAR(24) NOT NULL DEFAULT 'pending',
-  created_at BIGINT NOT NULL,
-  captured_at BIGINT NULL,
-  raw_json LONGTEXT NULL,
-  KEY idx_purchases_user (user_id, created_at DESC)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 CREATE TABLE IF NOT EXISTS subscriptions (
   id CHAR(36) NOT NULL PRIMARY KEY,
   user_id BIGINT UNSIGNED NOT NULL,
   plan_key VARCHAR(48) NOT NULL,
-  provider VARCHAR(16) NOT NULL DEFAULT 'paypal',
+  provider VARCHAR(16) NOT NULL DEFAULT 'economy',
   provider_subscription_id VARCHAR(64) NOT NULL UNIQUE,
   status VARCHAR(24) NOT NULL,
   current_period_end BIGINT NULL,
@@ -153,22 +197,6 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   updated_at BIGINT NOT NULL,
   raw_json LONGTEXT NULL,
   KEY idx_subscriptions_user (user_id, status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS subscription_intents (
-  id CHAR(36) NOT NULL PRIMARY KEY,
-  user_id BIGINT UNSIGNED NOT NULL,
-  plan_key VARCHAR(48) NOT NULL,
-  created_at BIGINT NOT NULL,
-  used_at BIGINT NULL,
-  KEY idx_intents_user (user_id, created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS paypal_events (
-  event_id VARCHAR(80) NOT NULL PRIMARY KEY,
-  event_type VARCHAR(64) NOT NULL,
-  created_at BIGINT NOT NULL,
-  raw_json LONGTEXT NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS play_sessions (

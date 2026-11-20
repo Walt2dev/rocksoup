@@ -98,23 +98,31 @@ test("el lore conserva solo eventos válidos y limita texto", () => {
   assert.equal(sanitizeLore(next).name, "Mundo de prueba");
 });
 
-test("el catálogo contiene productos válidos y el slot de 15 MXN", () => {
+test("el catálogo usa la economía del juego y el slot cuesta DracCoins", () => {
   const products = publicProducts();
   assert.ok(products.length >= 10);
-  assert.ok(products.every((product) => product.priceCents > 0));
+  assert.ok(
+    products.every(
+      (product) =>
+        product.price.amount > 0 &&
+        ["drac", "prestige"].includes(product.price.currency),
+    ),
+  );
   assert.deepEqual(
     STORE_PRODUCTS.map((product) => product.id),
     [...new Set(STORE_PRODUCTS.map((product) => product.id))],
   );
 
   const slot = getProduct("world_slot");
-  assert.equal(slot.priceCents, 1500);
+  assert.equal(slot.price.amount, 2500);
+  assert.equal(slot.price.currency, "drac");
   assert.equal(slot.grants.worldSlots, 1);
-  assert.equal(publicProduct(slot).currency, "MXN");
+  assert.equal(publicProduct(slot).currency, "drac");
+  assert.equal(publicProduct(slot).needsWorld, false);
 
-  for (const id of ["sub_noble", "sub_lord", "sub_feudo"]) {
+  for (const id of ["contract_noble", "contract_lord", "contract_feudo"]) {
     const product = getProduct(id);
-    assert.equal(product.kind, "subscription");
+    assert.equal(product.kind, "contract");
     assert.ok(product.dailyGrants);
   }
 });

@@ -52,12 +52,11 @@ import { createAmbientSync } from "./ambientSync.mjs";
 import { createDatabase } from "./db.mjs";
 import { createAuthStore, sessionTokenFromRequest } from "./authStore.mjs";
 import { createAccountStore } from "./accountStore.mjs";
-import { createStoreStore } from "./storeStore.mjs";
+import { createEconomyStore } from "./economyStore.mjs";
+import { createWoodStore } from "./woodStore.mjs";
 import { createPlaySessionStore } from "./playSessionStore.mjs";
 import { createRankingStore } from "./rankingStore.mjs";
 import { createClanStore } from "./clanStore.mjs";
-import { createPayPal } from "./paypal.mjs";
-import { PAYMENTS_ENABLED } from "./payments.mjs";
 import { createMailer } from "./mailer.mjs";
 import { createApiHandler } from "./api.mjs";
 import {
@@ -433,19 +432,17 @@ const rankingStore = createRankingStore({ db: database });
 const clanStore = createClanStore({ db: database });
 const authStore = createAuthStore({ db: database });
 const accountStore = createAccountStore({ db: database });
-const paypal = createPayPal();
-const storeStore = createStoreStore({
+const economyStore = createEconomyStore({
   db: database,
   accountStore,
-  paypal,
 });
+const woodStore = createWoodStore({ db: database });
 const mailer = createMailer();
 const apiHandler = createApiHandler({
   db: database,
   authStore,
   accountStore,
-  storeStore,
-  paypal,
+  economyStore,
   mailer,
   rankingStore,
   clanStore,
@@ -459,7 +456,10 @@ database
       return false;
     }
     await playSessionStore.closeStale({ staleAfterMs: 2 * 60 * 1000 });
-    return storeStore.init();
+    await economyStore.init();
+    await woodStore.init();
+    world.woodCatalog = await woodStore.serverCatalog().catch(() => world.woodCatalog);
+    return true;
   })
   .catch((error) => {
     console.warn(`[DB] Inicialización en segundo plano falló: ${error.message}`);
@@ -640,6 +640,12 @@ async function handlePvpTransition(now) {
     }
 
     if (transition.winner && transition.winner.score > 0) {
+      const winnerAccountId = tokenToAccount.get(transition.winner.token);
+      if (winnerAccountId) {
+        economyStore
+          .award(winnerAccountId, "pvp_win", { refId: `pvp:${now}` })
+          .catch(() => {});
+      }
       pushSystemChat(
         `Evento PvP finalizado. Ganador: ${transition.winner.name} (${transition.winner.score} pts).`,
       );
@@ -947,9 +953,9 @@ async function handleJoin(ws, message) {
   };
 
   if (accountUser) {
-    await storeStore.replayPendingPurchases(accountUser.id).catch(() => {});
-    const claim = await storeStore
-      .claimDueSubscriptionGrants(accountUser.id)
+    await economyStore.ensureWallet(accountUser.id).catch(() => {});
+    const claim = await economyStore
+      .claimDueContractGrants(accountUser.id)
       .catch(() => ({ grants: {}, periods: 0 }));
     const pending = await accountStore
       .takePendingGrants(accountUser.id)
@@ -957,7 +963,7 @@ async function handleJoin(ws, message) {
     const grants = mergeGrants(claim.grants, pending);
 
     if (!grantsAreEmpty(grants)) {
-      await storeStore
+      await economyStore
         .applySpecialGrants(accountUser.id, grants)
         .catch(() => {});
       client.inventory = applyGrantsToInventory(client.inventory, grants);
@@ -1498,6 +1504,13 @@ function handleAttack(client, message = {}) {
     const kill = recordKill(pvp, Date.now(), client, target);
     if (kill) {
       broadcast({ type: "kill", ...kill });
+      if (client.accountId) {
+        economyStore
+          .award(client.accountId, "pvp_kill", {
+            refId: `kill:${client.id}:${Date.now()}`,
+          })
+          .catch(() => {});
+      }
     }
 
     const spawn = findAvailableSpawn(null, target.id);
@@ -1818,6 +1831,29 @@ function readRequestBody(req, limit = 8 * 1024 * 1024) {
   });
 }
 
+function sendJson(res, status, data, headers = {}) {
+  res.writeHead(status, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+    ...headers,
+  });
+  res.end(JSON.stringify(data));
+}
+
+function sendAdminAuthError(res, auth) {
+  if (auth.status === 404) {
+    res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end("Not found");
+    return;
+  }
+  res.writeHead(401, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+    "WWW-Authenticate": "Bearer",
+  });
+  res.end(JSON.stringify({ error: "No autorizado" }));
+}
+
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
@@ -1841,7 +1877,7 @@ const server = createServer(async (req, res) => {
           ok: true,
           db: database.isAvailable(),
           auth: authStore.isConfigured,
-          payments: { enabled: PAYMENTS_ENABLED },
+          economy: { enabled: true, db: database.isAvailable() },
           mail: { configured: mailer.isConfigured === true },
         }),
       );
@@ -1951,41 +1987,47 @@ const server = createServer(async (req, res) => {
           database.query("SELECT COUNT(*) AS total FROM users WHERE created_at >= ?", [since]),
           database.query("SELECT COUNT(*) AS total FROM users WHERE created_at >= ?", [todayStart]),
           database.query(
-            `SELECT p.id, p.user_id, u.email, u.display_name, p.product_id,
-                    p.amount_cents, p.currency, p.status, p.grant_status,
-                    p.created_at, p.captured_at
-             FROM purchases p
-             LEFT JOIN users u ON u.id = p.user_id
-             WHERE p.created_at >= ?
-             ORDER BY p.created_at DESC
+            `SELECT t.id, t.user_id, u.email, u.display_name,
+                    t.ref_id AS product_id, ABS(t.amount) AS amount_cents,
+                    t.currency, 'completed' AS status, 'granted' AS grant_status,
+                    t.created_at, t.created_at AS captured_at
+             FROM economy_transactions t
+             LEFT JOIN users u ON u.id = t.user_id
+             WHERE t.reason = 'purchase' AND t.created_at >= ?
+             ORDER BY t.created_at DESC
              LIMIT 100`,
             [since],
           ),
           database.query(
-            `SELECT currency, status, COUNT(*) AS count,
-                    COALESCE(SUM(amount_cents), 0) AS total_cents
-             FROM purchases
-             WHERE created_at >= ?
-             GROUP BY currency, status
-             ORDER BY currency ASC, status ASC`,
+            `SELECT currency, 'completed' AS status, COUNT(*) AS count,
+                    COALESCE(SUM(-amount), 0) AS total_cents
+             FROM economy_transactions
+             WHERE reason = 'purchase' AND created_at >= ?
+             GROUP BY currency
+             ORDER BY currency ASC`,
             [since],
           ),
           database.query(
-            `SELECT currency, status, COUNT(*) AS count,
-                    COALESCE(SUM(amount_cents), 0) AS total_cents
-             FROM purchases
-             GROUP BY currency, status
-             ORDER BY currency ASC, status ASC`,
+            `SELECT currency, 'completed' AS status, COUNT(*) AS count,
+                    COALESCE(SUM(-amount), 0) AS total_cents
+             FROM economy_transactions
+             WHERE reason = 'purchase'
+             GROUP BY currency
+             ORDER BY currency ASC`,
           ),
           database.query(
-            `SELECT COUNT(*) AS count, COALESCE(SUM(amount_cents), 0) AS total_cents
-             FROM purchases
-             WHERE created_at >= ? AND status = 'completed'`,
+            `SELECT COUNT(*) AS count,
+                    COALESCE(SUM(-amount), 0) AS total_cents
+             FROM economy_transactions
+             WHERE reason = 'purchase'
+               AND currency IN ('drac', 'prestige')
+               AND created_at >= ?`,
             [todayStart],
           ),
           database.query(
             `SELECT plan_key, status, COUNT(*) AS count
              FROM subscriptions
+             WHERE provider = 'economy'
              GROUP BY plan_key, status
              ORDER BY plan_key ASC, status ASC`,
           ),
@@ -2006,7 +2048,7 @@ const server = createServer(async (req, res) => {
         }));
 
         const recentPurchases = recentPurchaseRows.map((row) => {
-          const product = storeStore.getProduct(row.product_id);
+          const product = economyStore.getProduct(row.product_id);
           return {
             id: row.id,
             userId: Number(row.user_id) || null,
@@ -2059,7 +2101,7 @@ const server = createServer(async (req, res) => {
               allTimeTotals: mapTotals(allPurchaseTotals),
             },
             subscriptions: subscriptionRows.map((row) => {
-              const product = storeStore.getProduct(row.plan_key);
+              const product = economyStore.getProduct(row.plan_key);
               return {
                 planKey: row.plan_key,
                 name: product?.name ?? row.plan_key,
@@ -2125,13 +2167,8 @@ const server = createServer(async (req, res) => {
           ),
         ),
       ];
-      const paypalCheck = PAYMENTS_ENABLED
-        ? (paypal.verifyCredentials?.() ??
-          Promise.resolve({ ok: false, error: "sin verificación" }))
-        : Promise.resolve({ ok: false, error: "Pagos deshabilitados" });
-      const [egress, paypalAuth, ...probes] = await Promise.all([
+      const [egress, ...probes] = await Promise.all([
         fetchEgressIp(),
-        paypalCheck,
         ...hosts.map((host) => probeTcp(host, port)),
       ]);
 
@@ -2152,13 +2189,10 @@ const server = createServer(async (req, res) => {
             ...mailer.publicConfig(),
             lastResult: mailer.lastResult?.() ?? null,
           },
-          paypal: {
-            enabled: PAYMENTS_ENABLED,
-            mode: PAYMENTS_ENABLED ? paypal.mode : null,
-            configured: PAYMENTS_ENABLED && paypal.configured,
-            webhookConfigured: PAYMENTS_ENABLED && Boolean(paypal.webhookId),
-            tokenOk: paypalAuth.ok,
-            tokenError: paypalAuth.error,
+          economy: {
+            enabled: true,
+            db: database.isAvailable(),
+            catalog: economyStore.listProducts().length,
           },
           admin: describeAdminSecrets(),
           probes,
@@ -2303,6 +2337,126 @@ const server = createServer(async (req, res) => {
       }
 
       res.writeHead(405, { Allow: "GET, POST" });
+      res.end();
+      return;
+    }
+
+    if (pathname === "/api/woods" && req.method === "GET") {
+      if (!database.isAvailable()) {
+        sendJson(res, 503, { error: "La base de datos no está configurada" });
+        return;
+      }
+      sendJson(res, 200, await woodStore.publicCatalog());
+      return;
+    }
+
+    const woodSpriteMatch = pathname.match(
+      /^\/api\/woods\/([^/]+)\/sprite\/(\d+)\.png$/,
+    );
+    if (woodSpriteMatch && req.method === "GET") {
+      if (!database.isAvailable()) {
+        sendJson(res, 503, { error: "La base de datos no está configurada" });
+        return;
+      }
+      const sprite = await woodStore.getSprite(
+        decodeURIComponent(woodSpriteMatch[1]),
+        woodSpriteMatch[2],
+      );
+      if (!sprite) {
+        sendJson(res, 404, { error: "Sprite no encontrado" });
+        return;
+      }
+      res.writeHead(200, {
+        "Content-Type": sprite.mime || "image/png",
+        "Cache-Control": "public, max-age=300",
+      });
+      res.end(sprite.data);
+      return;
+    }
+
+    if (pathname === "/api/admin/woods") {
+      const auth = verifyAdminRequest(req);
+      if (!auth.ok) {
+        sendAdminAuthError(res, auth);
+        return;
+      }
+      if (req.method === "GET") {
+        sendJson(res, 200, { woods: await woodStore.listAll() });
+        return;
+      }
+      if (req.method === "POST") {
+        try {
+          const body = JSON.parse((await readRequestBody(req, 8 * 1024 * 1024)) || "{}");
+          sendJson(res, 201, { wood: await woodStore.createWood(body) });
+        } catch (error) {
+          sendJson(res, Number(error.status) || 400, { error: error.message });
+        }
+        return;
+      }
+      res.writeHead(405, { Allow: "GET, POST" });
+      res.end();
+      return;
+    }
+
+    const adminWoodMatch = pathname.match(/^\/api\/admin\/woods\/([^/]+)$/);
+    if (adminWoodMatch) {
+      const auth = verifyAdminRequest(req);
+      if (!auth.ok) {
+        sendAdminAuthError(res, auth);
+        return;
+      }
+      const woodId = decodeURIComponent(adminWoodMatch[1]);
+      if (req.method === "PUT") {
+        try {
+          const body = JSON.parse((await readRequestBody(req, 8 * 1024 * 1024)) || "{}");
+          sendJson(res, 200, { wood: await woodStore.updateWood(woodId, body) });
+        } catch (error) {
+          sendJson(res, Number(error.status) || 400, { error: error.message });
+        }
+        return;
+      }
+      if (req.method === "DELETE") {
+        try {
+          sendJson(res, 200, await woodStore.deleteWood(woodId));
+        } catch (error) {
+          sendJson(res, Number(error.status) || 400, { error: error.message });
+        }
+        return;
+      }
+      res.writeHead(405, { Allow: "PUT, DELETE" });
+      res.end();
+      return;
+    }
+
+    const adminSpriteMatch = pathname.match(
+      /^\/api\/admin\/woods\/([^/]+)\/sprites\/(\d+)$/,
+    );
+    if (adminSpriteMatch) {
+      const auth = verifyAdminRequest(req);
+      if (!auth.ok) {
+        sendAdminAuthError(res, auth);
+        return;
+      }
+      const woodId = decodeURIComponent(adminSpriteMatch[1]);
+      const variant = adminSpriteMatch[2];
+      if (req.method === "PUT") {
+        try {
+          const body = JSON.parse((await readRequestBody(req, 8 * 1024 * 1024)) || "{}");
+          sendJson(res, 200, await woodStore.setSprite(woodId, variant, body));
+        } catch (error) {
+          sendJson(res, Number(error.status) || 400, { error: error.message });
+        }
+        return;
+      }
+      if (req.method === "DELETE") {
+        try {
+          sendJson(res, 200, await woodStore.deleteSprite(woodId, variant));
+        } catch (error) {
+          sendJson(res, Number(error.status) || 400, { error: error.message });
+        }
+        return;
+      }
+      res.writeHead(405, { Allow: "PUT, DELETE" });
       res.end();
       return;
     }

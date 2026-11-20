@@ -33,7 +33,9 @@ import {
   uploadDefaultPackFiles,
 } from "./game/texturePacks.js";
 import { LanClient } from "./net/lanClient.js";
+import { api } from "./net/api.js";
 import { createCloudSaveStore } from "./net/cloudSave.js";
+import { createLocalEconomy } from "./game/economy.js";
 import { SocialUI } from "./net/social.js";
 import { ClansUI } from "./ui/clans.js";
 import { HudMenu } from "./ui/hudMenu.js";
@@ -428,6 +430,13 @@ try {
   saveStore = createSaveStore(null);
 }
 
+let localEconomy = null;
+try {
+  localEconomy = createLocalEconomy(window.localStorage);
+} catch {
+  localEconomy = createLocalEconomy(null);
+}
+
 const STORE_PENDING_KEY = "rocksoup.store.pending.v1";
 
 function readStorePendingGrants() {
@@ -462,6 +471,7 @@ function mergeStoreGrants(first, second) {
     resources,
     items,
     upgrades: [...new Set([...(a.upgrades ?? []), ...(b.upgrades ?? [])])],
+    tools: [...new Set([...(a.tools ?? []), ...(b.tools ?? [])])],
     energy: (a.energy ?? 0) + (b.energy ?? 0),
   };
 }
@@ -479,6 +489,64 @@ function applyStorePendingGrants(gameInstance) {
   writeStorePendingGrants({});
   gameInstance?.applyStoreGrants?.(grants);
 }
+
+function economyRewardLabel(result) {
+  const parts = [];
+  if (result?.dracCoins > 0) {
+    parts.push(`+${result.dracCoins} DracCoins`);
+  }
+  if (result?.prestige > 0) {
+    parts.push(`+${result.prestige} Prestigio`);
+  }
+  if (result?.essences > 0) {
+    parts.push(`+${result.essences} Esencias`);
+  }
+  return parts.join(" · ");
+}
+
+function createEconomyBridge() {
+  return {
+    async award(kind, { refId = "", worldId = null } = {}) {
+      const targetWorld = worldId ?? activeCloudWorld?.id ?? null;
+      if (accountUI?.user) {
+        try {
+          const result = await api("/api/economy/earn", {
+            method: "POST",
+            body: { kind, refId, worldId: targetWorld },
+          });
+          if (result?.awarded) {
+            const label = economyRewardLabel(result);
+            if (label) {
+              game?.notify?.(`Economía: ${label}`);
+            }
+          }
+          return result;
+        } catch {
+          return null;
+        }
+      }
+
+      const result = localEconomy.award(kind, { refId });
+      if (result?.awarded) {
+        if (result.essences > 0) {
+          const added = game?.inventory?.add?.("esencia", result.essences) ?? 0;
+          const leftover = result.essences - added;
+          if (leftover > 0) {
+            addStorePendingGrants({ resources: { esencia: leftover } });
+          }
+          game?.save?.();
+        }
+        const label = economyRewardLabel(result);
+        if (label) {
+          game?.notify?.(`Economía: ${label}`);
+        }
+      }
+      return result;
+    },
+  };
+}
+
+const economyBridge = createEconomyBridge();
 
 function showScreen(name) {
   for (const [screenName, element] of Object.entries(screens)) {
@@ -582,6 +650,7 @@ function beginGame(seed, saveState, characterSkin = null, options = {}) {
       difficulty: options.difficulty ?? null,
       hud: ui.hud,
       onMenuRequested: returnToMenu,
+      economy: economyBridge,
     });
     game.start();
     attachHudMenu();
@@ -1021,6 +1090,7 @@ function startLanGame(message) {
       saveState,
       hud: ui.hud,
       onMenuRequested: returnToMenu,
+      economy: economyBridge,
       network: lanClient,
       networkSelfId: message.selfId ?? lanClient.selfId,
     });
@@ -1525,6 +1595,11 @@ accountUI.setOnBack(() => {
 storeUI = createStoreUI({
   onOpenAccount: () => openAccountScreen(),
   onPurchased: () => accountUI?.refresh?.(),
+  onLocalPurchase: ({ grants }) => {
+    if (grants && Object.keys(grants).length > 0) {
+      addStorePendingGrants(grants);
+    }
+  },
   getPlayerState: () => saveStore.read(),
   onBack: () => {
     refreshSaveInfo();

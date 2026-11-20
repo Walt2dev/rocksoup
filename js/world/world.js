@@ -9,11 +9,28 @@ import { rollGoldVein, rollMineral } from "./minerals.js";
 import { clamp01, createNoise, fbm01 } from "./noise.js";
 import { WORLD } from "./params.js";
 import { rollBush, rollGrass, rollTree } from "./vegetation.js";
+import { defaultWoodCatalog, woodForBiome } from "./woods.js";
+import { createCaveLayout } from "./caveLayout.js";
+import { createSkyLayout } from "./skyLayout.js";
 
 export class World {
   constructor(seed, options = {}) {
     this.seed = createRng(seed).seed;
     this.config = { ...WORLD, ...options };
+    this.woodCatalog =
+      options.woodCatalog?.byBiome instanceof Map
+        ? options.woodCatalog
+        : defaultWoodCatalog();
+    this.realm =
+      options.realm === "underground" || options.realm === "sky"
+        ? options.realm
+        : "surface";
+    this.realmLayout =
+      this.realm === "underground"
+        ? createCaveLayout(this.seed)
+        : this.realm === "sky"
+          ? createSkyLayout(this.seed)
+          : null;
     this.biomeSet =
       this.config.biomeSet === "expanded" ? "expanded" : "legacy";
     this.flat = options.flat === true;
@@ -66,6 +83,9 @@ export class World {
   }
 
   sampleTerrain(x, y) {
+    if (this.realmLayout) {
+      return this.realmLayout.sample(x, y);
+    }
     const elevation = this.elevationAt(x, y);
     const moisture = this.moistureAt(x, y, elevation);
     const temperature =
@@ -86,6 +106,10 @@ export class World {
 
   biomeAt(x, y) {
     return this.sampleTerrain(x, y).biome;
+  }
+
+  woodForBiome(biomeId) {
+    return woodForBiome(this.woodCatalog, biomeId);
   }
 
   isWalkableAt(x, y) {
@@ -304,6 +328,11 @@ export class World {
           continue;
         }
 
+        if (this.realm !== "surface") {
+          this.generateRealmTile(chunk, index, localX, localY, x, y, rng, terrain);
+          continue;
+        }
+
         const vein = this.mineralVeinAt(x, y);
         const gold = rollGoldVein(
           createRng(`${this.seed}:gold:${x}:${y}`),
@@ -328,7 +357,13 @@ export class World {
         }
 
         const density = this.vegetationDensityAt(x, y);
-        const tree = rollTree(rng, terrain.biome, terrain.moisture, density);
+        const tree = rollTree(
+          rng,
+          terrain.biome,
+          terrain.moisture,
+          density,
+          this.woodCatalog,
+        );
 
         if (tree) {
           if (this.isHarvested("tree", x, y)) {
@@ -370,6 +405,77 @@ export class World {
     this.evictChunks();
 
     return chunk;
+  }
+
+  generateRealmTile(chunk, index, localX, localY, x, y, rng, terrain) {
+    const entry = this.realmLayout?.entry;
+    const exit = this.realmLayout?.exit;
+    const tileX = x + 0.5;
+    const tileY = y + 0.5;
+    if (entry && Math.hypot(tileX - entry.x, tileY - entry.y) < 3.5) {
+      return;
+    }
+    if (exit && Math.hypot(tileX - exit.x, tileY - exit.y) < 2.5) {
+      return;
+    }
+    if (this.realm === "underground") {
+      if (terrain.biome !== BIOME.CAVE_FLOOR) {
+        return;
+      }
+      const mineral = rollMineral(rng, BIOME.CAVE_FLOOR, this.mineralVeinAt(x, y));
+      if (mineral) {
+        if (this.isHarvested("mineral", x, y)) {
+          chunk.rubble.push({ localX, localY, ...mineral });
+        } else {
+          chunk.mineral[index] = mineral.type;
+          chunk.minerals.push({ localX, localY, ...mineral });
+        }
+        return;
+      }
+      if (!this.realmLayout?.isRoom(x, y)) {
+        return;
+      }
+      const density = this.vegetationDensityAt(x, y);
+      const tree = rollTree(
+        rng,
+        terrain.biome,
+        terrain.moisture,
+        density,
+        this.woodCatalog,
+      );
+      if (tree) {
+        if (this.isHarvested("tree", x, y)) {
+          chunk.stumps.push({ localX, localY, ...tree });
+        } else {
+          chunk.tree[index] = 1;
+          chunk.trees.push({ localX, localY, ...tree });
+        }
+      }
+      return;
+    }
+
+    if (this.realm === "sky") {
+      if (terrain.biome !== BIOME.CLOUD) {
+        return;
+      }
+      const density = this.vegetationDensityAt(x, y);
+      const tree = rollTree(
+        rng,
+        terrain.biome,
+        terrain.moisture,
+        density,
+        this.woodCatalog,
+      );
+      if (!tree) {
+        return;
+      }
+      if (this.isHarvested("tree", x, y)) {
+        chunk.stumps.push({ localX, localY, ...tree });
+      } else {
+        chunk.tree[index] = 1;
+        chunk.trees.push({ localX, localY, ...tree });
+      }
+    }
   }
 
   evictChunks() {
@@ -667,6 +773,9 @@ export class World {
   }
 
   findSpawn({ attempts = 240, radius = 160 } = {}) {
+    if (this.realmLayout) {
+      return { ...this.realmLayout.entry };
+    }
     const rng = createRng(`${this.seed}:spawn`);
     let fallback = null;
 

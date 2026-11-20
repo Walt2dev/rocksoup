@@ -10,6 +10,11 @@ export const BIOME = Object.freeze({
   DESERT: 6,
   JUNGLE: 7,
   WOLF: 8,
+  CAVE_FLOOR: 9,
+  CAVE_WALL: 10,
+  CLOUD: 11,
+  VOID: 12,
+  GOLD_PATH: 13,
 });
 
 export const BIOMES = Object.freeze([
@@ -84,6 +89,46 @@ export const BIOMES = Object.freeze([
     walkable: true,
     shades: ["#233d34", "#2c4a3d", "#365846"],
     mineralChance: 0.008,
+  }),
+  Object.freeze({
+    id: BIOME.CAVE_FLOOR,
+    key: "cave_floor",
+    name: "Suelo de cueva",
+    walkable: true,
+    shades: ["#2b2830", "#35313b", "#403a46"],
+    mineralChance: 0.03,
+  }),
+  Object.freeze({
+    id: BIOME.CAVE_WALL,
+    key: "cave_wall",
+    name: "Muro de cueva",
+    walkable: false,
+    shades: ["#121116", "#19171e", "#211e26"],
+    mineralChance: 0,
+  }),
+  Object.freeze({
+    id: BIOME.CLOUD,
+    key: "cloud",
+    name: "Nube",
+    walkable: true,
+    shades: ["#dbe8f5", "#e8f1fb", "#f4f8ff"],
+    mineralChance: 0,
+  }),
+  Object.freeze({
+    id: BIOME.VOID,
+    key: "void",
+    name: "Vacío",
+    walkable: false,
+    shades: ["#78a7d6", "#8db8e2", "#a2c8ed"],
+    mineralChance: 0,
+  }),
+  Object.freeze({
+    id: BIOME.GOLD_PATH,
+    key: "gold_path",
+    name: "Camino de oro",
+    walkable: true,
+    shades: ["#c99a2e", "#e0b243", "#f2ce6b"],
+    mineralChance: 0,
   }),
 ]);
 

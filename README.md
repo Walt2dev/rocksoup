@@ -59,8 +59,8 @@ Abre `http://localhost:3000` en el equipo anfitrión o la URL del despliegue.
   sin clave la ruta y la API devuelven 404.
 - Muestra conectados, salud, posición, tiempo conectado, evento y TOP del
   ranking. Se actualiza cada 2 segundos.
-- Incluye un resumen de jugadores únicos, tiempo jugado, compras e ingresos, con
-  selector de rango de **7, 30 o 90 días**.
+- Incluye un resumen de jugadores únicos, tiempo jugado, compras con DracCoins y
+  movimientos de economía, con selector de rango de **7, 30 o 90 días**.
 - Permite **descargar** e **importar** el mundo en JSON. La importación se
   aplica al reiniciar/redeployar la app.
 
@@ -114,83 +114,62 @@ MySQL: sin base de datos esas rutas responden `503`.
 - **Google Sign-In opcional**: si defines `GOOGLE_CLIENT_ID`, el jugador también
   puede entrar con Google. La misma sesión se reutiliza en tienda, menú y
   multijugador.
-- El multijugador online y las compras requieren cuenta. El jugador inicia
-  sesión una sola vez al entrar al menú.
+- El multijugador online y las compras en la nube requieren cuenta. El jugador
+  inicia sesión una sola vez al entrar al menú. La tienda local funciona sin
+  cuenta con una cartera en el navegador.
 - Google exige HTTPS o `localhost`; para LAN local se usa correo/contraseña.
 - **Un mundo individual gratis** por cuenta, guardado en MySQL. Cada slot extra
-  cuesta **15 MXN** (pago único) y se compra en la tienda.
+  cuesta **2,500 DracCoins** y se compra en la tienda.
 - **Lore del mundo**: el servidor guarda una crónica automática de eventos
   (creación, jugadores que entran/salen, ganadores PvP, inicio de partida) y la
   muestra en la cuenta. En LAN también se persiste dentro del mundo compartido.
-- **Compras registradas**: cada pago queda en `purchases` con usuario, producto,
-  monto, moneda, estado y order ID de PayPal.
+- **Compras registradas**: cada compra queda en `economy_transactions` con usuario,
+  producto, moneda del juego, saldo resultante y fecha.
 - El guardado local (`localStorage`) sigue funcionando como caché y respaldo.
 
-## Tienda y PayPal Business
+## Tienda y economía de Dracxcore
 
-> **Pagos deshabilitados.** La cuenta de PayPal fue desactivada permanentemente.
-> La tienda se mantiene visible para explorar el catálogo, pero las compras y
-> suscripciones están bloqueadas desde el servidor (`server/payments.mjs`).
-> Cuando exista otro proveedor de pagos, cámbialo ahí y vuelve a habilitar los
-> endpoints correspondientes.
+La tienda ya no usa PayPal ni dinero real. Usa una economía cerrada del juego:
 
-La tienda integrada incluye recursos, diamantes, armaduras, herramientas, el
-slot de mundo de 15 MXN y las suscripciones Noble, Lord y Feudo con recursos
-cada 24 horas.
+- **DracCoins**: moneda comercial de la cuenta. Se gana jugando y se gasta en la
+  tienda NPC, slots de mundo, packs de Esencias y contratos.
+- **Esencias**: recurso por mundo. Se obtiene explorando, descubriendo
+  constelaciones y aves, completando misiones y fabricando; se usa en recetas y
+  objetos especiales del mundo.
+- **Prestigio**: moneda de reputación de la cuenta. Se gana con logros, misiones
+  y eventos PvP; desbloquea títulos y apariencias.
 
-La tienda se puede ver sin cuenta, pero **comprar requiere iniciar sesión**. Hay
-productos de prueba de **5 MXN** y pestañas **Exclusivo**, **Para Mi**,
-**Recursos** y **Packs**.
+Reglas del modelo:
 
-> **Importante:** una cuenta PayPal **personal no puede usar la API de cobros**.
-> Para que el pago llegue solo a tu cuenta y el artículo se entregue
-> automáticamente necesitas una cuenta **PayPal Business**.
+- Sin depósitos, compras con pesos, retiros ni conversión a dinero real.
+- Sin criptomonedas, blockchain, apuestas ni cajas sorpresa pagadas.
+- Los saldos de DracCoins y Prestigio viven en MySQL y se auditan en
+  `economy_transactions`.
+- Las Esencias viven en el guardado de cada mundo.
+- Cada movimiento del servidor se valida con transacciones SQL y deduplicación
+  para evitar abusos.
+- Los jugadores sin cuenta usan una cartera local en el navegador; al iniciar
+  sesión se usa la cartera de MySQL.
 
-### Cómo pasar de PayPal personal a Business
+### Recompensas
 
-1. Entra a <https://www.paypal.com> con tu cuenta personal.
-2. Abre **Configuración** (engranaje) → **Cuenta** → **Actualizar a Business**.
-   También puedes crear una cuenta Business nueva con el mismo correo desde
-   <https://www.paypal.com/business>.
-3. Completa los datos del negocio (puede ser como persona física / actividad
-   independiente). PayPal no cobra por tener la cuenta Business; solo aplica sus
-   comisiones normales por venta.
-4. Confirma tu correo, identidad y, si te lo pide, datos fiscales. En México
-   puedes facturar después; para operar la tienda basta con completar la
-   verificación.
-5. Entra a <https://developer.paypal.com/dashboard/applications> con la cuenta
-   Business.
-6. Crea una app **REST API**:
-   - Modo **Sandbox** para probar con compradores de prueba.
-   - Modo **Live** para cobrar de verdad.
-7. Copia **Client ID** y **Secret** a `PAYPAL_CLIENT_ID` y
-   `PAYPAL_CLIENT_SECRET` en `.env`. No pongas el Secret en el frontend.
-8. En la app, crea un **Webhook** con la URL
-   `https://tudominio.com/api/paypal/webhook` y copia su ID a
-   `PAYPAL_WEBHOOK_ID`.
-9. Activa los eventos:
-   `PAYMENT.CAPTURE.COMPLETED`, `PAYMENT.CAPTURE.REFUNDED`,
-   `BILLING.SUBSCRIPTION.ACTIVATED`, `BILLING.SUBSCRIPTION.UPDATED`,
-   `BILLING.SUBSCRIPTION.RENEWED`, `BILLING.SUBSCRIPTION.CANCELLED`,
-   `BILLING.SUBSCRIPTION.SUSPENDED`, `BILLING.SUBSCRIPTION.EXPIRED` y
-   `PAYMENT.SALE.COMPLETED`.
-10. Prueba una compra y una suscripción en Sandbox. Cuando todo funcione, cambia
-    `PAYPAL_MODE=live` y usa las credenciales Live.
+Las misiones de aldeas, la cueva de lobos, la misión de aves, las constelaciones,
+las especies nuevas, la fabricación, las bajas PvP, las victorias de evento y el
+objetivo diario otorgan DracCoins, Prestigio y/o Esencias. El servidor aplica
+topes diarios y solo entrega una vez las recompensas únicas.
 
-> `PAYPAL_MODE` debe coincidir con las credenciales. Si `/api/health` muestra
-> `paypal.mode:"sandbox"` pero las credenciales son Live (o al revés), PayPal
-> rechaza el token y el checkout falla. Tras cambiar variables, reinicia la app
-> y confirma `configured:true` y `webhookConfigured:true` en `/api/health`.
+### Tienda NPC
 
-Los botones de compra habilitan también **tarjeta** (`enable-funding=card`). Si
-no aparece la opción de tarjeta, actívala en la cuenta PayPal Business
-(Advanced Credit and Debit Card Payments) o valora Mercado Pago/Stripe como
-pasarela separada.
+La tienda incluye recursos, equipo, Esencias, slots de mundo, contratos de 30
+días con suministros diarios y títulos de prestigio. Los productos se compran
+directamente con DracCoins o Prestigio. No hay botones ni SDK de PayPal.
 
-El dinero se abona en el saldo de tu PayPal Business (y desde ahí lo retiras a
-tu banco o cuenta personal). PayPal descuenta su comisión habitual por
-transacción. Revisa también tu política de reembolsos y obligaciones fiscales
-por venta de bienes digitales en México.
+### Migración desde diamantes
+
+Si una cuenta tenía diamantes, se convierten una sola vez a Esencias pendientes
+(`1 diamante = 5 Esencias`) que se entregan al cargar un mundo. Las
+suscripciones antiguas de PayPal quedan canceladas; los contratos nuevos se
+compran con DracCoins.
 
 ### Google Sign-In
 
@@ -203,6 +182,36 @@ por venta de bienes digitales en México.
 5. Copia el Client ID a `GOOGLE_CLIENT_ID`.
 
 No se necesita Client Secret para el flujo de ID Token usado aquí.
+
+## Maderas, editor y reinos
+
+### Editor de maderas
+
+- En `/admin` → **Maderas** puedes crear, editar y ocultar tipos de árbol.
+- Cada bioma de superficie, Subsuelo y Cielo puede tener una madera asignada.
+- El editor permite ajustar colores, tronco, ramas, hojas, densidad y forma
+  (árbol, cactus u hongo), con vista previa en vivo.
+- También puedes subir hasta 6 sprites PNG por madera (uno por variante). Si no
+  hay PNG, se usa el dibujo procedural.
+- El catálogo público se sirve en `/api/woods`; los sprites en
+  `/api/woods/:id/sprite/:variante.png`.
+- Los cambios se aplican al recargar el juego. Las maderas ocultas dejan de
+  generarse pero se conservan para mundos antiguos.
+- Las maderas siguen dando `madera`; el tipo de árbol es visual y de bioma.
+
+### Subsuelo y Cielo
+
+- Cada partida individual/nube genera un **portal al Subsuelo** y unas
+  **escaleras al Cielo** cerca del spawn.
+- También se pueden fabricar **Portal al Subsuelo** y **Escalera al Cielo** en
+  Crafteo → Construcción y colocarlos en la superficie.
+- El Subsuelo es un laberinto de cuevas con minerales y hongos gigantes.
+- El Cielo son islas de nubes conectadas por caminos de oro y árboles de nube.
+- Entrar y salir usa el portal más cercano o el botón contextual.
+- El estado de cada reino (árboles talados, minerales agotados) se guarda dentro
+  del mundo.
+- Los portales funcionan en partidas individuales y en la nube. En LAN se
+  muestran desactivados para evitar desincronizaciones.
 
 ## Variables de entorno útiles
 
@@ -217,9 +226,6 @@ No se necesita Client Secret para el flujo de ID Token usado aquí.
 - `MYSQL_SSL`, `MYSQL_SSL_CA`, `MYSQL_CONNECTION_LIMIT`.
 - `PUBLIC_BASE_URL`: URL pública HTTPS del juego.
 - `GOOGLE_CLIENT_ID`: Client ID Web de Google Cloud.
-- `PAYPAL_MODE`: `sandbox` o `live`.
-- `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`: app REST de PayPal Business.
-- `PAYPAL_WEBHOOK_ID`: ID del webhook de PayPal.
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`,
   `MAIL_FROM`: correo de bienvenida y pruebas. Si no hay SMTP se intenta usar
   `sendmail` del hosting (`SENDMAIL_PATH` opcional).
@@ -254,18 +260,16 @@ página con `?ws=host:puerto`.
 
 ### Despliegue en GoDaddy con dominio propio
 
-1. Sube todos los archivos nuevos (`server/*.mjs`, `js/net/api.js`,
-   `js/net/auth.js`, `js/net/cloudSave.js`, `js/ui/account.js`,
-   `js/ui/store.js`, `css/store.css`, `index.html`, `js/main.js`,
-   `js/net/lanClient.js`, `package.json`, `.env.example`, `README.md`).
+1. Sube todos los archivos nuevos o modificados. Como mínimo:
+   `server/*.mjs`, `server/schema.sql`, `js/world/*.js`, `js/game/*.js`,
+   `js/render/*.js`, `js/net/api.js`, `js/net/auth.js`, `js/net/cloudSave.js`,
+   `js/ui/account.js`, `js/ui/store.js`, `js/admin.js`, `js/adminWoods.js`,
+   `css/store.css`, `css/style.css`, `index.html`, `admin.html`, `js/main.js`,
+   `js/net/lanClient.js`, `package.json`, `.env.example`, `README.md`.
 2. En **GoDaddy → Node.js / Variables de entorno**, define:
    ```env
    PUBLIC_BASE_URL=https://rocksoup.xyz
    GOOGLE_CLIENT_ID=...
-   PAYPAL_MODE=sandbox
-   PAYPAL_CLIENT_ID=...
-   PAYPAL_CLIENT_SECRET=...
-   PAYPAL_WEBHOOK_ID=...
    ```
    Mantén tus variables de MySQL y `ADMIN_TOKEN`.
 3. Reinicia la aplicación Node desde el panel de GoDaddy.
@@ -274,13 +278,12 @@ página con `?ws=host:puerto`.
    https://rocksoup.xyz/api/health
    ```
    Debe devolver `"db":true`, `"auth":true` y
-   `"paypal":{"configured":true,...}`.
+   `"economy":{"enabled":true,"db":true}`.
 5. Si `/api/health` devuelve 404, GoDaddy sigue ejecutando la versión anterior
    del servidor. Vuelve a subir el código y reinicia Node.
-6. Abre `/api/auth/config` y `/api/store/config` para confirmar Google y PayPal.
-7. Prueba en Sandbox: login con Google, crear mundo, comprar un recurso y
-   verificar que aparece en el inventario. Después cambia a `PAYPAL_MODE=live`
-   con las credenciales Live y el webhook Live.
+6. Abre `/api/auth/config` y `/api/store/config` para confirmar Google y la economía.
+7. Prueba la economía: inicia sesión, gana DracCoins, compra un recurso,
+   carga un mundo y verifica que aparece en el inventario.
 
 El cliente elige el WebSocket automáticamente:
 
@@ -299,8 +302,9 @@ npm test
 ## Estructura
 
 - `js/world`: generación procedural (biomas, minerales, vegetación).
-- `js/game`: simulación, inventario, aldeas, crafteo, trabajadores.
+- `js/game`: simulación, inventario, aldeas, crafteo, trabajadores y economía.
 - `js/render`: carga de assets y render isométrico.
 - `js/net`: cliente WebSocket y UI social multijugador.
-- `server`: servidor estático + WebSocket, eventos PvP, chat, ranking y mundos.
+- `server`: servidor estático + WebSocket, eventos PvP, chat, ranking, mundos y
+  economía (DracCoins, Esencias y Prestigio).
 - `tests`: pruebas con `node --test`.

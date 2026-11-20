@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <title>Administración · Sopa de Piedras</title>
-    <link rel="stylesheet" href="css/style.css" />
+    <link rel="stylesheet" href="css/style.css?v=5" />
   </head>
   <body class="admin-body">
     <main class="admin-shell">
@@ -47,6 +47,7 @@
         <nav id="admin-tabs" class="admin-tabs" aria-label="Secciones de administración">
           <button class="admin-tab is-active" type="button" data-admin-tab="resumen">Resumen</button>
           <button class="admin-tab" type="button" data-admin-tab="mundo">Mundo</button>
+          <button class="admin-tab" type="button" data-admin-tab="maderas">Maderas</button>
           <button class="admin-tab" type="button" data-admin-tab="jugadores">Jugadores</button>
           <button class="admin-tab" type="button" data-admin-tab="actividad">Actividad</button>
           <button class="admin-tab" type="button" data-admin-tab="compras">Compras</button>
@@ -73,7 +74,7 @@
               <strong id="admin-purchases-today">0</strong>
             </article>
             <article class="admin-card">
-              <span>Ingresos hoy</span>
+              <span>DracCoins hoy</span>
               <strong id="admin-revenue-today">$0</strong>
             </article>
           </div>
@@ -123,6 +124,22 @@
           </section>
         </section>
 
+        <section class="admin-tab-panel" data-tab-panel="maderas" hidden>
+          <section class="admin-section">
+            <h2>Editor de maderas</h2>
+            <p class="admin-muted">
+              Asigna un árbol a cada bioma. Puedes ajustar colores, forma y
+              subir sprites PNG por variante. Los cambios se aplican al recargar
+              el juego.
+            </p>
+            <div class="admin-woods-layout">
+              <div class="admin-woods-list" id="admin-woods-list"></div>
+              <div class="admin-woods-editor" id="admin-woods-editor"></div>
+            </div>
+            <p id="admin-woods-status" class="admin-status" role="status"></p>
+          </section>
+        </section>
+
         <section class="admin-tab-panel" data-tab-panel="jugadores" hidden>
           <section class="admin-section">
             <h2>Conectados</h2>
@@ -151,7 +168,7 @@
 
         <section class="admin-tab-panel" data-tab-panel="compras" hidden>
           <section class="admin-section">
-            <h2>Compras recientes</h2>
+            <h2>Compras con DracCoins</h2>
             <div id="admin-purchases" class="admin-table-wrap"></div>
           </section>
           <section class="admin-section">
@@ -159,7 +176,7 @@
             <div id="admin-purchase-totals" class="admin-table-wrap"></div>
           </section>
           <section class="admin-section">
-            <h2>Suscripciones</h2>
+            <h2>Contratos</h2>
             <div id="admin-subscriptions" class="admin-table-wrap"></div>
           </section>
         </section>
@@ -188,6 +205,6 @@
       </section>
     </main>
 
-    <script type="module" src="js/admin.js"></script>
+    <script type="module" src="js/admin.js?v=2"></script>
   </body>
 </html>

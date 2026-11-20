@@ -7,8 +7,8 @@
     <meta name="theme-color" content="#0b0f14" />
     <title>Sopa de Piedras — DracxGames</title>
     <link rel="icon" type="image/png" href="characters/logo_sopa_de_rocas.png?v=4" />
-    <link rel="stylesheet" href="css/style.css?v=4" />
-    <link rel="stylesheet" href="css/store.css?v=1" />
+    <link rel="stylesheet" href="css/style.css?v=5" />
+    <link rel="stylesheet" href="css/store.css?v=2" />
   </head>
   <body>
     <svg class="svg-defs" aria-hidden="true" focusable="false">
@@ -367,14 +367,16 @@
             </div>
 
             <div class="account-stats">
-              <div><span>Diamantes</span><strong id="account-diamonds">0</strong></div>
+              <div><span>DracCoins</span><strong id="account-drac">0</strong></div>
+              <div><span>Prestigio</span><strong id="account-prestige">0</strong></div>
+              <div><span>Títulos</span><strong id="account-titles">0</strong></div>
               <div><span>Mundos</span><strong id="account-worlds-count">0/1</strong></div>
-              <div><span>Suscripción</span><strong id="account-sub">Ninguna</strong></div>
+              <div><span>Contrato</span><strong id="account-sub">Ninguno</strong></div>
             </div>
 
             <div class="account-actions">
               <button id="account-store" class="menu-button primary" type="button">Abrir tienda</button>
-              <button id="account-buy-slot" class="menu-button" type="button">Comprar slot · 15 MXN</button>
+              <button id="account-buy-slot" class="menu-button" type="button">Comprar slot · 2,500 DracCoins</button>
               <button id="account-new-world" class="menu-button" type="button">Nuevo mundo</button>
               <button id="account-upload-local" class="menu-button" type="button">Subir partida local</button>
               <button id="account-logout" class="menu-button danger" type="button">Cerrar sesión</button>
@@ -385,7 +387,7 @@
             <h3>Mis mundos</h3>
             <div id="account-worlds" class="account-worlds"></div>
 
-            <h3>Historial de compras</h3>
+            <h3>Movimientos de economía</h3>
             <div id="account-purchases" class="account-worlds"></div>
           </div>
 
@@ -398,7 +400,7 @@
           <header class="store-header">
             <div>
               <span class="lan-eyebrow">Tienda</span>
-              <h2>Recursos, armaduras y suscripciones</h2>
+              <h2>Recursos, equipo y contratos</h2>
             </div>
             <button id="btn-store-back" class="craft-close" type="button" aria-label="Volver al menú">&times;</button>
           </header>
@@ -425,7 +427,7 @@
               Mundo destino
               <select id="store-world-select"></select>
             </label>
-            <div id="paypal-button-container" class="paypal-button-container"></div>
+            <div id="store-purchase-container" class="store-purchase-container"></div>
             <p id="store-modal-status" class="lan-note" role="status"></p>
           </div>
         </div>
@@ -1341,7 +1343,7 @@
       </section>
     </div>
 
-    <script type="module" src="js/main.js?v=5"></script>
+    <script type="module" src="js/main.js?v=6"></script>
   </body>
 </html>
 

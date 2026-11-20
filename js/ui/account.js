@@ -6,6 +6,7 @@ import {
   signOut,
 } from "../net/auth.js";
 import { createRng, randomSeed } from "../core/rng.js";
+import { ECONOMY_CURRENCIES } from "../game/economy.js";
 
 function el(id) {
   return document.getElementById(id);
@@ -83,22 +84,33 @@ export function createAccountUI({
       capacity: 1,
       used: 0,
     };
-    const diamondsNode = el("account-diamonds");
-    if (diamondsNode) {
-      const nextValue = String(summary?.diamonds ?? 0);
-      if (diamondsNode.textContent !== nextValue) {
-        diamondsNode.textContent = nextValue;
+    const wallet = summary?.wallet ?? { dracCoins: 0, prestige: 0 };
+    const dracNode = el("account-drac");
+    if (dracNode) {
+      const nextValue = String(wallet.dracCoins ?? 0);
+      if (dracNode.textContent !== nextValue) {
+        dracNode.textContent = nextValue;
       }
-      diamondsNode.classList.remove("is-bump");
-      void diamondsNode.offsetWidth;
-      diamondsNode.classList.add("is-bump");
+      dracNode.classList.remove("is-bump");
+      void dracNode.offsetWidth;
+      dracNode.classList.add("is-bump");
+    }
+    const prestigeNode = el("account-prestige");
+    if (prestigeNode) {
+      prestigeNode.textContent = String(wallet.prestige ?? 0);
+    }
+    const titlesNode = el("account-titles");
+    if (titlesNode) {
+      titlesNode.textContent = String(
+        Array.isArray(summary?.entitlements) ? summary.entitlements.length : 0,
+      );
     }
     el("account-worlds-count").textContent = `${slots.used}/${slots.capacity}`;
 
-    const activeSub = (summary?.subscriptions ?? []).find(
+    const activeContract = (summary?.contracts ?? []).find(
       (entry) => entry.status === "ACTIVE",
     );
-    el("account-sub").textContent = activeSub?.name ?? "Ninguna";
+    el("account-sub").textContent = activeContract?.name ?? "Ninguno";
     el("account-pending").hidden = !(summary?.pendingGrants > 0);
     el("account-pending").textContent =
       summary?.pendingGrants > 0
@@ -114,26 +126,28 @@ export function createAccountUI({
     if (!container) {
       return;
     }
-    const purchases = Array.isArray(summary?.purchases) ? summary.purchases : [];
-    if (purchases.length === 0) {
+    const transactions = Array.isArray(summary?.transactions)
+      ? summary.transactions
+      : [];
+    if (transactions.length === 0) {
       const empty = document.createElement("p");
       empty.className = "account-note";
-      empty.textContent = "Todavía no tienes compras.";
+      empty.textContent = "Todavía no tienes movimientos en tu economía.";
       container.replaceChildren(empty);
       return;
     }
     container.replaceChildren(
-      ...purchases.map((purchase) => {
+      ...transactions.map((entry) => {
         const row = document.createElement("div");
         row.className = "account-world";
         const info = document.createElement("div");
         info.className = "account-world-info";
         const name = document.createElement("strong");
-        name.textContent = purchase.productName || purchase.productId;
+        name.textContent = entry.reason === "purchase" ? "Compra en la tienda" : entry.reason;
         const meta = document.createElement("span");
-        meta.textContent = `${formatPrice(purchase.amountCents, purchase.currency)} · ${formatDate(purchase.createdAt)}`;
+        meta.textContent = `${formatCurrencyAmount(entry.currency, entry.amount)} · ${formatDate(entry.createdAt)}`;
         const status = document.createElement("small");
-        status.textContent = `Estado: ${purchase.status} · Entrega: ${purchase.grantStatus}`;
+        status.textContent = `Saldo: ${formatCurrencyAmount(entry.currency, entry.balanceAfter)}`;
         info.append(name, meta, status);
         row.append(info);
         return row;
@@ -141,15 +155,11 @@ export function createAccountUI({
     );
   }
 
-  function formatPrice(cents, currency = "MXN") {
-    try {
-      return new Intl.NumberFormat("es-MX", {
-        style: "currency",
-        currency,
-      }).format((Number(cents) || 0) / 100);
-    } catch {
-      return `$${((Number(cents) || 0) / 100).toFixed(2)} ${currency}`;
-    }
+  function formatCurrencyAmount(currency, amount) {
+    const info = ECONOMY_CURRENCIES[currency] ?? ECONOMY_CURRENCIES.drac;
+    const value = Number(amount) || 0;
+    const sign = value < 0 ? "-" : "+";
+    return `${sign}${Math.abs(value).toLocaleString("es-MX")} ${info.label}`;
   }
 
   function renderWorlds() {

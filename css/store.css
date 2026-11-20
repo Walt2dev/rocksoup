@@ -434,8 +434,14 @@
   background: linear-gradient(160deg, rgba(224, 164, 88, 0.12), rgba(255, 255, 255, 0.015));
 }
 
-.store-product.store-cat-diamonds {
-  border-color: rgba(126, 198, 219, 0.3);
+.store-product.store-cat-prestige {
+  border-color: rgba(181, 140, 224, 0.4);
+  background: linear-gradient(160deg, rgba(181, 140, 224, 0.12), rgba(255, 255, 255, 0.015));
+}
+
+.store-product.store-cat-contracts {
+  border-color: rgba(224, 164, 88, 0.34);
+  background: linear-gradient(160deg, rgba(224, 164, 88, 0.12), rgba(255, 255, 255, 0.015));
 }
 
 /* ---------- Modal de compra ---------- */
@@ -539,9 +545,22 @@
   font-size: 0.82rem;
 }
 
-.paypal-button-container {
+.store-purchase-container {
   min-height: 48px;
   margin-top: 4px;
+}
+
+.store-buy-wide {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 0.86rem;
+}
+
+.store-buy:disabled {
+  filter: grayscale(0.6);
+  opacity: 0.6;
+  cursor: not-allowed;
+  animation: none;
 }
 
 .store-modal-card .lan-note.is-error,

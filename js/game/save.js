@@ -10,6 +10,11 @@ import {
   BUILDING_TYPES,
 } from "./towerDefense.js";
 import { MINERAL_TYPES } from "../world/minerals.js";
+import {
+  WOOD_ID_PATTERN,
+  legacyWoodIdForSpecies,
+} from "../world/woods.js";
+import { sanitizePortals } from "../world/portals.js";
 import { CAMERA } from "../world/params.js";
 import {
   DEFAULT_CAPACITY,
@@ -483,8 +488,23 @@ function sanitizePlantedNodes(value) {
     const key = `${node.kind}:${x}:${y}`;
     const data = {};
 
+    if (
+      typeof node.data.woodId === "string" &&
+      WOOD_ID_PATTERN.test(node.data.woodId)
+    ) {
+      data.woodId = node.data.woodId.slice(0, 48);
+    } else if (Number.isFinite(node.data.species)) {
+      data.woodId = legacyWoodIdForSpecies(node.data.species);
+    }
     if (Number.isFinite(node.data.species)) {
       data.species = Math.min(3, Math.max(0, Math.floor(node.data.species)));
+    }
+    if (
+      node.data.shape === "tree" ||
+      node.data.shape === "cactus" ||
+      node.data.shape === "mushroom"
+    ) {
+      data.shape = node.data.shape;
     }
     if (Number.isFinite(node.data.variant)) {
       data.variant = Math.max(0, Math.floor(node.data.variant));
@@ -503,6 +523,36 @@ function sanitizePlantedNodes(value) {
   }
 
   return [...nodes.values()];
+}
+
+function sanitizeRealmName(value) {
+  return value === "underground" || value === "sky" ? value : "surface";
+}
+
+function sanitizeRealmPosition(value) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  if (!Number.isFinite(value.x) || !Number.isFinite(value.y)) {
+    return null;
+  }
+  return {
+    x: Math.max(-MAX_COORDINATE, Math.min(MAX_COORDINATE, value.x)),
+    y: Math.max(-MAX_COORDINATE, Math.min(MAX_COORDINATE, value.y)),
+  };
+}
+
+function sanitizeRealmStates(value) {
+  const source = value && typeof value === "object" ? value : {};
+  const result = {};
+  for (const realm of ["underground", "sky"]) {
+    const entry = source[realm] && typeof source[realm] === "object" ? source[realm] : {};
+    result[realm] = {
+      harvestedNodes: sanitizeHarvestedNodes(entry.harvestedNodes),
+      plantedNodes: sanitizePlantedNodes(entry.plantedNodes),
+    };
+  }
+  return result;
 }
 
 const FEATHER_SPECIES_KEYS = Object.freeze(["vulture", "sparrow", "crow", "owl", "perdiz"]);
@@ -864,6 +914,10 @@ export function sanitizeSave(value) {
     waveTimer: 0,
     tradeRoutes: sanitizeTradeRoutes(value.tradeRoutes),
     villageProgress: sanitizeVillageProgress(value.villageProgress),
+    realm: sanitizeRealmName(value.realm),
+    realms: sanitizeRealmStates(value.realms),
+    portals: sanitizePortals(value.portals),
+    returnPosition: sanitizeRealmPosition(value.returnPosition),
     savedAt: Number.isFinite(value.savedAt) ? value.savedAt : Date.now(),
   };
 }

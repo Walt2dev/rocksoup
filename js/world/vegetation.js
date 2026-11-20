@@ -1,15 +1,24 @@
 import { BIOME } from "./biomes.js";
 import { clamp01 } from "./noise.js";
+import {
+  BUILTIN_WOODS,
+  LEGACY_WOOD_IDS,
+  defaultWoodCatalog,
+  legacySpeciesForWood,
+  woodForBiome,
+} from "./woods.js";
 
 export const TREE_VARIANTS = 6;
 export const BUSH_VARIANTS = 3;
 
-export const TREE_SPECIES = Object.freeze([
-  Object.freeze({ id: 0, key: "roble", name: "Roble" }),
-  Object.freeze({ id: 1, key: "pino", name: "Pino" }),
-  Object.freeze({ id: 2, key: "ceiba", name: "Ceiba" }),
-  Object.freeze({ id: 3, key: "cactus", name: "Cactus" }),
-]);
+export const TREE_SPECIES = Object.freeze(
+  LEGACY_WOOD_IDS.map((key, id) => {
+    const wood = BUILTIN_WOODS.find((entry) => entry.id === key);
+    return Object.freeze({ id, key, name: wood?.name ?? key });
+  }),
+);
+
+const DEFAULT_CATALOG = defaultWoodCatalog();
 
 export const BUSH_STYLES = Object.freeze({
   NORMAL: "normal",
@@ -17,7 +26,18 @@ export const BUSH_STYLES = Object.freeze({
   JUNGLE: "jungle",
 });
 
-export function rollTree(rng, biomeId, moisture, density) {
+export function rollTree(
+  rng,
+  biomeId,
+  moisture,
+  density,
+  catalog = DEFAULT_CATALOG,
+) {
+  const wood = woodForBiome(catalog, biomeId);
+  if (!wood) {
+    return null;
+  }
+
   const canopy = clamp01((density - 0.38) / 0.62);
   let chance = 0;
 
@@ -33,26 +53,24 @@ export function rollTree(rng, biomeId, moisture, density) {
     chance = (0.05 + canopy * 0.42) * (0.7 + moisture * 0.5);
   } else if (biomeId === BIOME.DESERT) {
     chance = 0.002 + canopy * 0.018;
+  } else if (biomeId === BIOME.ROCK) {
+    chance = 0.001 + canopy * 0.016;
+  } else if (biomeId === BIOME.CAVE_FLOOR) {
+    chance = 0.004 + canopy * 0.028;
+  } else if (biomeId === BIOME.CLOUD) {
+    chance = 0.012 + canopy * 0.05;
   }
+
+  chance *= Math.max(0.1, Number(wood.density) || 1);
 
   if (chance <= 0 || !rng.chance(chance)) {
     return null;
   }
 
-  let species = 0;
-
-  if (biomeId === BIOME.SNOW || biomeId === BIOME.ROCK || biomeId === BIOME.WOLF) {
-    species = 1;
-  } else if (biomeId === BIOME.JUNGLE) {
-    species = 2;
-  } else if (biomeId === BIOME.DESERT) {
-    species = 3;
-  } else {
-    species = rng.chance(0.8) ? 0 : 1;
-  }
-
   return {
-    species,
+    woodId: wood.id,
+    shape: wood.style?.shape ?? "tree",
+    species: legacySpeciesForWood(wood.id),
     variant: rng.int(0, TREE_VARIANTS),
     scale: rng.float(0.75, 1.18),
   };

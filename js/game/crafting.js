@@ -298,6 +298,26 @@ export const CRAFT_RECIPES = Object.freeze([
     item: "wolfTotem",
     requiresWolfMission: true,
   }),
+  Object.freeze({
+    id: "portalSubsuelo",
+    category: "build",
+    name: "Portal al Subsuelo",
+    description:
+      "Colocable en la superficie. Abre un acceso adicional al laberinto de cuevas.",
+    costs: Object.freeze({ piedra: 24, oro: 12, esencia: 5, cuarzo: 2 }),
+    type: "placeable",
+    item: "portalSubsuelo",
+  }),
+  Object.freeze({
+    id: "portalCielo",
+    category: "build",
+    name: "Escalera al Cielo",
+    description:
+      "Colocable en la superficie. Abre un acceso adicional a las islas de nubes.",
+    costs: Object.freeze({ piedra: 18, oro: 28, esencia: 8, cuarzo: 5 }),
+    type: "placeable",
+    item: "portalCielo",
+  }),
 ]);
 
 const RECIPES_BY_ID = new Map(CRAFT_RECIPES.map((recipe) => [recipe.id, recipe]));

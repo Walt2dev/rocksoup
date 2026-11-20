@@ -138,6 +138,11 @@ import { mineralById } from "../world/minerals.js";
 import { CAMERA } from "../world/params.js";
 import { World } from "../world/world.js";
 import {
+  createRealmExitPortal,
+  findSurfacePortals,
+  sanitizePortals,
+} from "../world/portals.js";
+import {
   CRAFT_CATEGORIES,
   CRAFT_RECIPES,
   craftLevelForXp,
@@ -329,6 +334,7 @@ export class Game {
     difficulty = null,
     hud,
     onMenuRequested,
+    economy = null,
     network = null,
     networkSelfId = null,
   }) {
@@ -338,6 +344,7 @@ export class Game {
     this.saveStore = saveStore;
     this.hud = hud;
     this.onMenuRequested = onMenuRequested;
+    this.economy = economy;
     this.network = network;
     this.networkSelfId = networkSelfId ?? network?.selfId ?? null;
     this.worldBiomes = saveState
@@ -350,9 +357,42 @@ export class Game {
       biomeSet: this.worldBiomes,
       flat: true,
       wolfBiome: this.wolfBiome,
+      woodCatalog: this.assets?.woodCatalog,
     });
     this.world.loadHarvested(saveState?.harvestedNodes);
     this.world.loadPlanted(saveState?.plantedNodes);
+    this.surfaceWorld = this.world;
+    this.realm = "surface";
+    this.realmWorlds = {
+      underground: new World(`${this.world.seed}:underground`, {
+        biomeSet: this.worldBiomes,
+        flat: true,
+        wolfBiome: this.wolfBiome,
+        realm: "underground",
+        woodCatalog: this.assets?.woodCatalog,
+      }),
+      sky: new World(`${this.world.seed}:sky`, {
+        biomeSet: this.worldBiomes,
+        flat: true,
+        wolfBiome: this.wolfBiome,
+        realm: "sky",
+        woodCatalog: this.assets?.woodCatalog,
+      }),
+    };
+    for (const [realm, realmWorld] of Object.entries(this.realmWorlds)) {
+      const realmState = saveState?.realms?.[realm];
+      realmWorld.loadHarvested(realmState?.harvestedNodes);
+      realmWorld.loadPlanted(realmState?.plantedNodes);
+    }
+    this.realmExitPortals = {
+      underground: createRealmExitPortal(
+        "underground",
+        this.realmWorlds.underground.realmLayout,
+      ),
+      sky: createRealmExitPortal("sky", this.realmWorlds.sky.realmLayout),
+    };
+    this.returnPosition = saveState?.returnPosition ?? null;
+    this.portals = [];
     this.inventory = Inventory.fromJSON(saveState?.inventory);
     this.characterSkin = normalizeSkinId(
       saveState?.characterSkin ?? characterSkin,
@@ -624,9 +664,8 @@ export class Game {
     this.nightSpawnSlot = 0;
 
 
-    const start = this.resolvePlayerStart(saveState);
-    this.spawnPoint = { x: start.x, y: start.y };
-    this.university = this.findUniversityLocation(this.world.findSpawn());
+    const surfaceStart = this.surfaceWorld.findSpawn();
+    this.university = this.findUniversityLocation(surfaceStart);
     this.observatory = this.findObservatoryLocation(this.university);
     this.observatoryOpen = false;
     this.skyView = { ra: 12, dec: 0, zoom: 1 };
@@ -753,9 +792,9 @@ export class Game {
     this.fiefFocusSlot = null;
     this.fiefStatusText = "";
     this.villages = findVillageSites(
-      this.world,
-      this.world.seed,
-      start,
+      this.surfaceWorld,
+      this.surfaceWorld.seed,
+      surfaceStart,
       [this.university, this.observatory],
     );
     for (const village of this.villages) {
@@ -813,14 +852,36 @@ export class Game {
       }
     }
     this.wolfDen = findWolfDenSite(
-      this.world,
-      this.world.seed,
-      start,
+      this.surfaceWorld,
+      this.surfaceWorld.seed,
+      surfaceStart,
       [this.university, this.observatory, ...this.villages],
     );
     if (this.wolfDen) {
       this.wolfDen.discovered = this.wolfMission.discovered;
     }
+    const savedPortals = sanitizePortals(saveState?.portals);
+    const generatedPortals = findSurfacePortals(
+      this.surfaceWorld,
+      this.surfaceWorld.seed,
+      surfaceStart,
+      [this.university, this.observatory, this.wolfDen, ...this.villages].filter(
+        Boolean,
+      ),
+    );
+    const portalMap = new Map(
+      generatedPortals.map((portal) => [portal.id, portal]),
+    );
+    for (const portal of savedPortals) {
+      portalMap.set(portal.id, portal);
+    }
+    this.portals = [...portalMap.values()];
+    if (saveState?.realm === "underground" || saveState?.realm === "sky") {
+      this.realm = saveState.realm;
+      this.world = this.realmWorlds[this.realm];
+    }
+    const start = this.resolvePlayerStart(saveState);
+    this.spawnPoint = { x: start.x, y: start.y };
     this.playerId = createPlayerEntity(this.ecs, {
       x: start.x,
       y: start.y,
@@ -2006,8 +2067,14 @@ export class Game {
     const nextLens = lensForXp(this.lensXp);
     const previousLens = this.lensLevel;
     this.lensLevel = nextLens.id;
+    const firstConstellation = !this.observatoryDiscoveries.has(
+      align.constellation.id,
+    );
     this.observationNotes.add(align.constellation.id);
     this.observatoryDiscoveries.add(align.constellation.id);
+    if (firstConstellation) {
+      this.awardEconomy("constellation", align.constellation.id);
+    }
     this.investigations.push({
       objectId: align.constellation.id,
       name: align.constellation.name,
@@ -3450,6 +3517,135 @@ export class Game {
     this.save();
   }
 
+  activePortals() {
+    if (this.realm === "surface") {
+      return this.portals ?? [];
+    }
+    const exit = this.realmExitPortals?.[this.realm];
+    return exit ? [exit] : [];
+  }
+
+  getNearbyPortal() {
+    const transform = this.playerTransform;
+    let best = null;
+    let bestDistance = 1.8;
+    for (const portal of this.activePortals()) {
+      const distance = Math.hypot(portal.x - transform.x, portal.y - transform.y);
+      if (distance <= bestDistance) {
+        best = portal;
+        bestDistance = distance;
+      }
+    }
+    return best;
+  }
+
+  pickPortalAt(screenX, screenY) {
+    const zoom = this.camera.zoom;
+    for (const portal of this.activePortals()) {
+      const point = this.camera.project(portal.x, portal.y, 0);
+      if (Math.hypot(screenX - point.x, screenY - point.y) <= 34 * zoom) {
+        return portal;
+      }
+    }
+    return null;
+  }
+
+  enterPortal(portal) {
+    if (!portal) {
+      return false;
+    }
+    const distance = Math.hypot(
+      portal.x - this.playerTransform.x,
+      portal.y - this.playerTransform.y,
+    );
+    if (distance > 2.4) {
+      this.notify("Acércate al portal para usarlo.");
+      return false;
+    }
+    if (portal.realm === "surface") {
+      return this.exitRealm();
+    }
+    return this.enterRealm(portal.realm);
+  }
+
+  enterRealm(realm) {
+    if (this.network) {
+      this.notify("Los portales solo funcionan en partidas individuales o en la nube.");
+      return false;
+    }
+    const realmWorld = this.realmWorlds?.[realm];
+    if (!realmWorld || this.realm === realm) {
+      return false;
+    }
+    if (this.realm === "surface") {
+      this.returnPosition = {
+        x: this.playerTransform.x,
+        y: this.playerTransform.y,
+      };
+    }
+    this.realm = realm;
+    this.world = realmWorld;
+    const start = realmWorld.findSpawn();
+    const transform = this.playerTransform;
+    transform.x = start.x;
+    transform.y = start.y;
+    this.cancelPlayerAction();
+    this.cancelPlacement();
+    this.cameraFollow = true;
+    this.camera.x = start.x;
+    this.camera.y = start.y;
+    this.playerGroundHeight = realmWorld.heightAt(start.x, start.y);
+    this.playerVerticalOffset = 0;
+    this.playerVerticalVelocity = 0;
+    this.playerAirborne = false;
+    this.playerMaxFeetHeight = this.playerGroundHeight;
+    this.save();
+    this.notify(
+      realm === "underground"
+        ? "Has entrado al Subsuelo. El laberinto de cuevas se extiende bajo tus pies."
+        : "Has subido al Cielo. Los caminos de oro conectan las islas de nubes.",
+    );
+    return true;
+  }
+
+  exitRealm() {
+    if (this.realm === "surface") {
+      return false;
+    }
+    const previousRealm = this.realm;
+    const fallback = this.portals?.find((portal) => portal.realm === previousRealm);
+    const target = this.returnPosition ?? {
+      x: fallback?.x ?? this.spawnPoint?.x ?? 0.5,
+      y: fallback?.y ?? this.spawnPoint?.y ?? 0.5,
+    };
+    this.realm = "surface";
+    this.world = this.surfaceWorld;
+    const transform = this.playerTransform;
+    transform.x = target.x;
+    transform.y = target.y;
+    this.cancelPlayerAction();
+    this.cancelPlacement();
+    this.cameraFollow = true;
+    this.camera.x = target.x;
+    this.camera.y = target.y;
+    this.playerGroundHeight = this.world.heightAt(target.x, target.y);
+    this.playerVerticalOffset = 0;
+    this.playerVerticalVelocity = 0;
+    this.playerAirborne = false;
+    this.playerMaxFeetHeight = this.playerGroundHeight;
+    this.returnPosition = null;
+    this.save();
+    this.notify("Has vuelto a la superficie.");
+    return true;
+  }
+
+  awardEconomy(kind, refId = "") {
+    const result = this.economy?.award?.(kind, { refId });
+    if (result && typeof result.catch === "function") {
+      result.catch(() => {});
+    }
+  }
+
   applyStoreGrants(grants) {
     if (!grants || typeof grants !== "object") {
       return false;
@@ -3509,8 +3705,17 @@ export class Game {
     const transform = this.playerTransform;
     const energy = this.playerEnergy;
 
+    const surfaceWorld = this.surfaceWorld ?? this.world;
+    const realms = {};
+    for (const [realm, realmWorld] of Object.entries(this.realmWorlds ?? {})) {
+      realms[realm] = {
+        harvestedNodes: realmWorld.exportHarvested(),
+        plantedNodes: realmWorld.exportPlanted(),
+      };
+    }
+
     return this.saveStore?.write({
-      seed: this.world.seed,
+      seed: surfaceWorld.seed,
       worldBiomes: this.worldBiomes,
       wolfBiome: this.wolfBiome,
       characterSkin: this.characterSkin,
@@ -3533,8 +3738,12 @@ export class Game {
         swimSeconds: this.swimRemaining,
       },
       inventory: this.inventory.toJSON(),
-      harvestedNodes: this.world.exportHarvested(),
-      plantedNodes: this.world.exportPlanted(),
+      harvestedNodes: surfaceWorld.exportHarvested(),
+      plantedNodes: surfaceWorld.exportPlanted(),
+      realm: this.realm,
+      realms,
+      portals: this.portals.map((portal) => ({ ...portal })),
+      returnPosition: this.returnPosition ? { ...this.returnPosition } : null,
       campfires: this.campfires.map((fire) => ({ x: fire.x, y: fire.y })),
       ovens: this.ovens.map((oven) => ({ x: oven.x, y: oven.y })),
       brewingTables: this.brewingTables.map((table) => ({ x: table.x, y: table.y })),
@@ -4639,11 +4848,13 @@ export class Game {
       }
     }
 
-    this.updateFishing(deltaSeconds);
-    this.updateBirdWatch(deltaSeconds);
-    this.updateFarmPlots(deltaSeconds);
-    this.updateFarmAnimals(deltaSeconds);
-    this.updateProjectiles(deltaSeconds);
+    if (this.realm === "surface") {
+      this.updateFishing(deltaSeconds);
+      this.updateBirdWatch(deltaSeconds);
+      this.updateFarmPlots(deltaSeconds);
+      this.updateFarmAnimals(deltaSeconds);
+      this.updateProjectiles(deltaSeconds);
+    }
 
     if (this.poisonRemaining > 0) {
       this.poisonRemaining = Math.max(0, this.poisonRemaining - deltaSeconds);
@@ -4891,7 +5102,7 @@ export class Game {
       this.wasNight = nightNow;
       this.showCycleBanner(nightNow);
 
-      if (nightNow) {
+      if (nightNow && this.realm === "surface") {
         this.nightSpawnSlot = 0;
         this.spawnNightBatch(NIGHT_MOB_TARGET);
       }
@@ -4901,42 +5112,49 @@ export class Game {
       this.hud.cycleIndicator.dataset.phase = nightNow ? "night" : "day";
     }
 
-    updateAmbientSystem(this.ecs, deltaSeconds, {
-      playerX: transform.x,
-      playerY: transform.y,
-      isWalkable: (x, y) => this.isActorWalkableAt(x, y),
-      time: this.gameTime,
-      campfires: [...this.campfires, ...this.tipis, ...this.torches],
-      totems: this.wolfTotems,
-    });
-    this.updateNetworkAmbient(deltaSeconds);
-    this.updateAmbientPopulation(deltaSeconds);
-    this.updateNightCombat(deltaSeconds);
-    this.updateAmbientPoison(deltaSeconds);
-    this.updateWolfMissionDiscovery();
+    if (this.realm === "surface") {
+      updateAmbientSystem(this.ecs, deltaSeconds, {
+        playerX: transform.x,
+        playerY: transform.y,
+        isWalkable: (x, y) => this.isActorWalkableAt(x, y),
+        time: this.gameTime,
+        campfires: [...this.campfires, ...this.tipis, ...this.torches],
+        totems: this.wolfTotems,
+      });
+      this.updateNetworkAmbient(deltaSeconds);
+      this.updateAmbientPopulation(deltaSeconds);
+      this.updateNightCombat(deltaSeconds);
+      this.updateAmbientPoison(deltaSeconds);
+      this.updateWolfMissionDiscovery();
+    }
 
-    this.energyBoosted = this.isNearCampfire(transform);
+    this.energyBoosted =
+      this.realm === "surface" && this.isNearCampfire(transform);
     updateEnergy(this.ecs, deltaSeconds, {
       regenPerSecond: this.energyBoosted
         ? ENERGY_REGEN * CAMPFIRE_REGEN_MULTIPLIER
         : ENERGY_REGEN,
     });
 
-    for (const village of this.villages) {
-      if (this.villageSeen.has(village.id) || this.villageNotified.has(village.id)) {
-        continue;
-      }
-      if (Math.hypot(village.x - transform.x, village.y - transform.y) <= 9) {
-        this.villageNotified.add(village.id);
-        this.notify(
-          `${village.name}: un chamán necesita ayuda. Habla con ${village.shamanName}.`,
-        );
+    if (this.realm === "surface") {
+      for (const village of this.villages) {
+        if (this.villageSeen.has(village.id) || this.villageNotified.has(village.id)) {
+          continue;
+        }
+        if (Math.hypot(village.x - transform.x, village.y - transform.y) <= 9) {
+          this.villageNotified.add(village.id);
+          this.notify(
+            `${village.name}: un chamán necesita ayuda. Habla con ${village.shamanName}.`,
+          );
+        }
       }
     }
 
     this.effects.update(deltaSeconds);
-    this.updateVillageBalance(deltaSeconds);
-    this.updateTowerDefense(deltaSeconds);
+    if (this.realm === "surface") {
+      this.updateVillageBalance(deltaSeconds);
+      this.updateTowerDefense(deltaSeconds);
+    }
     this.updatePlayerVertical(deltaSeconds);
     this.syncMountedDonkey();
 
@@ -5083,6 +5301,7 @@ export class Game {
       }
     }
 
+    if (this.realm === "surface") {
     if (this.selectedUnitId) {
       const target = this.tileAtScreen(screenX, screenY);
       const unit = this.units.find((entry) => entry.id === this.selectedUnitId);
@@ -5165,6 +5384,12 @@ export class Game {
       return;
     }
 
+    const portal = this.pickPortalAt(screenX, screenY);
+    if (portal) {
+      this.enterPortal(portal);
+      return;
+    }
+
     if (this.pickWolfDenAt(screenX, screenY)) {
       this.openWolfDen();
       return;
@@ -5176,6 +5401,7 @@ export class Game {
 
     if (this.tryOpenStationAt(screenX, screenY)) {
       return;
+    }
     }
 
     const pickable = this.renderer.pickNode(screenX, screenY);
@@ -5471,6 +5697,9 @@ export class Game {
     screenY,
     { hostileOnly = false, attackable = false, species = null } = {},
   ) {
+    if (this.realm !== "surface") {
+      return null;
+    }
     const sprites = this.assets.ambientSprites;
     let best = null;
 
@@ -6066,18 +6295,15 @@ export class Game {
     let data;
 
     if (selected.key === "semillaArbol") {
-      const species =
-        biome === BIOME.SNOW
-          ? 1
-          : biome === BIOME.JUNGLE
-            ? 2
-            : biome === BIOME.DESERT
-              ? 3
-              : rng.chance(0.8)
-                ? 0
-                : 1;
+      const wood = this.world.woodForBiome(biome);
+      if (!wood) {
+        this.notify("Este bioma no tiene un tipo de árbol asignado.");
+        return true;
+      }
       data = {
-        species,
+        woodId: wood.id,
+        shape: wood.style?.shape ?? "tree",
+        species: wood.id === "pino" ? 1 : wood.id === "ceiba" ? 2 : wood.id === "cactus" ? 3 : 0,
         variant: rng.int(0, 6),
         scale: rng.float(0.75, 1.18),
       };
@@ -6545,6 +6771,9 @@ export class Game {
     const id = bird.id;
     const first = !this.birdObservations.has(id);
     this.birdObservations.add(id);
+    if (first) {
+      this.awardEconomy("bird_species", id);
+    }
 
     const record = this.birdRecords[id] ?? { count: 0, best: 0 };
     record.count += 1;
@@ -6569,6 +6798,7 @@ export class Game {
     if (mission.complete && !this.birdMissionCompleted) {
       this.birdMissionCompleted = true;
       this.inventory.add("pluma", BIRD_MISSION.rewardFeathers);
+      this.awardEconomy("bird_mission", "mission");
       this.notify(
         `¡Misión de aves completada! +${BIRD_MISSION.rewardFeathers} plumas.`,
       );
@@ -6804,6 +7034,7 @@ export class Game {
     this.wolfMission.completed = true;
     this.wolfMission.claimed = true;
     this.wolfDen.discovered = true;
+    this.awardEconomy("wolf_cave", "cave");
     this.notify(
       `¡Cueva de lobos completada! +${WOLF_MISSION.rewardPelts} pieles y recetas especiales desbloqueadas.`,
     );
@@ -8669,6 +8900,7 @@ export class Game {
         progress.everAllied = true;
         this.everAllied = true;
         progress.lastProduction = this.gameTime;
+        this.awardEconomy("village_allied", village.id);
         this.notify(`${village.name} se ha unido a la alianza.`);
       }
     }
@@ -10143,6 +10375,10 @@ export class Game {
       this.inventory.add(key, amount);
     }
     progress.lastProduction = this.gameTime;
+    this.awardEconomy(
+      "village_production",
+      `${villageId}:${Math.floor(this.gameTime)}`,
+    );
     const label = Object.entries(yields)
       .map(([key, amount]) => `${RESOURCE_INFO[key]?.label ?? key} ${amount}`)
       .join(" · ");
@@ -11979,6 +12215,11 @@ export class Game {
     const previousLevel = craftLevelForXp(this.craftXp);
     this.craftXp += craftXpReward(recipe);
     this.craftLevel = craftLevelForXp(this.craftXp);
+    this.awardEconomy("craft_new", recipe?.id ?? "unknown");
+    this.awardEconomy(
+      "craft_repeat",
+      `${recipe?.id ?? "unknown"}:${Math.floor(this.gameTime)}:${Date.now()}`,
+    );
     this.renderCraftProgress();
 
     if (this.craftLevel > previousLevel) {
@@ -12509,6 +12750,18 @@ export class Game {
     const transform = this.playerTransform;
     const distance = Math.hypot(centerX - transform.x, centerY - transform.y);
 
+    if (
+      (itemId === "portalSubsuelo" || itemId === "portalCielo") &&
+      this.realm !== "surface"
+    ) {
+      return {
+        ok: false,
+        reason: "Los portales solo se pueden colocar en la superficie.",
+        centerX,
+        centerY,
+      };
+    }
+
     if (itemId === "stonePath") {
       if (distance > STONE_PATH_PLACE_RANGE) {
         return { ok: false, reason: "Demasiado lejos.", centerX, centerY };
@@ -12626,6 +12879,7 @@ export class Game {
         ...this.beds,
         ...this.cauldrons,
         ...this.wolfTotems,
+        ...this.portals,
       ].some(
         (item) => Math.floor(item.x) === tileX && Math.floor(item.y) === tileY,
       )
@@ -12783,6 +13037,16 @@ export class Game {
       this.cauldrons.push({ x: centerX, y: centerY });
     } else if (itemId === "wolfTotem") {
       this.wolfTotems.push({ x: centerX, y: centerY });
+    } else if (itemId === "portalSubsuelo" || itemId === "portalCielo") {
+      const realm = itemId === "portalSubsuelo" ? "underground" : "sky";
+      this.portals.push({
+        id: `crafted_${realm}_${globalThis.crypto?.randomUUID?.() ?? Date.now()}`,
+        realm,
+        kind: realm === "underground" ? "cave" : "stairs",
+        source: "crafted",
+        x: centerX,
+        y: centerY,
+      });
     }
 
     this.network?.sendStructure(
@@ -13722,6 +13986,7 @@ export class Game {
 
   render() {
     const now = performance.now();
+    const surfaceRealm = this.realm === "surface";
 
     if (!this.hoverUpdatedAt || now - this.hoverUpdatedAt > 80) {
       this.updateHoverPreview();
@@ -13776,6 +14041,23 @@ export class Game {
           moving: motion.moving === true,
         });
       }
+    }
+
+    for (const portal of this.activePortals()) {
+      const sprite = this.assets.portalSprites?.[portal.kind];
+      if (!sprite) {
+        continue;
+      }
+      actors.push({
+        kind: "structure",
+        x: portal.x,
+        y: portal.y,
+        z: 0,
+        sprite,
+        flip: 1,
+        scale: 1,
+        glow: true,
+      });
     }
 
     for (const remote of this.remotePlayers.values()) {
@@ -13848,6 +14130,7 @@ export class Game {
       });
     }
 
+    if (surfaceRealm) {
     for (const id of this.getWorkerIds()) {
       const workerTransform = this.ecs.getComponent(id, Component.TRANSFORM);
       const workerMotion = this.ecs.getComponent(id, Component.MOTION);
@@ -13940,8 +14223,9 @@ export class Game {
           ambient.species === AMBIENT_SPECIES.OWL,
       });
     }
+    }
 
-    if (fireSprite) {
+    if (surfaceRealm && fireSprite) {
       for (const fire of this.campfires) {
         actors.push({
           kind: "campfire",
@@ -13956,6 +14240,7 @@ export class Game {
       }
     }
 
+    if (surfaceRealm) {
     const ovenSprites = this.assets.ovenSprites;
     if (ovenSprites && ovenSprites.length > 0) {
       for (let index = 0; index < this.ovens.length; index += 1) {
@@ -14218,9 +14503,13 @@ export class Game {
         });
       }
     }
+    }
 
-    const celestial = celestialStateAt(this.gameTime);
-    celestial.reflectionWorld = reflectionWorldPoint(transform, celestial);
+    const celestial =
+      this.realm === "underground" ? null : celestialStateAt(this.gameTime);
+    if (celestial) {
+      celestial.reflectionWorld = reflectionWorldPoint(transform, celestial);
+    }
     this.renderer.render(this.ctx, {
       world: this.world,
       camera: this.camera,
@@ -14228,27 +14517,29 @@ export class Game {
       width: this.camera.width,
       height: this.camera.height,
       actors,
-      stonePaths: this.stonePaths,
+      stonePaths: surfaceRealm ? this.stonePaths : [],
       celestial,
     });
 
-    this.drawColonyBanner();
-    this.drawFarmPlots();
-    this.drawQuestRings();
-    this.drawWaypointMarker();
-    this.drawProjectiles();
-    this.drawSwimRipple();
-    this.drawFishingLine();
-    this.drawNightOverlay();
+    if (surfaceRealm) {
+      this.drawColonyBanner();
+      this.drawFarmPlots();
+      this.drawQuestRings();
+      this.drawWaypointMarker();
+      this.drawProjectiles();
+      this.drawSwimRipple();
+      this.drawFishingLine();
+      this.drawNightOverlay();
+      this.drawWorkerTaskLine();
+      this.drawNightMobHealthBars();
+      this.drawGroundItems();
+    }
     this.drawCursorPreview();
-    this.drawWorkerTaskLine();
-    this.drawGroundItems();
     this.effects.draw(
       this.ctx,
       this.camera,
       (x, y) => this.world.heightAt(x, y),
     );
-    this.drawNightMobHealthBars();
     this.drawNetworkLabels();
     this.drawGatherProgressBars();
   }
@@ -14712,6 +15003,8 @@ export class Game {
       bed: this.assets.bedSprites?.[0],
       cauldron: this.assets.cauldronSprites?.[0],
       wolfTotem: this.assets.wolfTotemSprites?.[0],
+      portalSubsuelo: this.assets.portalSprites?.cave,
+      portalCielo: this.assets.portalSprites?.stairs,
     };
 
     return sprites[itemId] ?? null;
@@ -15528,6 +15821,7 @@ export class Game {
       placing: Boolean(this.placingItem),
       mounted: this.donkeyMounted,
       nearDonkey: Boolean(this.getNearbyDonkeyId()),
+      nearPortal: this.getNearbyPortal(),
       fishing: this.fishing,
       birdWatch: this.birdWatch,
     });
@@ -15584,6 +15878,11 @@ export class Game {
       const tileY = Math.floor(this.playerTransform.y);
       if (!this.tryFarmInteraction(tileX, tileY)) {
         this.notify("Toca tierra para preparar una parcela.");
+      }
+    } else if (action.id === "portal") {
+      const portal = this.getNearbyPortal();
+      if (portal) {
+        this.enterPortal(portal);
       }
     }
   }

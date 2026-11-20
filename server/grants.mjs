@@ -198,7 +198,7 @@ export function applyGrantsToSave(payload, grants) {
 export function describeGrants(grants) {
   const clean = sanitizeGrants(grants);
   const labels = [];
-  const icons = { C: "carbón", Fe: "hierro", oro: "oro" };
+  const icons = { C: "carbón", Fe: "hierro", oro: "oro", esencia: "Esencias" };
 
   for (const [key, amount] of Object.entries(clean.resources ?? {})) {
     labels.push(`${amount} ${icons[key] ?? key}`);

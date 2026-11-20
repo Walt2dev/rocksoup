@@ -294,6 +294,23 @@ export function createAccountStore({ db, logger = console } = {}) {
     return await getWallet(userId);
   }
 
+  async function listEntitlements(userId) {
+    const rows = await db.query(
+      `SELECT entitlement_key, quantity, source, created_at, expires_at
+       FROM user_entitlements
+       WHERE user_id = ?
+       ORDER BY created_at DESC`,
+      [Number(userId)],
+    );
+    return rows.map((row) => ({
+      key: row.entitlement_key,
+      quantity: Number(row.quantity) || 0,
+      source: row.source,
+      createdAt: Number(row.created_at) || 0,
+      expiresAt: Number(row.expires_at) || 0,
+    }));
+  }
+
   async function addEntitlements(userId, keys, { source = null } = {}) {
     const now = nowMs();
     for (const key of Array.isArray(keys) ? keys : []) {
@@ -381,11 +398,12 @@ export function createAccountStore({ db, logger = console } = {}) {
   }
 
   async function summary(userId) {
-    const [worlds, slots, diamonds, pending] = await Promise.all([
+    const [worlds, slots, diamonds, pending, entitlements] = await Promise.all([
       listWorlds(userId),
       getSlots(userId),
       getWallet(userId),
       pendingGrantCount(userId),
+      listEntitlements(userId),
     ]);
     return {
       worlds,
@@ -397,6 +415,7 @@ export function createAccountStore({ db, logger = console } = {}) {
       },
       diamonds,
       pendingGrants: pending,
+      entitlements,
     };
   }
 
@@ -423,6 +442,7 @@ export function createAccountStore({ db, logger = console } = {}) {
     deleteWorld,
     addWorldSlots,
     addDiamonds,
+    listEntitlements,
     addEntitlements,
     addPendingGrants,
     takePendingGrants,

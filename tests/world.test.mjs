@@ -285,7 +285,7 @@ test("la vegetación es determinista y solo aparece en biomas válidos", () => {
   assert.ok(tree.variant >= 0 && tree.variant < TREE_VARIANTS);
   assert.ok(tree.scale >= 0.75 && tree.scale <= 1.18);
   assert.equal(rollTree(createRng("water"), BIOME.WATER, 1, 1), null);
-  assert.equal(rollTree(createRng("rock"), BIOME.ROCK, 1, 1), null);
+  assert.equal(rollTree(createRng("beach"), BIOME.BEACH, 1, 1), null);
 });
 
 test("los minerales son deterministas y tienen tipo válido", () => {
@@ -477,6 +477,8 @@ test("el guardado valida, escribe, lee y limpia", () => {
     moonPoisonPotion: 0,
     arrow: 0,
     wolfTotem: 0,
+    portalSubsuelo: 0,
+    portalCielo: 0,
     carnePollo: 0,
     polvoHueso: 0,
   });

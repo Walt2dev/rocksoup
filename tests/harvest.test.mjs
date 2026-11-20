@@ -261,6 +261,8 @@ test("sanitizeSave migra v1 y valida el guardado v2", () => {
     moonPoisonPotion: 0,
     arrow: 0,
     wolfTotem: 0,
+    portalSubsuelo: 0,
+    portalCielo: 0,
     carnePollo: 0,
     polvoHueso: 0,
   });
@@ -435,6 +437,8 @@ test("sanitizeSave migra v1 y valida el guardado v2", () => {
     moonPoisonPotion: 0,
     arrow: 0,
     wolfTotem: 0,
+    portalSubsuelo: 0,
+    portalCielo: 0,
     carnePollo: 0,
     polvoHueso: 0,
   });

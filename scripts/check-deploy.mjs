@@ -61,8 +61,8 @@ try {
     );
     line(health.data?.auth === true, "Google configurado");
     line(
-      health.data?.payments?.enabled === false,
-      "Pagos deshabilitados (PayPal eliminado)",
+      health.data?.economy?.enabled === true,
+      "Economía del juego activa",
     );
     line(
       health.data?.mail?.configured === true,
@@ -85,8 +85,8 @@ if (!failed) {
     );
     const store = await get("/api/store/config");
     line(
-      store.data?.paymentsEnabled === false,
-      "Tienda con pagos deshabilitados (PayPal eliminado)",
+      store.data?.economyEnabled === true,
+      "Tienda con economía de DracCoins activa",
     );
   } catch (error) {
     line(false, "Configuración de auth/tienda", error.message);
