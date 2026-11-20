@@ -1,4 +1,5 @@
 import { initWoodsAdmin } from "./adminWoods.js";
+import { initContentAdmin } from "./adminContent.js";
 
 const TOKEN_KEY = "rocksoup-admin-token";
 const RANGE_KEY = "rocksoup-admin-range";
@@ -55,6 +56,7 @@ let statsTimer = null;
 let fetching = false;
 let fetchingStats = false;
 const woodsAdmin = initWoodsAdmin({ getToken: () => token });
+const contentAdmin = initContentAdmin({ getToken: () => token });
 
 function formatDuration(ms) {
   const total = Math.max(0, Math.floor((Number.isFinite(ms) ? ms : 0) / 1000));
@@ -475,6 +477,7 @@ el.loginForm.addEventListener("submit", (event) => {
   void fetchAdmin();
   void fetchStats();
   void woodsAdmin.refresh();
+  void contentAdmin.refresh();
 });
 
 el.range?.addEventListener("change", () => {
@@ -616,6 +619,7 @@ if (token) {
   void fetchAdmin();
   void fetchStats();
   void woodsAdmin.refresh();
+  void contentAdmin.refresh();
 } else {
   showLogin();
 }

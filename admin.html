@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <title>Administración · Sopa de Piedras</title>
-    <link rel="stylesheet" href="v7/css/style.css?v=7" />
+    <link rel="stylesheet" href="v8/css/style.css?v=8" />
   </head>
   <body class="admin-body">
     <main class="admin-shell">
@@ -47,6 +47,7 @@
         <nav id="admin-tabs" class="admin-tabs" aria-label="Secciones de administración">
           <button class="admin-tab is-active" type="button" data-admin-tab="resumen">Resumen</button>
           <button class="admin-tab" type="button" data-admin-tab="mundo">Mundo</button>
+          <button class="admin-tab" type="button" data-admin-tab="contenido">Contenido</button>
           <button class="admin-tab" type="button" data-admin-tab="maderas">Maderas</button>
           <button class="admin-tab" type="button" data-admin-tab="jugadores">Jugadores</button>
           <button class="admin-tab" type="button" data-admin-tab="actividad">Actividad</button>
@@ -121,6 +122,18 @@
               </label>
             </div>
             <p id="admin-world-status" class="admin-status" role="status"></p>
+          </section>
+        </section>
+
+        <section class="admin-tab-panel" data-tab-panel="contenido" hidden>
+          <section class="admin-section">
+            <h2>Editor de contenido</h2>
+            <p class="admin-muted">
+              Personaliza nombres, colores, recetas, precios y recompensas de
+              los items existentes. Los cambios se aplican al recargar el juego.
+            </p>
+            <div id="admin-content" class="admin-content-layout"></div>
+            <p id="admin-content-status" class="admin-status" role="status"></p>
           </section>
         </section>
 
@@ -205,6 +218,6 @@
       </section>
     </main>
 
-    <script type="module" src="v7/js/admin.js?v=7"></script>
+    <script type="module" src="v8/js/admin.js?v=8"></script>
   </body>
 </html>

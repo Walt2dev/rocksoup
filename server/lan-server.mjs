@@ -54,6 +54,7 @@ import { createAuthStore, sessionTokenFromRequest } from "./authStore.mjs";
 import { createAccountStore } from "./accountStore.mjs";
 import { createEconomyStore } from "./economyStore.mjs";
 import { createWoodStore } from "./woodStore.mjs";
+import { createContentStore } from "./contentStore.mjs";
 import { createPlaySessionStore } from "./playSessionStore.mjs";
 import { createRankingStore } from "./rankingStore.mjs";
 import { createClanStore } from "./clanStore.mjs";
@@ -437,6 +438,7 @@ const economyStore = createEconomyStore({
   accountStore,
 });
 const woodStore = createWoodStore({ db: database });
+const contentStore = createContentStore({ db: database });
 const mailer = createMailer();
 const apiHandler = createApiHandler({
   db: database,
@@ -456,6 +458,7 @@ database
       return false;
     }
     await playSessionStore.closeStale({ staleAfterMs: 2 * 60 * 1000 });
+    await contentStore.init();
     await economyStore.init();
     await woodStore.init();
     world.woodCatalog = await woodStore.serverCatalog().catch(() => world.woodCatalog);
@@ -2461,15 +2464,166 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    if (pathname === "/api/content/manifest" && req.method === "GET") {
+      if (!database.isAvailable()) {
+        sendJson(res, 503, { error: "La base de datos no está configurada" });
+        return;
+      }
+      sendJson(res, 200, contentStore.publicManifest());
+      return;
+    }
+
+    if (pathname === "/api/content/config" && req.method === "GET") {
+      sendJson(res, 200, { settings: contentStore.getSettings() });
+      return;
+    }
+
+    const contentSpriteMatch = pathname.match(
+      /^\/api\/content\/sprites\/([^/]+)\/([^/]+)\/0\.png$/,
+    );
+    if (contentSpriteMatch && req.method === "GET") {
+      if (!database.isAvailable()) {
+        sendJson(res, 503, { error: "La base de datos no está configurada" });
+        return;
+      }
+      const sprite = await contentStore.getSprite(
+        decodeURIComponent(contentSpriteMatch[1]),
+        decodeURIComponent(contentSpriteMatch[2]),
+      );
+      if (!sprite) {
+        sendJson(res, 404, { error: "Icono no encontrado" });
+        return;
+      }
+      res.writeHead(200, {
+        "Content-Type": sprite.mime || "image/png",
+        "Cache-Control": "public, max-age=300",
+      });
+      res.end(sprite.data);
+      return;
+    }
+
+    if (pathname === "/api/admin/content" && req.method === "GET") {
+      const auth = verifyAdminRequest(req);
+      if (!auth.ok) {
+        sendAdminAuthError(res, auth);
+        return;
+      }
+      sendJson(res, 200, { sections: contentStore.adminSections() });
+      return;
+    }
+
+    const adminContentMatch = pathname.match(
+      /^\/api\/admin\/content\/([^/]+)\/([^/]+)$/,
+    );
+    if (adminContentMatch) {
+      const auth = verifyAdminRequest(req);
+      if (!auth.ok) {
+        sendAdminAuthError(res, auth);
+        return;
+      }
+      const kind = decodeURIComponent(adminContentMatch[1]);
+      const entityId = decodeURIComponent(adminContentMatch[2]);
+      if (req.method === "PUT") {
+        try {
+          const body = JSON.parse((await readRequestBody(req, 8 * 1024 * 1024)) || "{}");
+          sendJson(res, 200, {
+            entity: await contentStore.saveOverride(kind, entityId, body),
+          });
+        } catch (error) {
+          sendJson(res, Number(error.status) || 400, { error: error.message });
+        }
+        return;
+      }
+      if (req.method === "DELETE") {
+        try {
+          sendJson(res, 200, await contentStore.deleteOverride(kind, entityId));
+        } catch (error) {
+          sendJson(res, Number(error.status) || 400, { error: error.message });
+        }
+        return;
+      }
+      res.writeHead(405, { Allow: "PUT, DELETE" });
+      res.end();
+      return;
+    }
+
+    const adminContentSpriteMatch = pathname.match(
+      /^\/api\/admin\/content\/([^/]+)\/([^/]+)\/sprites\/0$/,
+    );
+    if (adminContentSpriteMatch) {
+      const auth = verifyAdminRequest(req);
+      if (!auth.ok) {
+        sendAdminAuthError(res, auth);
+        return;
+      }
+      const kind = decodeURIComponent(adminContentSpriteMatch[1]);
+      const entityId = decodeURIComponent(adminContentSpriteMatch[2]);
+      if (req.method === "PUT") {
+        try {
+          const body = JSON.parse((await readRequestBody(req, 8 * 1024 * 1024)) || "{}");
+          sendJson(
+            res,
+            200,
+            await contentStore.setSprite(kind, entityId, body),
+          );
+        } catch (error) {
+          sendJson(res, Number(error.status) || 400, { error: error.message });
+        }
+        return;
+      }
+      if (req.method === "DELETE") {
+        try {
+          sendJson(res, 200, await contentStore.deleteSprite(kind, entityId));
+        } catch (error) {
+          sendJson(res, Number(error.status) || 400, { error: error.message });
+        }
+        return;
+      }
+      res.writeHead(405, { Allow: "PUT, DELETE" });
+      res.end();
+      return;
+    }
+
+    if (pathname === "/api/admin/settings") {
+      const auth = verifyAdminRequest(req);
+      if (!auth.ok) {
+        sendAdminAuthError(res, auth);
+        return;
+      }
+      if (req.method === "GET") {
+        sendJson(res, 200, { settings: contentStore.getSettings() });
+        return;
+      }
+      if (req.method === "PUT") {
+        try {
+          const body = JSON.parse((await readRequestBody(req, 4 * 1024 * 1024)) || "{}");
+          if (typeof body.key === "string") {
+            await contentStore.setSetting(body.key, body.value);
+          } else {
+            for (const [key, value] of Object.entries(body)) {
+              await contentStore.setSetting(key, value);
+            }
+          }
+          sendJson(res, 200, { settings: contentStore.getSettings() });
+        } catch (error) {
+          sendJson(res, Number(error.status) || 400, { error: error.message });
+        }
+        return;
+      }
+      res.writeHead(405, { Allow: "GET, PUT" });
+      res.end();
+      return;
+    }
+
     if (await apiHandler(req, res, url, pathname)) {
       return;
     }
 
     const versionedPrefixes = [
-      "/v7/js/",
-      "/v7/css/",
-      "/v7/characters/",
-      "/v7/packs/",
+      "/v8/js/",
+      "/v8/css/",
+      "/v8/characters/",
+      "/v8/packs/",
     ];
     const versioned = versionedPrefixes.find((prefix) =>
       pathname.startsWith(prefix),

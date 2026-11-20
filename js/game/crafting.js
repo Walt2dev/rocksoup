@@ -6,7 +6,7 @@ export const CRAFT_CATEGORIES = Object.freeze([
   Object.freeze({ id: "upgrades", label: "Mejoras" }),
 ]);
 
-export const CRAFT_RECIPES = Object.freeze([
+const BASE_CRAFT_RECIPES = Object.freeze([
   Object.freeze({
     id: "axe",
     category: "tools",
@@ -320,7 +320,43 @@ export const CRAFT_RECIPES = Object.freeze([
   }),
 ]);
 
-const RECIPES_BY_ID = new Map(CRAFT_RECIPES.map((recipe) => [recipe.id, recipe]));
+export let CRAFT_RECIPES = BASE_CRAFT_RECIPES;
+const RECIPES_BY_ID = new Map(
+  CRAFT_RECIPES.map((recipe) => [recipe.id, recipe]),
+);
+
+export function applyCraftingContentOverrides(overrides = {}) {
+  const source = overrides && typeof overrides === "object" ? overrides : {};
+  CRAFT_RECIPES = Object.freeze(
+    BASE_CRAFT_RECIPES.map((recipe) => {
+      const override = source[recipe.id];
+      if (!override || typeof override !== "object") {
+        return recipe;
+      }
+      const next = { ...recipe };
+      for (const key of [
+        "name",
+        "description",
+        "category",
+        "costs",
+        "amount",
+        "requiresTool",
+        "requiresWolfMission",
+      ]) {
+        if (override[key] !== undefined) {
+          next[key] = override[key];
+        }
+      }
+      next.active = override.active !== false;
+      return Object.freeze(next);
+    }).filter((recipe) => recipe.active !== false),
+  );
+  RECIPES_BY_ID.clear();
+  for (const recipe of CRAFT_RECIPES) {
+    RECIPES_BY_ID.set(recipe.id, recipe);
+  }
+  return CRAFT_RECIPES;
+}
 
 export const CRAFT_XP_STEP = 50;
 export const CRAFT_XP_BASE = 10;

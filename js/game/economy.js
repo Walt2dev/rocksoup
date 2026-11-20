@@ -133,7 +133,7 @@ function product(entry) {
   });
 }
 
-export const ECONOMY_PRODUCTS = Object.freeze([
+const BASE_ECONOMY_PRODUCTS = Object.freeze([
   product({
     id: "energy_small",
     name: "Poción de energía",
@@ -464,9 +464,35 @@ export const ECONOMY_PRODUCTS = Object.freeze([
   }),
 ]);
 
+export let ECONOMY_PRODUCTS = BASE_ECONOMY_PRODUCTS;
 const PRODUCT_BY_ID = new Map(
   ECONOMY_PRODUCTS.map((entry) => [entry.id, entry]),
 );
+
+export function applyStoreContentOverrides(overrides = {}) {
+  const source = overrides && typeof overrides === "object" ? overrides : {};
+  ECONOMY_PRODUCTS = Object.freeze(
+    BASE_ECONOMY_PRODUCTS.map((entry) => {
+      const override = source[entry.id];
+      if (!override || typeof override !== "object") {
+        return entry;
+      }
+      return Object.freeze({
+        ...entry,
+        ...override,
+        price: override.price ?? entry.price,
+        grants: override.grants ?? entry.grants,
+        dailyGrants: override.dailyGrants ?? entry.dailyGrants,
+        highlights: override.highlights ?? entry.highlights,
+      });
+    }).filter((entry) => entry.active !== false),
+  );
+  PRODUCT_BY_ID.clear();
+  for (const entry of ECONOMY_PRODUCTS) {
+    PRODUCT_BY_ID.set(entry.id, entry);
+  }
+  return ECONOMY_PRODUCTS;
+}
 
 export function getEconomyProduct(productId) {
   return PRODUCT_BY_ID.get(String(productId ?? "")) ?? null;

@@ -213,16 +213,35 @@ No se necesita Client Secret para el flujo de ID Token usado aquí.
 - Los portales funcionan en partidas individuales y en la nube. En LAN se
   muestran desactivados para evitar desincronizaciones.
 
+### Editor de contenido
+
+En `/admin` → **Contenido** puedes personalizar los datos existentes de:
+
+- **Recursos:** nombre, color, símbolo, descripción, origen e icono PNG.
+- **Objetos:** nombre, símbolo, descripción e icono PNG.
+- **Herramientas:** nombre, nombre corto, símbolo, descripción e icono PNG.
+- **Mejoras:** nombre, descripción e icono PNG.
+- **Recetas:** nombre, descripción, categoría, costes, cantidad y requisitos.
+- **Tienda:** nombre, descripción, precio, moneda, recompensas, badge y estado.
+
+Cada elemento tiene un botón **Restaurar original**. Los cambios de metadata se
+aplican al recargar el juego. La tienda se valida en el servidor, así que el
+precio y las recompensas editados también se usan en la compra real.
+
+La API pública está en `/api/content/manifest`; los iconos en
+`/api/content/sprites/:kind/:id/0.png`. No se crean IDs nuevos en esta fase:
+solo se personalizan los existentes para no romper guardados.
+
 ## Caché y versiones de assets
 
 Cloudflare puede cachear `/js/*` y `/css/*` durante 31 días. Para que cada
 deploy se vea al instante, las páginas cargan los assets bajo el prefijo
-`/v7/`:
+`/v8/`:
 
-- `/v7/js/...`
-- `/v7/css/...`
-- `/v7/characters/...`
-- `/v7/packs/...`
+- `/v8/js/...`
+- `/v8/css/...`
+- `/v8/characters/...`
+- `/v8/packs/...`
 
 El servidor Node mapea ese prefijo a los archivos reales, así que no hay que
 duplicar carpetas. Para una futura actualización, cambia `v7` por `v8` en

@@ -1,4 +1,4 @@
-export const RESOURCE_INFO = Object.freeze({
+export let RESOURCE_INFO = Object.freeze({
   madera: Object.freeze({ label: "Madera", color: "#b98a4e", symbol: "M" }),
   tierra: Object.freeze({ label: "Tierra", color: "#8a6541", symbol: "T" }),
   piedra: Object.freeze({ label: "Piedra", color: "#8b929b", symbol: "P" }),
@@ -30,7 +30,7 @@ export const RESOURCE_INFO = Object.freeze({
 });
 
 export const RESOURCE_KEYS = Object.freeze(Object.keys(RESOURCE_INFO));
-export const TOOL_INFO = Object.freeze({
+export let TOOL_INFO = Object.freeze({
   axe: Object.freeze({ label: "Hacha de piedra", short: "Hacha", symbol: "A" }),
   pickaxe: Object.freeze({ label: "Pico de piedra", short: "Pico", symbol: "P" }),
   spear: Object.freeze({ label: "Lanza de piedra", short: "Lanza", symbol: "L" }),
@@ -48,7 +48,7 @@ export const TOOL_INFO = Object.freeze({
 });
 export const TOOL_KEYS = Object.freeze(Object.keys(TOOL_INFO));
 
-export const ITEM_INFO = Object.freeze({
+export let ITEM_INFO = Object.freeze({
   campfire: Object.freeze({ label: "Fogata", symbol: "Fg" }),
   bowl: Object.freeze({ label: "Tazón de madera", symbol: "Tz" }),
   roastedBerries: Object.freeze({ label: "Bayas tostadas", symbol: "BT" }),
@@ -86,7 +86,7 @@ export const ITEM_INFO = Object.freeze({
 });
 export const ITEM_KEYS = Object.freeze(Object.keys(ITEM_INFO));
 
-export const UPGRADE_INFO = Object.freeze({
+export let UPGRADE_INFO = Object.freeze({
   basket: Object.freeze({ label: "Cesta de madera" }),
   leatherPack: Object.freeze({ label: "Mochila de piel" }),
   leatherArmor: Object.freeze({ label: "Armadura de piel" }),
@@ -94,6 +94,71 @@ export const UPGRADE_INFO = Object.freeze({
   veinRestorer: Object.freeze({ label: "Restaurador de vetas" }),
 });
 export const UPGRADE_KEYS = Object.freeze(Object.keys(UPGRADE_INFO));
+
+const BASE_RESOURCE_INFO = RESOURCE_INFO;
+const BASE_ITEM_INFO = ITEM_INFO;
+const BASE_TOOL_INFO = TOOL_INFO;
+const BASE_UPGRADE_INFO = UPGRADE_INFO;
+
+function mergeInfo(base, override) {
+  if (!override || typeof override !== "object") {
+    return base;
+  }
+  const next = { ...base };
+  for (const [key, value] of Object.entries(override)) {
+    if (
+      value === null ||
+      value === undefined ||
+      key === "id" ||
+      key === "kind"
+    ) {
+      continue;
+    }
+    next[key] = value;
+  }
+  return Object.freeze(next);
+}
+
+export function applyInventoryContentOverrides({
+  resources = {},
+  items = {},
+  tools = {},
+  upgrades = {},
+} = {}) {
+  RESOURCE_INFO = Object.freeze(
+    Object.fromEntries(
+      Object.entries(BASE_RESOURCE_INFO).map(([key, value]) => [
+        key,
+        mergeInfo(value, resources[key]),
+      ]),
+    ),
+  );
+  ITEM_INFO = Object.freeze(
+    Object.fromEntries(
+      Object.entries(BASE_ITEM_INFO).map(([key, value]) => [
+        key,
+        mergeInfo(value, items[key]),
+      ]),
+    ),
+  );
+  TOOL_INFO = Object.freeze(
+    Object.fromEntries(
+      Object.entries(BASE_TOOL_INFO).map(([key, value]) => [
+        key,
+        mergeInfo(value, tools[key]),
+      ]),
+    ),
+  );
+  UPGRADE_INFO = Object.freeze(
+    Object.fromEntries(
+      Object.entries(BASE_UPGRADE_INFO).map(([key, value]) => [
+        key,
+        mergeInfo(value, upgrades[key]),
+      ]),
+    ),
+  );
+  return { RESOURCE_INFO, ITEM_INFO, TOOL_INFO, UPGRADE_INFO };
+}
 
 export const DEFAULT_CAPACITY = 40;
 export const MAX_STACK = 32;

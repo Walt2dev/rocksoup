@@ -7820,7 +7820,7 @@ export class Game {
         const dot = document.createElement("span");
         const label = document.createElement("span");
         cost.className = "recipe-cost";
-        cost.dataset.tooltip = `${info.label}\n${sourceFor("resource", key)}`;
+        cost.dataset.tooltip = `${info.label}\n${info.source || sourceFor("resource", key)}`;
         cost.title = cost.dataset.tooltip;
         cost.style.setProperty("--resource-color", info.color);
         dot.className = "dot";
@@ -7836,7 +7836,7 @@ export class Game {
         const dot = document.createElement("span");
         const label = document.createElement("span");
         cost.className = "recipe-cost";
-        cost.dataset.tooltip = `${item.label}\n${sourceFor("item", key)}`;
+        cost.dataset.tooltip = `${item.label}\n${item.description || sourceFor("item", key)}`;
         cost.title = cost.dataset.tooltip;
         cost.style.setProperty("--resource-color", "#c9a36a");
         dot.className = "dot";
@@ -12103,7 +12103,7 @@ export class Game {
 
         cost.className = "recipe-cost";
         cost.dataset.resource = key;
-        cost.dataset.tooltip = `${info.label}\n${sourceFor("resource", key)}`;
+        cost.dataset.tooltip = `${info.label}\n${info.source || sourceFor("resource", key)}`;
         cost.title = cost.dataset.tooltip;
         cost.style.setProperty("--resource-color", info.color);
         cost.classList.toggle("is-missing", this.inventory.count(key) < amount);
@@ -12325,7 +12325,7 @@ export class Game {
         cost.className = "recipe-cost";
         cost.dataset.costType = "resource";
         cost.dataset.costKey = key;
-        cost.dataset.tooltip = `${info.label}\n${sourceFor("resource", key)}`;
+        cost.dataset.tooltip = `${info.label}\n${info.source || sourceFor("resource", key)}`;
         cost.title = cost.dataset.tooltip;
         cost.style.setProperty("--resource-color", info.color);
         cost.classList.toggle("is-missing", this.inventory.count(key) < amount);
@@ -12343,7 +12343,7 @@ export class Game {
         cost.className = "recipe-cost";
         cost.dataset.costType = "item";
         cost.dataset.costKey = key;
-        cost.dataset.tooltip = `${ITEM_INFO[key]?.label ?? key}\n${sourceFor("item", key)}`;
+        cost.dataset.tooltip = `${ITEM_INFO[key]?.label ?? key}\n${ITEM_INFO[key]?.description || sourceFor("item", key)}`;
         cost.title = cost.dataset.tooltip;
         cost.style.setProperty("--resource-color", "#c9a36a");
         cost.classList.toggle("is-missing", this.inventory.itemCount(key) < amount);
@@ -15734,6 +15734,7 @@ export class Game {
           label: info.label,
           color: info.color,
           symbol: info.symbol,
+          iconUrl: info.iconUrl ?? null,
           source: info.source,
         });
         remaining -= count;
@@ -15748,7 +15749,8 @@ export class Game {
           label: RESOURCE_INFO[key].label,
           color: RESOURCE_INFO[key].color,
           symbol: RESOURCE_INFO[key].symbol,
-          source: sourceFor("resource", key),
+          iconUrl: RESOURCE_INFO[key].iconUrl ?? null,
+          source: RESOURCE_INFO[key].source || sourceFor("resource", key),
         });
       }
     }
@@ -15760,7 +15762,8 @@ export class Game {
           label: ITEM_INFO[key].label,
           color: "#c9a36a",
           symbol: ITEM_INFO[key].symbol,
-          source: sourceFor("item", key),
+          iconUrl: ITEM_INFO[key].iconUrl ?? null,
+          source: ITEM_INFO[key].source || sourceFor("item", key),
         });
       }
     }
@@ -15776,12 +15779,25 @@ export class Game {
           label: TOOL_INFO[key].short,
           color: "#7ec699",
           symbol: TOOL_INFO[key].symbol,
-          source: sourceFor("tool", key),
+          iconUrl: TOOL_INFO[key].iconUrl ?? null,
+          source: TOOL_INFO[key].source || sourceFor("tool", key),
         });
       }
     }
 
     return entries;
+  }
+
+  setInventoryIcon(icon, entry) {
+    icon.replaceChildren();
+    if (entry?.iconUrl) {
+      const image = document.createElement("img");
+      image.src = entry.iconUrl;
+      image.alt = "";
+      icon.append(image);
+      return;
+    }
+    icon.textContent = entry?.symbol ?? "?";
   }
 
   getSelectedEntry(entries = this.inventoryEntries()) {
@@ -16233,7 +16249,7 @@ export class Game {
 
         const icon = document.createElement("span");
         icon.className = "inventory-item-icon";
-        icon.textContent = entry.symbol ?? "?";
+        this.setInventoryIcon(icon, entry);
         const label = document.createElement("span");
         label.className = "inventory-item-label";
         label.textContent = entry.label;
@@ -16302,7 +16318,7 @@ export class Game {
         }
         const icon = document.createElement("span");
         icon.className = "inventory-item-icon";
-        icon.textContent = entry.symbol ?? "?";
+        this.setInventoryIcon(icon, entry);
         const count = document.createElement("b");
         count.textContent = String(entry.count);
         slot.append(icon, count);
@@ -16675,7 +16691,7 @@ export class Game {
       chip.append(slot);
 
       icon.className = "hotbar-icon";
-      icon.textContent = entry.symbol ?? "?";
+      this.setInventoryIcon(icon, entry);
       value.textContent = String(total);
       chip.append(icon, value);
       fragment.append(chip);

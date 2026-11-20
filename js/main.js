@@ -36,6 +36,7 @@ import { LanClient } from "./net/lanClient.js";
 import { api } from "./net/api.js";
 import { createCloudSaveStore } from "./net/cloudSave.js";
 import { createLocalEconomy } from "./game/economy.js";
+import { loadContentManifest } from "./game/contentOverrides.js";
 import { SocialUI } from "./net/social.js";
 import { ClansUI } from "./ui/clans.js";
 import { HudMenu } from "./ui/hudMenu.js";
@@ -1561,7 +1562,9 @@ async function boot() {
   setLoading(0, "Encendiendo la fogata...");
 
   try {
+    const contentPromise = loadContentManifest();
     assets = await loadAssets(setLoading);
+    await contentPromise;
     setLoading(0.99, "Cargando pack original...");
     await loadStaticDefaultPack(assets);
     await loadDefaultPack(assets);

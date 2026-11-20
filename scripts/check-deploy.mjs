@@ -36,8 +36,8 @@ console.log(`\nComprobando despliegue: ${base}\n`);
 try {
   const home = await get("/");
   line(home.status === 200, "El dominio responde", `HTTP ${home.status}`);
-  const version = home.text?.match(/v7\/js\/main\.js/)?.[0] ?? "";
-  line(version.length > 0, "Cliente actualizado", version || "busca v7/js/main.js");
+  const version = home.text?.match(/v8\/js\/main\.js/)?.[0] ?? "";
+  line(version.length > 0, "Cliente actualizado", version || "busca v8/js/main.js");
 } catch (error) {
   line(false, "El dominio responde", error.message);
 }
@@ -88,8 +88,18 @@ if (!failed) {
       store.data?.economyEnabled === true,
       "Tienda con economía de DracCoins activa",
     );
+    const content = await get("/api/content/manifest");
+    line(
+      content.status === 200 && content.data !== null,
+      "Editor de contenido activo",
+    );
+    const woods = await get("/api/woods");
+    line(
+      woods.status === 200 && Array.isArray(woods.data?.woods),
+      "Catálogo de maderas activo",
+    );
   } catch (error) {
-    line(false, "Configuración de auth/tienda", error.message);
+    line(false, "Configuración de auth/tienda/contenido", error.message);
   }
 }
 

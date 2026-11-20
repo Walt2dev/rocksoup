@@ -6,7 +6,7 @@ import {
 } from "../js/game/economy.js";
 
 export const CURRENCY = "drac";
-export const STORE_PRODUCTS = ECONOMY_PRODUCTS;
+export { ECONOMY_PRODUCTS as STORE_PRODUCTS };
 
 function previewFor(product) {
   return describeGrants(economyProductGrants(product));
@@ -60,7 +60,7 @@ export function publicProduct(product) {
 }
 
 export function publicProducts() {
-  return STORE_PRODUCTS.map(publicProduct);
+  return ECONOMY_PRODUCTS.map(publicProduct);
 }
 
 export function productsByCategory() {

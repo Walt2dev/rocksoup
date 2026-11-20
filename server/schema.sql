@@ -108,6 +108,33 @@ CREATE TABLE IF NOT EXISTS wood_sprites (
   PRIMARY KEY (wood_id, variant)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS content_overrides (
+  kind VARCHAR(24) NOT NULL,
+  entity_id VARCHAR(64) NOT NULL,
+  data_json LONGTEXT NOT NULL,
+  active TINYINT(1) NOT NULL DEFAULT 1,
+  updated_at BIGINT NOT NULL,
+  PRIMARY KEY (kind, entity_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS content_sprites (
+  kind VARCHAR(24) NOT NULL,
+  entity_id VARCHAR(64) NOT NULL,
+  variant TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  mime VARCHAR(32) NOT NULL,
+  width INT UNSIGNED NOT NULL,
+  height INT UNSIGNED NOT NULL,
+  data LONGBLOB NOT NULL,
+  updated_at BIGINT NOT NULL,
+  PRIMARY KEY (kind, entity_id, variant)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS app_settings (
+  setting_key VARCHAR(64) NOT NULL PRIMARY KEY,
+  value_json LONGTEXT NOT NULL,
+  updated_at BIGINT NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS economy_wallets (
   user_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
   drac_coins BIGINT UNSIGNED NOT NULL DEFAULT 0,
