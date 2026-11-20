@@ -2465,6 +2465,15 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    const versionedPrefixes = [
+      "/v7/js/",
+      "/v7/css/",
+      "/v7/characters/",
+      "/v7/packs/",
+    ];
+    const versioned = versionedPrefixes.find((prefix) =>
+      pathname.startsWith(prefix),
+    );
     const allowed =
       pathname === "/index.html" ||
       pathname === "/admin.html" ||
@@ -2474,7 +2483,8 @@ const server = createServer(async (req, res) => {
       pathname.startsWith("/css/") ||
       pathname.startsWith("/packs/") ||
       pathname.startsWith("/characters/") ||
-      pathname.startsWith("/js/");
+      pathname.startsWith("/js/") ||
+      Boolean(versioned);
 
     if (!allowed) {
       res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
@@ -2482,7 +2492,8 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    const filePath = resolve(ROOT, `.${pathname}`);
+    const filePathname = versioned ? pathname.slice(3) : pathname;
+    const filePath = resolve(ROOT, `.${filePathname}`);
     if (filePath !== ROOT && !filePath.startsWith(`${ROOT}${sep}`)) {
       res.writeHead(403);
       res.end("Forbidden");

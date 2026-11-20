@@ -213,6 +213,22 @@ No se necesita Client Secret para el flujo de ID Token usado aquí.
 - Los portales funcionan en partidas individuales y en la nube. En LAN se
   muestran desactivados para evitar desincronizaciones.
 
+## Caché y versiones de assets
+
+Cloudflare puede cachear `/js/*` y `/css/*` durante 31 días. Para que cada
+deploy se vea al instante, las páginas cargan los assets bajo el prefijo
+`/v7/`:
+
+- `/v7/js/...`
+- `/v7/css/...`
+- `/v7/characters/...`
+- `/v7/packs/...`
+
+El servidor Node mapea ese prefijo a los archivos reales, así que no hay que
+duplicar carpetas. Para una futura actualización, cambia `v7` por `v8` en
+`index.html`, `admin.html` y `versionedPrefixes` de
+`server/lan-server.mjs`, o purga la caché de Cloudflare.
+
 ## Variables de entorno útiles
 
 - `PORT`: puerto HTTP/WebSocket (por defecto `3000`).

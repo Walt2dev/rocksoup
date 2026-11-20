@@ -36,8 +36,8 @@ console.log(`\nComprobando despliegue: ${base}\n`);
 try {
   const home = await get("/");
   line(home.status === 200, "El dominio responde", `HTTP ${home.status}`);
-  const version = home.text?.match(/js\/main\.js\?v=(\d+)/)?.[1] ?? "?";
-  line(version !== "4", "Cliente actualizado", `main.js v${version}`);
+  const version = home.text?.match(/v7\/js\/main\.js/)?.[0] ?? "";
+  line(version.length > 0, "Cliente actualizado", version || "busca v7/js/main.js");
 } catch (error) {
   line(false, "El dominio responde", error.message);
 }
